@@ -329,6 +329,27 @@ class StreamlitSmokeTests(unittest.TestCase):
             sum(item.label == "🌍 Ngôn ngữ đích" for item in app.selectbox), 1
         )
 
+    def test_hover_tooltips_removed_without_disabling_controls(self):
+        import ast
+        from pathlib import Path
+
+        source = Path("streamlit_app.py").read_text(encoding="utf-8")
+        tree = ast.parse(source)
+        hover_help = [
+            node for node in ast.walk(tree)
+            if isinstance(node, ast.keyword) and node.arg == "help"
+        ]
+        self.assertEqual(hover_help, [])
+        self.assertIn('[role="tooltip"]', source)
+        self.assertIn('[data-baseweb="tooltip"]', source)
+        app = self.app.run()
+        self.assertFalse(app.exception, [str(exc.message) for exc in app.exception])
+        self.assertTrue(any(button.label == "➕ Tạo phiên mới" for button in app.button))
+        self.assertTrue(any(
+            panel.label == "🔑 Cấu hình API đa nền tảng"
+            for panel in app.get("expander")
+        ))
+
     def test_backup_section_removed_but_api_and_session_controls_remain(self):
         app = self.app.run()
         self.assertFalse(app.exception, [str(exc.message) for exc in app.exception])
