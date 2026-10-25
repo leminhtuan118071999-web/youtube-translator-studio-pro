@@ -408,16 +408,46 @@ def list_models(provider, base_url, api_key):
     except requests.RequestException as exc:
         raise RuntimeError("Không lấy được danh sách Model. Kiểm tra mạng và Base URL.") from exc
     if not response.ok:
+        # Gateways compatible with Claude Code messages frequently omit
+        # model discovery. A failed GET /models does not mean POST /messages
+        # fails; report the distinction rather than marking the key invalid.
+        if provider == "Claude Gateway (AUTH_TOKEN)" and response.status_code in (404, 405, 501):
+            raise RuntimeError(
+                f"Gateway trả HTTP {response.status_code} cho /v1/models: "
+                "có thể không hỗ trợ quét model. Không phải lỗi xác thực. "
+                "Hãy nhập Model ID do gateway cấp rồi dùng "
+                "'Kiểm tra kết nối API' để thử gửi một tin nhắn thực tế."
+            )
         raise _error(response, token)
     try:
         obj = response.json()
-        items = obj.get("data", obj.get("models", []))
-        models = []
-        for item in items:
-            if isinstance(item, dict):
-                value = item.get("id") or item.get("name")
-                if isinstance(value, str) and value.strip():
-                    models.append(value.strip())
-        return sorted(set(models), key=str.casefold)[:300]
-    except (ValueError, TypeError, AttributeError) as exc:
-        raise RuntimeError("Không đọc được danh sách Model do API trả về.") from exc
+    except ValueError as exc:
+        raise RuntimeError(
+            "API trả về dữ liệu không phải JSON khi quét model. "
+            "Nếu đây là Claude Gateway, có thể dùng Model ID thủ công "
+            "và kiểm tra kết nối bằng tin nhắn ngắn."
+        ) from exc
+    if isinstance(obj, dict):
+        items = obj.get("data", obj.get("models"))
+        if isinstance(items, dict):
+            items = items.get("data", items.get("models"))
+    elif isinstance(obj, list):
+        items = obj
+    else:
+        items = None
+    if not isinstance(items, list):
+        raise RuntimeError(
+            "Phản hồi /models không chứa danh sách model chuẩn "
+            "(data hoặc models dạng mảng). Gateway có thể chỉ hỗ trợ "
+            "/v1/messages. Hãy nhập Model ID thủ công và dùng "
+            "'Kiểm tra kết nối API' thay vì quét model."
+        )
+    models = []
+    for item in items:
+        if isinstance(item, str) and item.strip():
+            models.append(item.strip())
+        elif isinstance(item, dict):
+            value = item.get("id") or item.get("name")
+            if isinstance(value, str) and value.strip():
+                models.append(value.strip())
+    return sorted(set(models), key=str.casefold)[:300]
