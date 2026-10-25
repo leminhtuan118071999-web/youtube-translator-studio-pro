@@ -61,9 +61,22 @@ Dữ liệu mỗi phiên được tách riêng: link YouTube, phụ đề gốc,
 - Tự động trích xuất phụ đề từ link YouTube bằng nút **BẮT ĐẦU TẠO TOÀN BỘ**; không hiển thị các ô phụ đề, tiêu đề hoặc mô tả gốc.
 - Xem trước và tải thumbnail nếu truy cập được.
 
+## ⏳ Tự động xử lý Groq HTTP 429 (giới hạn token/phút)
+
+Nếu Groq báo lỗi `429 Rate limit reached` và có thông báo `Please try again in 11.52s`, điều đó **không có nghĩa API key sai**. Model `openai/gpt-oss-120b` trên gói miễn phí có giới hạn 8.000 TPM (thời điểm tài liệu được tra cứu). Giới hạn mỗi tổ chức và mỗi model có thể thay đổi.
+
+Ứng dụng hiện:
+- Đọc `Retry-After` của Groq hoặc thời gian trong thông báo, cộng thời gian đệm, rồi **tự đợi và thử lại** yêu cầu vừa bị 429 (tối đa 3 lần thử lại). Trạng thái chờ xuất hiện trong tiến trình phiên.
+- Chia nhỏ phụ đề thành các đoạn ngắn hơn khi dùng Groq GPT-OSS. Các đoạn đã dịch thành công được giữ lại, không bắt đầu toàn bộ từ đầu khi một đoạn gặp 429.
+- Giảm `max_completion_tokens` của dịch từ 8.192 xuống 2.200 token, giữ 3.600 token khi tạo 20 prompt, và dùng tóm tắt phân tầng cho nội dung dài nhằm giảm đỉnh nhu cầu TPM.
+- Nếu vượt quota **theo ngày** (TPD/RPD), app dừng thử lại vô ích và hướng dẫn chờ hạn mức mới hoặc chọn model khác.
+- Nếu 3 lần thử lại vẫn bị giới hạn, phiên hiện ⚠️ cùng thông báo rõ ràng và giữ các kết quả đã xử lý được.
+
+Lưu ý: App **không thể tăng hạn mức thật** của Groq hay bảo đảm mọi video dài sẽ hoàn thành trong hạn mức miễn phí. Nếu cần xử lý nhanh nhiều video, chọn nhà cung cấp/model có hạn mức cao hơn hoặc nâng gói của nhà cung cấp. Tham khảo [Groq rate limits](https://console.groq.com/docs/rate-limits).
+
 ## 🔧 Lỗi API có phản hồi nhưng không trả văn bản
 
-Một số model có suy luận (đặc biệt `openai/gpt-oss-120b` trên Groq) có thể dùng hết quota token đầu ra cho reasoning trước khi xuất bản dịch. App đã tối ưu riêng GPT-OSS trên **Groq** với `reasoning_effort=low`, `max_completion_tokens=8192` và không yêu cầu trả lại reasoning. Các nhà cung cấp khác giữ cấu hình riêng để tránh lỗi 400 do tham số không được hỗ trợ.
+Một số model có suy luận (đặc biệt `openai/gpt-oss-120b` trên Groq) có thể dùng hết quota token đầu ra cho reasoning trước khi xuất bản dịch. App đã tối ưu riêng GPT-OSS trên **Groq** với `reasoning_effort=low` và số token đầu ra phù hợp từng loại nội dung và không yêu cầu trả lại reasoning. Các nhà cung cấp khác giữ cấu hình riêng để tránh lỗi 400 do tham số không được hỗ trợ.
 
 Nếu API trả về không có text, app sẽ giải thích `finish_reason` (ví dụ `length` khi hết token, hoặc `tool_calls` khi model chỉ gọi công cụ) thay vì báo chung chung. App không sử dụng trường reasoning làm nội dung dịch và không ghi nội dung suy luận ra giao diện.
 
