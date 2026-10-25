@@ -1,0 +1,50 @@
+"""Smoke tests exercising the actual Streamlit entrypoint with AppTest.
+
+No external keys, YouTube requests, live Supabase project or costs required.
+"""
+import unittest
+
+from streamlit.testing.v1 import AppTest
+
+
+class StreamlitSmokeTests(unittest.TestCase):
+    def setUp(self):
+        self.app = AppTest.from_file("streamlit_app.py", default_timeout=20)
+
+    def test_app_loads_and_can_create_new_session(self):
+        app = self.app.run()
+        self.assertFalse(app.exception, [str(exc.message) for exc in app.exception])
+        names = [button.label for button in app.button]
+        self.assertIn("➕ Tạo phiên mới", names)
+        self.assertIn("🚀 BẮT ĐẦU TẠO TOÀN BỘ", names)
+        original = app.session_state["selected_session"]
+        for button in app.button:
+            if button.label == "➕ Tạo phiên mới":
+                button.click()
+                break
+        app.run()
+        self.assertFalse(app.exception, [str(exc.message) for exc in app.exception])
+        self.assertNotEqual(app.session_state["selected_session"], original)
+        self.assertEqual(len(app.session_state["workspaces"]), 2)
+
+    def test_language_selector_is_next_to_start_action(self):
+        app = self.app.run()
+        self.assertFalse(app.exception, [str(exc.message) for exc in app.exception])
+        self.assertTrue(any(
+            item.label == "🌍 Ngôn ngữ đích"
+            for item in app.selectbox
+        ))
+        self.assertEqual(
+            sum(item.label == "🌍 Ngôn ngữ đích" for item in app.selectbox), 1
+        )
+
+    def test_backup_section_is_visible_without_supabase(self):
+        app = self.app.run()
+        self.assertFalse(app.exception, [str(exc.message) for exc in app.exception])
+        expanders = [exp.label for exp in app.get("expander")]
+        self.assertIn("💾 Lưu dữ liệu và sao lưu", expanders)
+        self.assertIn("🔑 Cấu hình API đa nền tảng", expanders)
+
+
+if __name__ == "__main__":
+    unittest.main()
