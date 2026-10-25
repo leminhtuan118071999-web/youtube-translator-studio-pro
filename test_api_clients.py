@@ -89,6 +89,111 @@ class ApiClientTests(unittest.TestCase):
 
     @patch("api_clients.socket.getaddrinfo", return_value=PUBLIC_ADDR)
     @patch("api_clients._request")
+    def test_groq_oss_requests_low_reasoning_with_token_headroom(self, req, _dns):
+        response = Mock()
+        response.ok = True
+        response.json.return_value = {
+            "choices": [{"finish_reason": "stop",
+                         "message": {"content": "Tekst przetłumaczony",
+                                     "reasoning": "Hidden thoughts"}}]
+        }
+        req.return_value = response
+        result = generate_text(
+            "Groq", PROVIDERS["Groq"]["base_url"],
+            "openai/gpt-oss-120b", "secret", "Translate"
+        )
+        self.assertEqual(result, "Tekst przetłumaczony")
+        body = req.call_args.kwargs["json"]
+        self.assertEqual(body["reasoning_effort"], "low")
+        self.assertEqual(body["max_completion_tokens"], 8192)
+        self.assertFalse(body["include_reasoning"])
+
+    @patch("api_clients.socket.getaddrinfo", return_value=PUBLIC_ADDR)
+    @patch("api_clients._request")
+    def test_groq_reports_token_limit_instead_of_generic_error(self, req, _dns):
+        response = Mock()
+        response.ok = True
+        response.json.return_value = {
+            "choices": [{"finish_reason": "length", "message": {
+                "content": None, "reasoning": "internal work only"
+            }}],
+            "usage": {"completion_tokens": 1024}
+        }
+        req.return_value = response
+        with self.assertRaises(RuntimeError) as failure:
+            generate_text("Groq", PROVIDERS["Groq"]["base_url"],
+                          "openai/gpt-oss-120b", "secret", "Translate")
+        text = str(failure.exception)
+        self.assertIn("finish_reason=length", text)
+        self.assertIn("completion_tokens=1024", text)
+        self.assertNotIn("internal work only", text)
+
+    @patch("api_clients.socket.getaddrinfo", return_value=PUBLIC_ADDR)
+    @patch("api_clients._request")
+    def test_reasoning_is_never_shown_as_translated_text(self, req, _dns):
+        response = Mock()
+        response.ok = True
+        response.json.return_value = {
+            "choices": [{"finish_reason": "stop", "message": {
+                "content": None, "reasoning": "private assistant scratchpad"
+            }}]
+        }
+        req.return_value = response
+        with self.assertRaises(RuntimeError) as failure:
+            generate_text("Groq", PROVIDERS["Groq"]["base_url"],
+                          "openai/gpt-oss-120b", "secret", "Translate")
+        self.assertIn("không có nội dung", str(failure.exception))
+        self.assertNotIn("private assistant scratchpad", str(failure.exception))
+
+    @patch("api_clients.socket.getaddrinfo", return_value=PUBLIC_ADDR)
+    @patch("api_clients._request")
+    def test_openai_compatible_list_response(self, req, _dns):
+        response = Mock()
+        response.ok = True
+        response.json.return_value = {
+            "choices": [{"finish_reason": "stop", "message": {
+                "content": [{"type": "text", "text": "English"}, {
+                    "type": "text", "text": "Polish"
+                }]}
+            }]
+        }
+        req.return_value = response
+        result = generate_text("OpenRouter", PROVIDERS["OpenRouter"]["base_url"],
+                               "openai/gpt-oss-120b", "secret", "Translate")
+        self.assertEqual(result, "English\nPolish")
+        self.assertNotIn("reasoning_effort", req.call_args.kwargs["json"])
+
+    @patch("api_clients.socket.getaddrinfo", return_value=PUBLIC_ADDR)
+    @patch("api_clients._request")
+    def test_compatible_responses_style(self, req, _dns):
+        response = Mock()
+        response.ok = True
+        response.json.return_value = {
+            "output": [{"type": "message", "content": [
+                {"type": "output_text", "text": "Output from proxy"}]}]
+        }
+        req.return_value = response
+        result = generate_text("OpenAI", PROVIDERS["OpenAI"]["base_url"],
+                               "gpt-4.1-mini", "secret", "Translate")
+        self.assertEqual(result, "Output from proxy")
+
+    @patch("api_clients.socket.getaddrinfo", return_value=PUBLIC_ADDR)
+    @patch("api_clients._request")
+    def test_gemini_native_style_fallback(self, req, _dns):
+        response = Mock()
+        response.ok = True
+        response.json.return_value = {
+            "candidates": [{"finishReason": "STOP", "content": {
+                "parts": [{"text": "Przetłumaczony tekst."}]
+            }}]
+        }
+        req.return_value = response
+        result = generate_text("Google Gemini", PROVIDERS["Google Gemini"]["base_url"],
+                               "gemini-3.8-flash", "secret", "Translate")
+        self.assertEqual(result, "Przetłumaczony tekst.")
+
+    @patch("api_clients.socket.getaddrinfo", return_value=PUBLIC_ADDR)
+    @patch("api_clients._request")
     def test_anthropic_native(self, req, _dns):
         response = Mock()
         response.ok = True
