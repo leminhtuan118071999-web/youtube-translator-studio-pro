@@ -203,6 +203,18 @@ def _save_cloud_state(force=False):
             raise
 
 
+def _persist_and_rerun():
+    try:
+        _save_cloud_state(force=True)
+    except Exception as exc:
+        st.error(
+            "Không thể lưu dữ liệu trước khi chuyển phiên. "
+            "Thay đổi vẫn đang ở phiên tạm. " + str(exc)
+        )
+        return
+    st.rerun()
+
+
 # Data belong to this browser's current Streamlit session, never a shared server file.
 if "workspaces" not in st.session_state:
     first = uuid.uuid4().hex
@@ -406,7 +418,7 @@ with st.sidebar:
             st.session_state["_session_flash"] = (
                 "➕ Đã tạo phiên mới. Phiên trước chưa có kết quả xử lý nên không lưu vào danh sách."
             )
-        st.rerun()
+        _persist_and_rerun()
 
     if st.session_state.pop("_reset_delete_confirm_next", False):
         st.session_state["confirm_delete_all_sessions"] = False
@@ -433,7 +445,7 @@ with st.sidebar:
         st.session_state["editing_session_id"] = None
         st.session_state["_open_session_next"] = new_id
         st.session_state["_reset_delete_confirm_next"] = True
-        st.rerun()
+        _persist_and_rerun()
 
     st.divider()
     st.markdown("**📚 Danh sách phiên đã chạy**")
@@ -481,7 +493,7 @@ with st.sidebar:
                 if saved_id != sid:
                     sync_form(sid)
                     st.session_state["_open_session_next"] = saved_id
-                    st.rerun()
+                    _persist_and_rerun()
         with edit_col:
             if st.button(
                 "✏️",
@@ -492,7 +504,7 @@ with st.sidebar:
                 st.session_state["editing_session_id"] = (
                     None if st.session_state.get("editing_session_id") == saved_id else saved_id
                 )
-                st.rerun()
+                _persist_and_rerun()
         if st.session_state.get("editing_session_id") == saved_id:
             st.text_input(
                 "Tên mới (nhấn Enter để lưu)",
@@ -592,7 +604,7 @@ with st.sidebar:
                     st.session_state["_session_flash"] = (
                         "✅ Đã khôi phục các phiên từ bản sao lưu."
                     )
-                    st.rerun()
+                    _persist_and_rerun()
                 except (ValueError, UnicodeError, TypeError, RuntimeError) as exc:
                     st.error(f"Không khôi phục được: {exc}")
 
@@ -680,7 +692,7 @@ with st.sidebar:
             )
             if st.button("📌 Dùng Model đã chọn", key=f"set_model_{provider_id}", use_container_width=True):
                 st.session_state[f"pending_model_{provider_id}"] = scan_choice
-                st.rerun()
+                _persist_and_rerun()
 
         if key:
             st.caption("✅ Đã nhập API key" + (" (Secrets)" if not entered_key else ""))
@@ -969,7 +981,7 @@ if st.button("🚀 BẮT ĐẦU TẠO TOÀN BỘ", type="primary",
                 f"⏳ Phiên '{session['name']}' đã chạy nền. "
                 "Bạn có thể nhấn Tạo phiên mới, phiên này vẫn tiếp tục."
             )
-            st.rerun()
+            _persist_and_rerun()
         except Exception as exc:
             st.error(f"Không thể khởi động tác vụ: {exc}")
 
@@ -978,7 +990,7 @@ if st.button("🚀 BẮT ĐẦU TẠO TOÀN BỘ", type="primary",
 def show_background_job_progress():
     """Poll in the Streamlit thread; worker threads never call st.*."""
     if collect_completed_jobs():
-        st.rerun()
+        _persist_and_rerun()
     for session_id, job in list(st.session_state.background_jobs.items()):
         if session_id not in st.session_state.workspaces:
             continue
@@ -1033,7 +1045,7 @@ with tab_translate:
                 with st.spinner(f"Đang dịch sang {language}..."):
                     session["translated"] = translate_full_script(session["source"], language)
                 mark_session_processed(session)
-                st.rerun()
+                _persist_and_rerun()
             except Exception as exc:
                 st.error(str(exc))
     st.subheader(f"🌍 Bản dịch hoàn chỉnh ({language})")
@@ -1051,7 +1063,7 @@ with tab_visual:
                     generated = create_20_prompts(base, language)
                 session["prompts"] = json.dumps(generated, ensure_ascii=False)
                 mark_session_processed(session)
-                st.rerun()
+                _persist_and_rerun()
             except Exception as exc:
                 st.error(str(exc))
     prompt_items = parse_saved_prompts(session.get("prompts", ""))
@@ -1082,7 +1094,7 @@ with tab_seo:
                     session["new_title"], session["new_description"], session["seo_tags"]
                 ])
                 mark_session_processed(session)
-                st.rerun()
+                _persist_and_rerun()
             except Exception as exc:
                 st.error(str(exc))
 
