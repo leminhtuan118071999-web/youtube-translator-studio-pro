@@ -32,6 +32,12 @@ PROVIDERS = {
         "secret": "OPENAI_API_KEY",
         "kind": "chat",
     },
+    "Claude (Anthropic)": {
+        "base_url": "https://api.anthropic.com/v1",
+        "model": "claude-sonnet-4-6",
+        "secret": "ANTHROPIC_API_KEY",
+        "kind": "anthropic",
+    },
     "OpenRouter": {
         "base_url": "https://openrouter.ai/api/v1",
         "model": "openai/gpt-oss-120b",
@@ -50,12 +56,7 @@ PROVIDERS = {
         "secret": "TOGETHER_API_KEY",
         "kind": "chat",
     },
-    "Anthropic Claude": {
-        "base_url": "https://api.anthropic.com/v1",
-        "model": "claude-sonnet-4-5",
-        "secret": "ANTHROPIC_API_KEY",
-        "kind": "anthropic",
-    },
+
     "API tương thích OpenAI (tùy chỉnh)": {
         "base_url": "",
         "model": "",
@@ -63,6 +64,31 @@ PROVIDERS = {
         "kind": "chat",
     },
 }
+
+
+def migrate_claude_settings(state):
+    """Retain existing Claude credentials/models after making its name visible.
+
+    Runs before Streamlit instantiates API widgets. Never logs or copies a
+    credential outside the in-memory session mapping.
+    """
+    old_provider = "Anthropic Claude"
+    new_provider = "Claude (Anthropic)"
+    if state.get("api_provider") == old_provider:
+        state["api_provider"] = new_provider
+    for prefix in (
+        "api_key_", "api_base_", "api_model_id_", "models_found_",
+        "pending_model_", "model_picker_",
+    ):
+        old_name = prefix + old_provider
+        new_name = prefix + new_provider
+        if old_name in state:
+            if new_name not in state:
+                value = state[old_name]
+                if prefix == "api_model_id_" and value == "claude-sonnet-4-5":
+                    value = "claude-sonnet-4-6"
+                state[new_name] = value
+            state.pop(old_name, None)
 
 
 def validate_base_url(raw):
