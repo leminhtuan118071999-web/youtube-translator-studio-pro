@@ -285,6 +285,51 @@ class ApiClientTests(unittest.TestCase):
 
     @patch("api_clients.socket.getaddrinfo", return_value=PUBLIC_ADDR)
     @patch("api_clients._request")
+    def test_gateway_models_missing_endpoint_gives_manual_instructions(self, req, _dns):
+        response = Mock()
+        response.ok = False
+        response.status_code = 404
+        req.return_value = response
+        with self.assertRaises(RuntimeError) as raised:
+            list_models(
+                "Claude Gateway (AUTH_TOKEN)", "https://gateway.example.com",
+                "gateway-secret",
+            )
+        self.assertIn("/v1/models", str(raised.exception))
+        self.assertIn("Kiểm tra kết nối API", str(raised.exception))
+        self.assertNotIn("gateway-secret", str(raised.exception))
+
+    @patch("api_clients.socket.getaddrinfo", return_value=PUBLIC_ADDR)
+    @patch("api_clients._request")
+    def test_nonstandard_model_json_explains_next_step(self, req, _dns):
+        response = Mock()
+        response.ok = True
+        response.json.return_value = {"result": "ok"}
+        req.return_value = response
+        with self.assertRaises(RuntimeError) as raised:
+            list_models(
+                "Claude Gateway (AUTH_TOKEN)", "https://gateway.example.com",
+                "gateway-secret",
+            )
+        self.assertIn("Model ID thủ công", str(raised.exception))
+
+    @patch("api_clients.socket.getaddrinfo", return_value=PUBLIC_ADDR)
+    @patch("api_clients._request")
+    def test_gateway_flat_string_models(self, req, _dns):
+        response = Mock()
+        response.ok = True
+        response.json.return_value = {"models": ["claude-sonnet-4-6", "claude-opus-4-6"]}
+        req.return_value = response
+        self.assertEqual(
+            list_models(
+                "Claude Gateway (AUTH_TOKEN)", "https://gateway.example.com",
+                "gateway-secret",
+            ),
+            ["claude-opus-4-6", "claude-sonnet-4-6"],
+        )
+
+    @patch("api_clients.socket.getaddrinfo", return_value=PUBLIC_ADDR)
+    @patch("api_clients._request")
     def test_anthropic_native(self, req, _dns):
         response = Mock()
         response.ok = True
