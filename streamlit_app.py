@@ -99,6 +99,31 @@ def mark_session_processed(record):
     st.session_state["_session_flash"] = "✅ Đã đưa phiên xử lý thành công vào danh sách."
 
 
+def archive_previous_session(session_id):
+    """Keep a completed session accessible before switching to a new blank one."""
+    if session_id not in st.session_state.workspaces:
+        return False
+    # Sync current URL and target language from Streamlit widgets first.
+    sync_form(session_id)
+    previous = st.session_state.workspaces[session_id]
+    # A URL alone or an empty session is not considered a completed run.
+    has_result = any(
+        isinstance(previous.get(field), str) and previous[field].strip()
+        for field in (
+            "source", "translated", "prompts", "metadata",
+            "new_title", "new_description", "seo_tags",
+        )
+    )
+    if not has_result:
+        return False
+    previous["processed"] = True
+    previous["saved"] = True
+    if not isinstance(previous.get("saved_order"), int) or previous["saved_order"] <= 0:
+        st.session_state.saved_session_order += 1
+        previous["saved_order"] = st.session_state.saved_session_order
+    return True
+
+
 def rename_saved_session(saved_id):
     """Persist a changed name immediately when the inline text field is edited."""
     if saved_id not in st.session_state.workspaces:
@@ -147,13 +172,23 @@ with st.sidebar:
     st.header("📁 Quản lý phiên làm việc")
 
     if st.button("➕ Tạo phiên mới", use_container_width=True):
-        sync_form(sid)
+        old_name = session["name"]
+        was_archived = archive_previous_session(sid)
         newid = uuid.uuid4().hex
         st.session_state.saved_session_order += 1
         new_session = blank_session(unique_name(f"Phiên {st.session_state.saved_session_order}"))
         new_session["saved_order"] = st.session_state.saved_session_order
         st.session_state.workspaces[newid] = new_session
         st.session_state["_open_session_next"] = newid
+        if was_archived:
+            st.session_state["_session_flash"] = (
+                f"✅ Đã lưu phiên '{old_name}' trong Danh sách phiên đã chạy. "
+                "Bạn có thể nhấn trực tiếp vào tên phiên để xem lại."
+            )
+        else:
+            st.session_state["_session_flash"] = (
+                "➕ Đã tạo phiên mới. Phiên trước chưa có kết quả xử lý nên không lưu vào danh sách."
+            )
         st.rerun()
 
     if st.session_state.pop("_reset_delete_confirm_next", False):
@@ -180,7 +215,7 @@ with st.sidebar:
 
     st.divider()
     st.markdown("**📚 Danh sách phiên đã chạy**")
-    st.caption("Nhấn vào tên để xem lại; nhấn ✏️ để đổi tên.")
+    st.caption("Tạo phiên mới sẽ tự lưu phiên cũ nếu đã xử lý. Nhấn tên để xem lại, ✏️ để đổi tên.")
     name_message = st.session_state.pop("session_name_message", None)
     if name_message:
         st.warning(name_message)
