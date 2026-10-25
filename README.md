@@ -12,6 +12,20 @@
 
 **Giới hạn:** YouTube có thể chặn truy cập phụ đề, hoặc video không có phụ đề, khiến thao tác tự động thất bại; app không tự nhận dạng giọng nói cho video không có phụ đề. Chất lượng dịch/prompt/SEO phụ thuộc model và API key, có thể phát sinh phí.
 
+## 📥 Xử lý lỗi YouTube chặn IP Streamlit Cloud
+
+YouTube có thể chặn request trích xuất phụ đề từ địa chỉ IP máy chủ cloud. Khi đó model dịch dù đã kết nối thành công vẫn không nhận được phụ đề.
+
+App có 3 con đường:
+
+1. **YouTube trực tiếp:** luôn thử trước, không cần API key phụ đề.
+2. **Dịch vụ phụ đề dự phòng Supadata:** khi cách trực tiếp lỗi, nếu đã nhập key riêng trong thanh bên **📥 Phụ đề YouTube dự phòng**, app sẽ tự thử `GET https://api.supadata.ai/v1/transcript?url=...` với `mode=auto`. API trả dữ liệu ngay hoặc trả `jobId` để app chờ tác vụ xử lý xong. Supadata có tài khoản miễn phí giới hạn; tạo transcript bằng AI có thể tính phí/credit. Đây là **API lấy phụ đề**, khác API Groq/Gemini/OpenAI dùng để dịch. Có thể nhập trong giao diện hoặc đặt `SUPADATA_API_KEY` trong Streamlit Cloud Secrets; không đưa vào mã nguồn.
+3. **File phụ đề tải từ máy:** mở phần thu gọn **📄 Phụ đề dự phòng từ máy**, chọn file `.txt`, `.srt` hoặc `.vtt` (tối đa 4 MB). Khi nhấn **BẮT ĐẦU TẠO TOÀN BỘ**, app ưu tiên file vừa tải, bỏ bước yêu cầu phụ đề YouTube và tiếp tục dịch/generate tất cả mục. Không phải hiển thị các ô phụ đề gốc dài như trước.
+
+Nếu YouTube trực tiếp thất bại mà chưa có Supadata key hoặc file phụ đề, phiên vẫn được giữ trong danh sách với **⚠️ lỗi tiếng Việt**, giải thích bước xử lý tiếp theo. Không thể bảo đảm bất kỳ API bên thứ ba nào trích xuất được mọi video (ví dụ video riêng tư hoặc giới hạn vùng).
+
+Tài liệu tích hợp Supadata: https://github.com/supadata-ai/skills/blob/main/skills/supadata/references/video.md
+
 ## ⏳ Chạy nhiều phiên đồng thời
 
 - Nhấn **🚀 BẮT ĐẦU TẠO TOÀN BỘ** để tạo tác vụ chạy nền; ứng dụng **trả lại giao diện ngay** thay vì giữ người dùng ở trang chờ.
