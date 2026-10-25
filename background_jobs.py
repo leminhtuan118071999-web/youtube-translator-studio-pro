@@ -6,12 +6,13 @@ Jobs and API keys exist in process memory, not persistent storage.
 import json
 import re
 import threading
+import time
 from urllib.parse import urlsplit
 
 import requests
 from youtube_transcript_api import YouTubeTranscriptApi
 
-from api_clients import generate_text
+from api_clients import RateLimitError, generate_text
 from transcript_sources import fetch_with_fallback
 
 
@@ -115,11 +116,41 @@ def run_full_job(snapshot, progress):
     api_key = snapshot["api_key"]
 
     def call(prompt):
-        progress.check_cancelled()
-        return generate_text(
-            snapshot["provider"], snapshot["base_url"],
-            snapshot["model"], api_key, prompt
-        )
+        """Retry only the failed API request, not earlier completed chunks."""
+        for attempt in range(4):
+            progress.check_cancelled()
+            try:
+                return generate_text(
+                    snapshot["provider"], snapshot["base_url"],
+                    snapshot["model"], api_key, prompt
+                )
+            except RateLimitError as exc:
+                if not exc.can_retry:
+                    raise RuntimeError(
+                        "Tài khoản API đã hết giới hạn trong ngày. "
+                        "Cần chờ ngày mới hoặc dùng nhà cung cấp/model khác. "
+                        + str(exc)
+                    ) from exc
+                if attempt == 3:
+                    raise RuntimeError(
+                        "Đã tự động thử lại 3 lần nhưng API vẫn vượt giới hạn "
+                        "token/phút. Các kết quả đã xong được giữ lại. "
+                        "Hãy thử lại sau hoặc chọn model khác. " + str(exc)
+                    ) from exc
+                pause = min(120.0, max(2.0, float(exc.retry_after or 30.0) + 2))
+                # The progress bar remains visible in the saved session list.
+                remaining = pause
+                while remaining > 0:
+                    progress.update(
+                        progress.snapshot()[0],
+                        f"⏳ Groq giới hạn TPM: chờ {int(remaining + 0.99)} giây, "
+                        f"tự thử lại lần {attempt + 1}/3..."
+                    )
+                    progress.check_cancelled()
+                    step = min(1.0, remaining)
+                    time.sleep(step)
+                    remaining -= step
+        raise RuntimeError("Không thực hiện được yêu cầu API.")
 
     try:
         progress.check_cancelled()
@@ -165,7 +196,14 @@ def run_full_job(snapshot, progress):
         fields["source"] = source
         progress.publish("source", source)
 
-        chunks = list(chunk_text(source))
+        # Smaller chunks for Groq Free (8K TPM): each request needs far
+        # fewer input and reserved completion tokens.
+        chunk_size = (
+            2200 if snapshot.get("provider") == "Groq"
+            and snapshot.get("model") in ("openai/gpt-oss-20b", "openai/gpt-oss-120b")
+            else 5500
+        )
+        chunks = list(chunk_text(source, chunk_size))
         translations = []
         for idx, part in enumerate(chunks, 1):
             progress.check_cancelled()
