@@ -18,8 +18,8 @@ from persistent_store import (
     restore_widget_settings, snapshot_hash, normalize_sessions,
 )
 
-st.set_page_config(page_title="YouTube Translator Studio Pro", page_icon="🎬", layout="wide")
-st.title("🎬 YouTube Translator Studio Pro")
+st.set_page_config(page_title="LMT Studio Pro", page_icon="🎬", layout="wide")
+st.title("🎬 LMT Studio Pro")
 st.caption("Phụ đề YouTube • Dịch đa ngôn ngữ • Prompt hình ảnh • SEO • Thumbnail • Quản lý phiên")
 
 LANGUAGES = [
