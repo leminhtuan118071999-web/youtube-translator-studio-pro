@@ -11,6 +11,7 @@ from api_clients import (
     list_models,
     validate_base_url,
     migrate_claude_settings,
+    migrate_free_provider_settings,
 )
 
 
@@ -64,6 +65,159 @@ class ApiClientTests(unittest.TestCase):
         migrate_claude_settings(state)
         self.assertEqual(state["api_key_Claude (Anthropic)"], "keep-current")
         self.assertEqual(state["api_model_id_Claude (Anthropic)"], "claude-opus-4-5")
+
+    def test_free_model_presets_and_gemini_migration(self):
+        self.assertEqual(PROVIDERS["Groq"]["model"], "openai/gpt-oss-20b")
+        self.assertEqual(PROVIDERS["Google Gemini"]["kind"], "gemini")
+        self.assertEqual(PROVIDERS["Google Gemini"]["model"], "gemini-3.5-flash-lite")
+        self.assertEqual(
+            PROVIDERS["Google Gemini"]["base_url"],
+            "https://generativelanguage.googleapis.com/v1beta",
+        )
+        state = {
+            "api_key_Google Gemini": "private-google-key",
+            "api_base_Google Gemini":
+                "https://generativelanguage.googleapis.com/v1beta/openai",
+            "api_model_id_Google Gemini": "gemini-3.8-flash",
+            "api_model_id_Groq": "my-user-selected-model",
+        }
+        migrate_free_provider_settings(state)
+        self.assertEqual(state["api_key_Google Gemini"], "private-google-key")
+        self.assertEqual(
+            state["api_base_Google Gemini"],
+            PROVIDERS["Google Gemini"]["base_url"],
+        )
+        self.assertEqual(
+            state["api_model_id_Google Gemini"],
+            "gemini-3.5-flash-lite",
+        )
+        self.assertEqual(state["api_model_id_Groq"], "my-user-selected-model")
+
+    @patch("api_clients.socket.getaddrinfo", return_value=PUBLIC_ADDR)
+    @patch("api_clients._request")
+    def test_native_gemini_free_key_and_response_without_thought(self, request, _dns):
+        response = Mock()
+        response.ok = True
+        response.json.return_value = {
+            "candidates": [{
+                "finishReason": "STOP",
+                "content": {"parts": [
+                    {"text": "Hidden reasoning", "thought": True},
+                    {"text": "Đã dịch thành công"},
+                ]},
+            }]
+        }
+        request.return_value = response
+        text = generate_text(
+            "Google Gemini", PROVIDERS["Google Gemini"]["base_url"],
+            "gemini-3.5-flash-lite", "secret-google-key", "Translate this"
+        )
+        self.assertEqual(text, "Đã dịch thành công")
+        args, kwargs = request.call_args
+        self.assertEqual(
+            args[1],
+            "https://generativelanguage.googleapis.com/v1beta/"
+            "models/gemini-3.5-flash-lite:generateContent",
+        )
+        self.assertEqual(args[2]["x-goog-api-key"], "secret-google-key")
+        self.assertNotIn("Authorization", args[2])
+        self.assertEqual(kwargs["json"]["generationConfig"]["maxOutputTokens"], 128)
+        self.assertEqual(
+            kwargs["json"]["contents"][0]["parts"][0]["text"],
+            "Translate this",
+        )
+
+    @patch("api_clients.socket.getaddrinfo", return_value=PUBLIC_ADDR)
+    @patch("api_clients._request")
+    def test_gemini_scan_native_models_filters_incompatible(self, request, _dns):
+        response = Mock()
+        response.ok = True
+        response.json.return_value = {
+            "models": [
+                {"name": "models/gemini-3.5-flash-lite",
+                 "supportedGenerationMethods": ["generateContent"]},
+                {"name": "models/text-embedding-special",
+                 "supportedGenerationMethods": ["embedContent"]},
+                {"name": "models/gemini-3.8-flash",
+                 "supportedGenerationMethods": ["generateContent"]},
+            ],
+        }
+        request.return_value = response
+        models = list_models(
+            "Google Gemini", PROVIDERS["Google Gemini"]["base_url"],
+            "secret-google-key",
+        )
+        self.assertEqual(models, ["gemini-3.5-flash-lite", "gemini-3.8-flash"])
+        args, _ = request.call_args
+        self.assertEqual(
+            args[1],
+            "https://generativelanguage.googleapis.com/v1beta/models",
+        )
+        self.assertEqual(args[2]["x-goog-api-key"], "secret-google-key")
+
+    @patch("api_clients.socket.getaddrinfo", return_value=PUBLIC_ADDR)
+    @patch("api_clients._request")
+    def test_gemini_free_quota_zero_stops_retries(self, request, _dns):
+        response = Mock()
+        response.ok = False
+        response.status_code = 429
+        response.headers = {}
+        response.json.return_value = {
+            "error": {
+                "message": (
+                    "Quota exceeded for metric "
+                    "generativelanguage.googleapis.com/generate_content_free_tier_requests,"
+                    " limit: 0, model: gemini-3.5-flash-lite"
+                )
+            }
+        }
+        request.return_value = response
+        with self.assertRaises(RateLimitError) as raised:
+            generate_text(
+                "Google Gemini", PROVIDERS["Google Gemini"]["base_url"],
+                "gemini-3.5-flash-lite", "secret-google-key", "Test"
+            )
+        self.assertFalse(raised.exception.can_retry)
+        self.assertIn("hạn mức bằng 0", str(raised.exception))
+        self.assertNotIn("secret-google-key", str(raised.exception))
+
+    @patch("api_clients.socket.getaddrinfo", return_value=PUBLIC_ADDR)
+    @patch("api_clients._request")
+    def test_gemini_nonzero_429_is_retryable(self, request, _dns):
+        response = Mock()
+        response.ok = False
+        response.status_code = 429
+        response.headers = {"retry-after": "6"}
+        response.json.return_value = {
+            "error": {"message": "RESOURCE_EXHAUSTED. Try again later."}
+        }
+        request.return_value = response
+        with self.assertRaises(RateLimitError) as raised:
+            generate_text(
+                "Google Gemini", PROVIDERS["Google Gemini"]["base_url"],
+                "gemini-3.5-flash-lite", "secret-google-key", "Test"
+            )
+        self.assertTrue(raised.exception.can_retry)
+        self.assertEqual(raised.exception.retry_after, 6)
+
+    @patch("api_clients.socket.getaddrinfo", return_value=PUBLIC_ADDR)
+    @patch("api_clients._request")
+    def test_native_gemini_max_tokens_is_reported(self, request, _dns):
+        response = Mock()
+        response.ok = True
+        response.json.return_value = {
+            "candidates": [{
+                "finishReason": "MAX_TOKENS", "content": {"parts": []}
+            }]
+        }
+        request.return_value = response
+        with self.assertRaises(RuntimeError) as raised:
+            generate_text(
+                "Google Gemini", PROVIDERS["Google Gemini"]["base_url"],
+                "gemini-3.5-flash-lite", "key", "A short prompt"
+            )
+        self.assertIn("finish_reason=MAX_TOKENS", str(raised.exception))
+        self.assertIn("hết giới hạn token", str(raised.exception))
 
     @patch("api_clients.socket.getaddrinfo", return_value=PUBLIC_ADDR)
     def test_url_base_appends_chat_endpoint(self, _dns):
