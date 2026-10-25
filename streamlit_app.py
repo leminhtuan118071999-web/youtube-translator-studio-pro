@@ -112,26 +112,42 @@ def mark_session_processed(record):
 
 
 def collect_completed_jobs():
-    """Apply worker results in the Streamlit script thread, never in a worker."""
+    """Synchronize in-memory worker output with the matching Streamlit session."""
     changed = False
     for session_id, job in list(st.session_state.background_jobs.items()):
+        if session_id not in st.session_state.workspaces:
+            job["progress"].cancel()
+            del st.session_state.background_jobs[session_id]
+            continue
+
+        record = st.session_state.workspaces[session_id]
+        if record.get("job_run_id") != job["run_id"]:
+            job["progress"].cancel()
+            del st.session_state.background_jobs[session_id]
+            continue
+
+        # Checkpoints are available before the worker has completed its entire job.
+        for field, value in job["progress"].partial_result().items():
+            if field in FIELDS and record.get(field) != value:
+                record[field] = value
+                changed = True
+
+        percent, stage = job["progress"].snapshot()
+        if record.get("job_percent") != percent or record.get("job_stage") != stage:
+            record["job_percent"] = percent
+            record["job_stage"] = stage
+            changed = True
+
         future = job["future"]
         if not future.done():
             continue
-        changed = True
         del st.session_state.background_jobs[session_id]
-        if session_id not in st.session_state.workspaces:
-            # The user explicitly cleared all sessions while this job was running.
-            continue
-        record = st.session_state.workspaces[session_id]
         try:
             outcome = future.result()
         except Exception:
-            outcome = {"ok": False, "fields": {}, "error": "Tác vụ nền gặp lỗi không mong đợi."}
-        if record.get("job_run_id") != job["run_id"]:
-            continue
-        fields = outcome.get("fields", {})
-        for field, value in fields.items():
+            outcome = {"ok": False, "fields": {},
+                       "error": "Tác vụ nền gặp lỗi không mong đợi."}
+        for field, value in outcome.get("fields", {}).items():
             if field in FIELDS:
                 record[field] = value
         if outcome.get("ok"):
@@ -139,18 +155,20 @@ def collect_completed_jobs():
             record["job_error"] = ""
             mark_session_processed(record)
             st.session_state["_session_flash"] = (
-                f"✅ Phiên '{record['name']}' đã xử lý xong và được lưu vào danh sách."
+                f"✅ Phiên '{record['name']}' đã hoàn thành; nhấn tên trong danh sách để xem."
             )
         else:
+            # A failed attempt must remain accessible even if YouTube returned
+            # no subtitles or the provider failed before producing any text.
             record["job_state"] = "failed"
             record["job_error"] = outcome.get("error", "Không rõ nguyên nhân.")
-            if any(str(record.get(k, "")).strip() for k in (
-                "source", "translated", "prompts", "metadata"
-            )):
-                mark_session_processed(record)
+            record["processed"] = True
+            record["saved"] = True
             st.session_state["_session_flash"] = (
-                f"⚠️ Phiên '{record['name']}' gặp lỗi. Mở lại phiên để xem kết quả còn lại."
+                f"⚠️ Phiên '{record['name']}' gặp lỗi. "
+                "Nhấn tên phiên để xem lý do và chạy lại."
             )
+        changed = True
     return changed
 
 
@@ -287,7 +305,7 @@ with st.sidebar:
 
     st.divider()
     st.markdown("**📚 Danh sách phiên đã chạy**")
-    st.caption("Tạo phiên mới sẽ tự lưu phiên cũ nếu đã xử lý. Nhấn tên để xem lại, ✏️ để đổi tên.")
+    st.caption("Phiên bắt đầu chạy sẽ xuất hiện ngay, kể cả khi API lỗi. Nhấn tên để xem kết quả/trạng thái; ✏️ để đổi tên.")
     name_message = st.session_state.pop("session_name_message", None)
     if name_message:
         st.warning(name_message)
@@ -297,16 +315,14 @@ with st.sidebar:
             (saved_id, saved_record)
             for saved_id, saved_record in st.session_state.workspaces.items()
             if saved_record.get("processed", False)
-            or (
-                saved_id in st.session_state.background_jobs
-                and not st.session_state.background_jobs[saved_id]["future"].done()
-            )
+            or saved_record.get("job_state") in ("running", "completed", "failed", "interrupted")
+            or saved_id in st.session_state.background_jobs
         ),
         key=lambda pair: pair[1].get("saved_order", 0),
         reverse=True,
     )
     if not saved_sessions:
-        st.caption("Chưa có phiên nào xử lý thành công.")
+        st.caption("Chưa có phiên nào được bắt đầu. Bấm BẮT ĐẦU TẠO TOÀN BỘ trước khi tạo phiên mới.")
     for saved_id, saved_record in saved_sessions:
         name_col, edit_col = st.columns([5, 1], gap="small")
         with name_col:
@@ -316,8 +332,10 @@ with st.sidebar:
                 status_icon = f" ⏳ {pct}%"
             elif saved_record.get("job_state") == "completed":
                 status_icon = " ✅"
-            elif saved_record.get("job_state") == "failed":
+            elif saved_record.get("job_state") in ("failed", "interrupted"):
                 status_icon = " ⚠️"
+            elif saved_record.get("job_state") == "running":
+                status_icon = " ⏳"
             else:
                 status_icon = ""
             label = f"📄 {saved_record['name']}{status_icon}" + (" ✓" if saved_id == sid else "")
@@ -614,6 +632,17 @@ flash = st.session_state.pop("_session_flash", None)
 if flash:
     st.success(flash)
 st.info(f"📂 **Phiên đang mở:** {session['name']} — mọi kết quả chỉ thuộc phiên này.")
+if session.get("job_state") == "running":
+    st.info(
+        f"⏳ Phiên này đang xử lý: {session.get('job_stage', 'Đang chạy')} "
+        f"({session.get('job_percent', 0)}%). "
+        "Bạn có thể tạo phiên mới; tác vụ hiện tại không bị dừng."
+    )
+elif session.get("job_state") in ("failed", "interrupted"):
+    st.error(f"⚠️ Phiên này chưa hoàn tất: {session.get('job_error', 'Không rõ lỗi')}")
+    st.caption("Các kết quả đã tạo vẫn được giữ trong phiên. Có thể dùng nút BẮT ĐẦU TẠO TOÀN BỘ để thử lại.")
+elif session.get("job_state") == "completed":
+    st.success("✅ Phiên đã hoàn thành. Có thể Copy các mục trong những tab kết quả.")
 session["url"] = st.text_input(
     "🔗 Dán link video YouTube",
     value=session["url"], key=f"field_{sid}_url",
@@ -660,8 +689,12 @@ if st.button("🚀 BẮT ĐẦU TẠO TOÀN BỘ", type="primary",
             # accesses Streamlit session state. API credentials aren't saved.
             job_future = get_job_executor().submit(run_full_job, snapshot, progress)
             session["job_state"] = "running"
+            session["job_percent"] = 0
+            session["job_stage"] = "Đã xếp tác vụ vào hàng đợi"
             session["job_error"] = ""
             session["job_run_id"] = run_id
+            # Mark as listed immediately, without pretending work has completed.
+            session["saved"] = True
             st.session_state.background_jobs[sid] = {
                 "future": job_future,
                 "progress": progress,
