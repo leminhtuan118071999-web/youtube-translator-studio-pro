@@ -11,8 +11,18 @@ st.set_page_config(page_title="YouTube Translator Studio Pro", page_icon="🎬",
 st.title("🎬 YouTube Translator Studio Pro")
 st.caption("Phụ đề YouTube • Dịch đa ngôn ngữ • Prompt hình ảnh • SEO • Thumbnail • Quản lý phiên")
 
-LANGUAGES = ["Tiếng Ba Lan", "Tiếng Việt", "Tiếng Anh", "Tiếng Nhật", "Tiếng Hàn",
-             "Tiếng Pháp", "Tiếng Đức", "Tiếng Tây Ban Nha"]
+LANGUAGES = [
+    "Tiếng Ba Lan", "Tiếng Anh", "Tiếng Pháp", "Tiếng Đức", "Tiếng Tây Ban Nha",
+    "Tiếng Ý", "Tiếng Bồ Đào Nha", "Tiếng Hà Lan", "Tiếng Thụy Điển",
+    "Tiếng Na Uy", "Tiếng Đan Mạch", "Tiếng Phần Lan", "Tiếng Iceland",
+    "Tiếng Séc", "Tiếng Slovakia", "Tiếng Hungary", "Tiếng Romania",
+    "Tiếng Bulgaria", "Tiếng Hy Lạp", "Tiếng Croatia", "Tiếng Serbia",
+    "Tiếng Slovenia", "Tiếng Bosnia", "Tiếng Albania", "Tiếng Lithuania",
+    "Tiếng Latvia", "Tiếng Estonia", "Tiếng Ukraine", "Tiếng Nga",
+    "Tiếng Belarus", "Tiếng Thổ Nhĩ Kỳ", "Tiếng Ireland", "Tiếng Malta",
+    "Tiếng Catalan", "Tiếng Basque", "Tiếng Wales", "Tiếng Luxembourg",
+    "Tiếng Macedonia", "Tiếng Việt", "Tiếng Nhật", "Tiếng Hàn",
+]
 FIELDS = ("url", "source", "title", "description", "translated", "prompts", "metadata", "language")
 FORM_FIELDS = ("url", "source", "title", "description", "language")
 
@@ -21,6 +31,7 @@ def blank_session(name):
     return {
         "name": name, "url": "", "source": "", "title": "", "description": "",
         "translated": "", "prompts": "", "metadata": "", "language": "Tiếng Ba Lan",
+        "saved": False, "saved_order": 0,
     }
 
 
@@ -56,22 +67,51 @@ if "workspaces" not in st.session_state:
     st.session_state.workspaces = {first: record}
     st.session_state.selected_session = first
 
+# Preserve named sessions created in earlier app versions, before the saved flag existed.
+if "saved_session_order" not in st.session_state:
+    st.session_state.saved_session_order = 0
+for _sid, _record in st.session_state.workspaces.items():
+    if "saved" not in _record:
+        _record["saved"] = _record.get("name", "") not in {"Phiên 1", "Phiên mới"}
+        if _record["saved"]:
+            st.session_state.saved_session_order += 1
+            _record["saved_order"] = st.session_state.saved_session_order
+    _record.setdefault("saved_order", 0)
+
 # A new selection must be set BEFORE the selectbox is instantiated.
 if "_open_session_next" in st.session_state:
     st.session_state["session_picker"] = st.session_state.pop("_open_session_next")
 
 with st.sidebar:
+    # Set the language for the currently selected session at the VERY TOP.
+    sid = st.session_state.get("session_picker", st.session_state.selected_session)
+    if sid not in st.session_state.workspaces:
+        sid = next(iter(st.session_state.workspaces))
+    session = st.session_state.workspaces[sid]
+    lang_value = session.get("language", "Tiếng Ba Lan")
+    language = st.selectbox(
+        "🌍 Ngôn ngữ đích",
+        LANGUAGES,
+        index=LANGUAGES.index(lang_value) if lang_value in LANGUAGES else 0,
+        key=f"field_{sid}_language",
+        help="Chọn ngôn ngữ cho phiên đang mở; có thêm nhiều ngôn ngữ châu Âu.",
+    )
+    session["language"] = language
+    st.divider()
+
     st.header("📁 Quản lý phiên làm việc")
     names = list(st.session_state.workspaces)
-    sid = st.selectbox(
+    selected = st.selectbox(
         "Chọn phiên", names,
-        index=names.index(st.session_state.selected_session)
-        if st.session_state.selected_session in names else 0,
+        index=names.index(sid),
         format_func=lambda x: st.session_state.workspaces[x]["name"],
         key="session_picker",
     )
+    if selected != sid:
+        sync_form(sid)
+        st.session_state.selected_session = selected
+        st.rerun()
     st.session_state.selected_session = sid
-    session = st.session_state.workspaces[sid]
     st.caption(f"Đang làm việc: {session['name']}")
 
     saved_name = st.text_input(
@@ -90,7 +130,10 @@ with st.sidebar:
         else:
             sync_form(sid)
             session["name"] = proposed
-            st.success("Đã lưu tên phiên.")
+            st.session_state.saved_session_order += 1
+            session["saved_order"] = st.session_state.saved_session_order
+            session["saved"] = True
+            st.success("Đã lưu tên phiên vào danh sách.")
             st.rerun()
 
     if st.button("➕ Tạo phiên mới", use_container_width=True):
@@ -117,6 +160,34 @@ with st.sidebar:
         st.session_state["_open_session_next"] = new_id
         st.session_state["_reset_delete_confirm_next"] = True
         st.rerun()
+
+    st.divider()
+    st.markdown("**📚 Danh sách phiên đã lưu**")
+    saved_sessions = sorted(
+        (
+            (saved_id, record)
+            for saved_id, record in st.session_state.workspaces.items()
+            if record.get("saved", False)
+        ),
+        key=lambda entry: entry[1].get("saved_order", 0),
+        reverse=True,
+    )
+    if not saved_sessions:
+        st.caption("Chưa có phiên được lưu. Hãy nhập tên rồi bấm Lưu tên phiên.")
+    else:
+        for saved_id, saved_record in saved_sessions:
+            active_mark = " ✓" if saved_id == sid else ""
+            if st.button(
+                f"📄 {saved_record['name']}{active_mark}",
+                key=f"open_saved_session_{saved_id}",
+                use_container_width=True,
+                type="primary" if saved_id == sid else "secondary",
+            ):
+                if saved_id != sid:
+                    sync_form(sid)
+                    st.session_state["_open_session_next"] = saved_id
+                    st.rerun()
+        st.caption(f"{len(saved_sessions)} phiên đã lưu • Mới lưu ở trên")
 
     st.caption("Dữ liệu các phiên được giữ trong phiên truy cập hiện tại; chưa tự lưu vĩnh viễn khi đóng app.")
 
@@ -170,14 +241,6 @@ with st.sidebar:
     test_api = st.button("🧪 Kiểm tra kết nối API", use_container_width=True)
     st.caption("Key được che và không ghi vào GitHub hay file phiên. ChatGPT Plus không bao gồm phí sử dụng API.")
 
-    st.divider()
-    language = st.selectbox(
-        "🌍 Ngôn ngữ đích", LANGUAGES,
-        index=LANGUAGES.index(session.get("language", LANGUAGES[0]))
-        if session.get("language") in LANGUAGES else 0,
-        key=f"field_{sid}_language",
-    )
-    session["language"] = language
 
 
 def describe_api_error(response, token):
