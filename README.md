@@ -17,13 +17,13 @@
 Đầu thanh bên trái là **🌍 Ngôn ngữ đích**, đã mở rộng thêm tiếng Ý, Bồ Đào Nha, Hà Lan, Thụy Điển, Séc, Romania, Hungary, Ukraine và nhiều ngôn ngữ châu Âu khác. Mỗi phiên có ngôn ngữ đích riêng.
 
 Ngay bên dưới là **📁 Quản lý phiên làm việc**:
-1. Nhấn **➕ Tạo phiên mới** để tạo phiên trống. Phiên trống **không xuất hiện** trong danh sách.
+1. Nhấn **➕ Tạo phiên mới**: app **tự kiểm tra và lưu phiên cũ đã có kết quả xử lý** vào **📚 Danh sách phiên đã chạy** trước khi chuyển sang phiên trắng mới. Bạn không phải nhấn nút Lưu. Phiên chưa có phụ đề hoặc kết quả xử lý sẽ không được lưu.
 2. Sau khi **trích xuất phụ đề**, **nhập file TXT**, **dịch**, **tạo prompt** hoặc **tạo SEO** thành công, phiên tự động được đánh dấu đã chạy và xuất hiện tại **📚 Danh sách phiên đã chạy**. Các lần thử lỗi không được lưu.
 3. Trong danh sách, **nhấn trực tiếp vào tên phiên** để xem lại phụ đề, bản dịch, prompt và SEO; **không có nút “Mở”**.
 4. Để đổi tên, nhấn **✏️** cạnh tên, nhập tên mới rồi nhấn Enter. Phiên đang hoạt động có dấu ✓.
 5. **🗑️ Xóa tất cả phiên đã lưu** chỉ thực thi sau khi tích xác nhận.
 
-**Giới hạn lưu trữ:** Danh sách và dữ liệu của từng phiên được giữ bởi `st.session_state` trong kết nối Streamlit đang mở. Việc tạo/đổi tên **không đồng nghĩa với lưu vĩnh viễn**. Nếu đóng tab, tải lại thành một phiên kết nối mới hoặc máy chủ khởi động lại, dữ liệu có thể mất. Hiện app không có cơ sở dữ liệu người dùng hoặc đồng bộ cloud.
+**Giới hạn lưu trữ quan trọng:** Khi bấm Tạo phiên mới, phiên cũ được tự động giữ trong danh sách **ở kết nối Streamlit đang mở**. Đây chưa phải lưu trữ vĩnh viễn: dữ liệu có thể mất khi tải lại trang, đóng tab hoặc Streamlit Cloud khởi động lại. Không dùng tệp trên máy chủ làm kho chung vì có nguy cơ lộ nội dung giữa nhiều người dùng. Muốn giữ phiên qua các lần đăng nhập, cần tích hợp lưu trữ bền vững có xác thực riêng cho từng người dùng.
 
 Dữ liệu mỗi phiên được tách riêng: link YouTube, phụ đề gốc, bản dịch, tiêu đề, mô tả, prompt ảnh, nội dung SEO, ngôn ngữ dịch.
 
