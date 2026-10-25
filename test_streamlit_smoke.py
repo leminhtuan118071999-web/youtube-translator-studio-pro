@@ -129,6 +129,56 @@ class StreamlitSmokeTests(unittest.TestCase):
             "https://gateway.example.com",
         )
 
+    def test_editable_third_party_api_fields_and_protocol(self):
+        app = self.app.run()
+        selector = next(
+            item for item in app.selectbox if item.label == "CHỌN NỀN TẢNG AI"
+        )
+        self.assertIn("API bên thứ ba (tùy chỉnh)", selector.options)
+        selector.set_value("API bên thứ ba (tùy chỉnh)")
+        app.run()
+        self.assertFalse(app.exception, [str(x.message) for x in app.exception])
+        proto = next(item for item in app.selectbox if item.label == "📡 Chuẩn API")
+        self.assertIn("Anthropic Messages", proto.options)
+        proto.set_value("Anthropic Messages")
+        app.run()
+        auth = next(item for item in app.selectbox if item.label == "🔏 Kiểu xác thực")
+        auth.set_value("x-api-key")
+        app.run()
+        base = next(
+            item for item in app.get("text_input")
+            if item.key == "api_base_API bên thứ ba (tùy chỉnh)"
+        )
+        base.set_value("https://example.net/v1")
+        app.run()
+        model = next(
+            item for item in app.get("text_input")
+            if item.key == "api_model_id_API bên thứ ba (tùy chỉnh)"
+        )
+        model.set_value("my-custom-model")
+        app.run()
+        self.assertFalse(app.exception, [str(x.message) for x in app.exception])
+        self.assertEqual(
+            app.session_state["api_format_API bên thứ ba (tùy chỉnh)"],
+            "Anthropic Messages",
+        )
+        self.assertEqual(
+            app.session_state["api_auth_mode_API bên thứ ba (tùy chỉnh)"],
+            "x-api-key",
+        )
+        self.assertEqual(
+            app.session_state["api_base_API bên thứ ba (tùy chỉnh)"],
+            "https://example.net/v1",
+        )
+        self.assertEqual(
+            app.session_state["api_model_id_API bên thứ ba (tùy chỉnh)"],
+            "my-custom-model",
+        )
+        self.assertTrue(any(
+            item.key == "api_key_API bên thứ ba (tùy chỉnh)"
+            for item in app.get("text_input")
+        ))
+
     def test_language_selector_is_next_to_start_action(self):
         app = self.app.run()
         self.assertFalse(app.exception, [str(exc.message) for exc in app.exception])
