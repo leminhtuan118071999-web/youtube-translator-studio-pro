@@ -113,6 +113,104 @@ class ApiClientTests(unittest.TestCase):
         with self.assertRaises(ValueError):
             validate_base_url("https://internal-looking-public.example.org/v1")
 
+    def test_custom_provider_exists_and_rejects_invalid_protocol(self):
+        self.assertIn("API bên thứ ba (tùy chỉnh)", PROVIDERS)
+        from api_clients import resolve_provider_config
+        self.assertEqual(
+            resolve_provider_config("API bên thứ ba (tùy chỉnh)", "chat", "bearer"),
+            ("chat", "bearer"),
+        )
+        self.assertEqual(
+            resolve_provider_config("API bên thứ ba (tùy chỉnh)", "anthropic", "api_key"),
+            ("anthropic", "api_key"),
+        )
+        with self.assertRaises(ValueError):
+            resolve_provider_config(
+                "API bên thứ ba (tùy chỉnh)", "unknown", "bearer"
+            )
+        with self.assertRaises(ValueError):
+            resolve_provider_config(
+                "API bên thứ ba (tùy chỉnh)", "chat", "unknown"
+            )
+
+    @patch("api_clients.socket.getaddrinfo", return_value=PUBLIC_ADDR)
+    @patch("api_clients._request")
+    def test_custom_openai_bearer_and_model_are_used(self, request, _dns):
+        response = Mock()
+        response.ok = True
+        response.json.return_value = {
+            "choices": [{"message": {"content": "Xin chào"}}]
+        }
+        request.return_value = response
+        result = generate_text(
+            "API bên thứ ba (tùy chỉnh)", "https://example.net/api/v2",
+            "my-unique-model", "secret", "Translate this",
+            api_format="chat", auth_mode="bearer",
+        )
+        self.assertEqual(result, "Xin chào")
+        args, kw = request.call_args
+        self.assertEqual(args[1], "https://example.net/api/v2/chat/completions")
+        self.assertEqual(args[2]["Authorization"], "Bearer secret")
+        self.assertNotIn("x-api-key", args[2])
+        self.assertEqual(kw["json"]["model"], "my-unique-model")
+
+    @patch("api_clients.socket.getaddrinfo", return_value=PUBLIC_ADDR)
+    @patch("api_clients._request")
+    def test_custom_openai_x_api_key_auth(self, request, _dns):
+        response = Mock()
+        response.ok = True
+        response.json.return_value = {
+            "choices": [{"message": {"content": "Answer"}}]
+        }
+        request.return_value = response
+        self.assertEqual(generate_text(
+            "API bên thứ ba (tùy chỉnh)", "https://example.net/v1",
+            "model-a", "custom-token", "Hello",
+            api_format="chat", auth_mode="api_key",
+        ), "Answer")
+        headers = request.call_args.args[2]
+        self.assertEqual(headers["x-api-key"], "custom-token")
+        self.assertNotIn("Authorization", headers)
+
+    @patch("api_clients.socket.getaddrinfo", return_value=PUBLIC_ADDR)
+    @patch("api_clients._request")
+    def test_custom_anthropic_bearer_includes_root_v1(self, request, _dns):
+        response = Mock()
+        response.ok = True
+        response.json.return_value = {
+            "content": [{"type": "text", "text": "Tłumaczenie"}]
+        }
+        request.return_value = response
+        self.assertEqual(generate_text(
+            "API bên thứ ba (tùy chỉnh)", "https://example.net",
+            "claude-custom", "gateway-token", "Translate",
+            api_format="anthropic", auth_mode="bearer",
+        ), "Tłumaczenie")
+        args, kw = request.call_args
+        self.assertEqual(args[1], "https://example.net/v1/messages")
+        self.assertEqual(args[2]["Authorization"], "Bearer gateway-token")
+        self.assertNotIn("x-api-key", args[2])
+        self.assertEqual(kw["json"]["model"], "claude-custom")
+
+    @patch("api_clients.socket.getaddrinfo", return_value=PUBLIC_ADDR)
+    @patch("api_clients._request")
+    def test_custom_anthropic_x_api_key_and_model_scan(self, request, _dns):
+        response = Mock()
+        response.ok = True
+        response.json.return_value = {
+            "data": [{"id": "model1"}, {"id": "model2"}]
+        }
+        request.return_value = response
+        models = list_models(
+            "API bên thứ ba (tùy chỉnh)", "https://example.net/v3",
+            "gateway-token", api_format="anthropic", auth_mode="api_key",
+        )
+        self.assertEqual(models, ["model1", "model2"])
+        args, _ = request.call_args
+        self.assertEqual(args[1], "https://example.net/v3/models")
+        self.assertEqual(args[2]["x-api-key"], "gateway-token")
+        self.assertNotIn("Authorization", args[2])
+
     @patch("api_clients.socket.getaddrinfo", return_value=PUBLIC_ADDR)
     @patch("api_clients._request")
     def test_chat_completions(self, req, _dns):
