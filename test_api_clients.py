@@ -235,6 +235,54 @@ class ApiClientTests(unittest.TestCase):
                                "gemini-3.8-flash", "secret", "Translate")
         self.assertEqual(result, "Przetłumaczony tekst.")
 
+    def test_claude_gateway_is_separate_from_native_claude(self):
+        gateway = PROVIDERS["Claude Gateway (AUTH_TOKEN)"]
+        self.assertEqual(gateway["kind"], "anthropic")
+        self.assertEqual(gateway["auth"], "bearer")
+        self.assertEqual(gateway["base_url"], "")
+        self.assertEqual(gateway["secret"], "")
+        self.assertEqual(PROVIDERS["Claude (Anthropic)"]["kind"], "anthropic")
+
+    @patch("api_clients.socket.getaddrinfo", return_value=PUBLIC_ADDR)
+    @patch("api_clients._request")
+    def test_claude_code_gateway_sends_bearer_token_and_v1_messages(self, req, _dns):
+        response = Mock()
+        response.ok = True
+        response.json.return_value = {
+            "content": [{"type": "text", "text": "Tłumaczenie zakończone"}],
+            "stop_reason": "end_turn"
+        }
+        req.return_value = response
+        result = generate_text(
+            "Claude Gateway (AUTH_TOKEN)", "https://my-gateway.example.com",
+            "claude-sonnet-4-6", "fresh-gateway-token", "Dịch sang tiếng Ba Lan"
+        )
+        self.assertEqual(result, "Tłumaczenie zakończone")
+        args, kwargs = req.call_args
+        self.assertEqual(args[1], "https://my-gateway.example.com/v1/messages")
+        self.assertEqual(args[2]["Authorization"], "Bearer fresh-gateway-token")
+        self.assertNotIn("x-api-key", args[2])
+        self.assertIn("anthropic-version", args[2])
+        self.assertEqual(kwargs["json"]["model"], "claude-sonnet-4-6")
+
+    @patch("api_clients.socket.getaddrinfo", return_value=PUBLIC_ADDR)
+    @patch("api_clients._request")
+    def test_gateway_keeps_explicit_v1_path_and_bearer_model_lookup(self, req, _dns):
+        response = Mock()
+        response.ok = True
+        response.json.return_value = {
+            "data": [{"id": "claude-sonnet-4-6"}]
+        }
+        req.return_value = response
+        models = list_models(
+            "Claude Gateway (AUTH_TOKEN)", "https://my-gateway.example.com/v1",
+            "fresh-gateway-token"
+        )
+        self.assertEqual(models, ["claude-sonnet-4-6"])
+        args, _kwargs = req.call_args
+        self.assertEqual(args[1], "https://my-gateway.example.com/v1/models")
+        self.assertEqual(args[2]["Authorization"], "Bearer fresh-gateway-token")
+
     @patch("api_clients.socket.getaddrinfo", return_value=PUBLIC_ADDR)
     @patch("api_clients._request")
     def test_anthropic_native(self, req, _dns):
