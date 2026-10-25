@@ -620,12 +620,6 @@ def parse_saved_prompts(raw_text):
     return parsed if len(parsed) > 1 else [raw_text.strip()]
 
 
-def render_prompt_blocks(prompts):
-    for i, prompt in enumerate(prompts, start=1):
-        with st.expander(f"🎞️ Cảnh {i:02d} — 📋 Copy riêng", expanded=(i == 1)):
-            st.code(prompt, language=None, wrap_lines=True)
-
-
 
 if test_api:
     try:
@@ -831,9 +825,7 @@ with tab_visual:
                 st.error(str(exc))
     prompt_items = parse_saved_prompts(session.get("prompts", ""))
     if prompt_items:
-        st.subheader(f"🎬 {len(prompt_items)} prompt theo cảnh ({language})")
-        st.caption("Mở từng cảnh để dùng nút Copy riêng của cảnh đó.")
-        render_prompt_blocks(prompt_items)
+        st.subheader(f"🎬 {len(prompt_items)} prompt hình ảnh ({language})")
         all_prompts = "\n\n".join(
             f"Cảnh {index:02d}\n{description}"
             for index, description in enumerate(prompt_items, start=1)
@@ -869,14 +861,9 @@ with tab_seo:
     output("📋 Copy riêng mô tả", session.get("new_description", ""))
     st.subheader(f"🔎 Từ khóa SEO ({language})")
     output("📋 Copy riêng từ khóa SEO", session.get("seo_tags", ""))
-    if session.get("new_title") or session.get("new_description") or session.get("seo_tags"):
-        bundle = "\n\n".join(filter(None, [
-            session.get("new_title", ""),
-            session.get("new_description", ""),
-            session.get("seo_tags", ""),
-        ]))
-        output("📋 Copy toàn bộ tiêu đề • mô tả • SEO", bundle)
-    elif session.get("metadata", "").strip():
+    # Legacy SEO content remains viewable if a saved older session did
+    # not have separately generated title, description, and SEO fields.
+    if not any(session.get(field) for field in ("new_title", "new_description", "seo_tags")) and session.get("metadata", "").strip():
         st.caption("Nội dung SEO từ bản cũ (chưa được tách các mục):")
         output("📋 Copy nội dung SEO phiên cũ", session["metadata"])
 
