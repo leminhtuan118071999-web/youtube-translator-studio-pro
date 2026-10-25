@@ -1098,4 +1098,17 @@ with tab_seo:
         st.caption("Nội dung SEO từ bản cũ (chưa được tách các mục):")
         output("📋 Copy nội dung SEO phiên cũ", session["metadata"])
 
-st.caption("Nút Copy nằm ở góc phải khung nội dung. Các phiên không chia sẻ dữ liệu với nhau trong phiên truy cập hiện tại.")
+st.caption("Nút Copy nằm ở góc phải khung nội dung. Mỗi tài khoản có dữ liệu riêng khi bật Supabase.")
+
+# Automatically save changed sessions and ALL manually-entered API provider
+# settings/keys, encrypted, after widgets update on each Streamlit rerun.
+_save_cloud_state()
+if CLOUD_ENABLED:
+    if st.session_state.get("_cloud_save_error"):
+        st.warning(
+            "⚠️ Chưa đồng bộ được phiên hoặc API lên lưu trữ đám mây: "
+            + st.session_state["_cloud_save_error"]
+        )
+    else:
+        st.caption("☁️ Phiên, bản dịch và cấu hình API được đồng bộ cho lần đăng nhập tiếp theo.")
+
