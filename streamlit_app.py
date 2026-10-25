@@ -726,20 +726,32 @@ def show_background_job_progress():
 
 show_background_job_progress()
 
+@st.cache_data(ttl=3600, show_spinner=False, max_entries=100)
+def get_thumbnail(video_id):
+    """Avoid downloading the same public thumbnail on each progress refresh."""
+    for quality in ("maxresdefault", "sddefault", "hqdefault", "mqdefault"):
+        try:
+            response = requests.get(
+                f"https://i.ytimg.com/vi/{video_id}/{quality}.jpg", timeout=6
+            )
+            response.raise_for_status()
+            thumb = Image.open(BytesIO(response.content))
+            if thumb.width >= 300:
+                return response.content
+        except (requests.RequestException, OSError, ValueError):
+            continue
+    return None
+
+
 if vid:
     st.subheader("🖼️ Thumbnail gốc chất lượng cao")
-    for quality in ["maxresdefault", "sddefault", "hqdefault", "mqdefault"]:
-        try:
-            r = requests.get(f"https://i.ytimg.com/vi/{vid}/{quality}.jpg", timeout=8)
-            r.raise_for_status()
-            image = Image.open(BytesIO(r.content))
-            if image.width >= 300:
-                st.image(r.content, width=500)
-                st.download_button("⬇️ Tải thumbnail", r.content, file_name=f"thumbnail-{vid}.jpg",
-                                   mime="image/jpeg", key=f"thumb_{sid}_{vid}")
-                break
-        except Exception:
-            continue
+    thumbnail = get_thumbnail(vid)
+    if thumbnail:
+        st.image(thumbnail, width=500)
+        st.download_button(
+            "⬇️ Tải thumbnail", thumbnail, file_name=f"thumbnail-{vid}.jpg",
+            mime="image/jpeg", key=f"thumb_{sid}_{vid}",
+        )
 
 # Original transcript, title and description are retained internally for processing,
 # but only target-language results are shown to the user.
