@@ -508,6 +508,95 @@ with st.sidebar:
     )
 
     st.divider()
+    with st.expander("💾 Lưu dữ liệu và sao lưu", expanded=False):
+        if CLOUD_ENABLED:
+            st.success("☁️ Lưu tự động theo tài khoản đăng nhập.")
+            st.caption(
+                f"Tài khoản: {st.session_state.cloud_auth.get('email', '')}. "
+                "Phiên, bản dịch và các cấu hình API được lưu lại. API key "
+                "được mã hóa trước khi gửi tới Supabase."
+            )
+            if st.button("💾 Lưu ngay", use_container_width=True):
+                try:
+                    _save_cloud_state(force=True)
+                    st.success("Đã đồng bộ dữ liệu lên tài khoản.")
+                except Exception as exc:
+                    st.error(f"Chưa lưu được: {exc}")
+            if st.button("🚪 Đăng xuất", use_container_width=True):
+                try:
+                    _save_cloud_state(force=True)
+                except Exception as exc:
+                    st.error(f"Chưa thể lưu trước khi đăng xuất: {exc}")
+                else:
+                    for job in st.session_state.background_jobs.values():
+                        job["progress"].cancel()
+                        job["future"].cancel()
+                    st.session_state.clear()
+                    st.rerun()
+        else:
+            st.warning(
+                "Chưa kết nối kho lưu trữ Supabase. Hiện chỉ có thể sao lưu "
+                "thủ công. Để tự lưu qua các lần đăng nhập, cần thêm "
+                "SUPABASE_URL, SUPABASE_ANON_KEY và SESSION_ENCRYPTION_KEY "
+                "vào Streamlit Secrets và chạy supabase_schema.sql."
+            )
+        try:
+            portable = backup_state(
+                st.session_state.workspaces, st.session_state.selected_session,
+                st.session_state.saved_session_order
+            )
+            st.download_button(
+                "⬇️ Tải bản sao các phiên (.json)",
+                data=json.dumps(portable, ensure_ascii=False, indent=2),
+                file_name="youtube-studio-phien-da-luu.json",
+                mime="application/json",
+                use_container_width=True,
+                help="Không bao gồm API key. Nếu đã cấu hình Supabase, API key "
+                     "được lưu riêng trong dữ liệu mã hóa của tài khoản.",
+            )
+        except ValueError as exc:
+            st.error(str(exc))
+        imported_file = st.file_uploader(
+            "📂 Khôi phục danh sách phiên từ file JSON",
+            type=["json"], key="session_json_restore",
+        )
+        accept_replace = st.checkbox(
+            "Xác nhận thay thế danh sách phiên hiện tại khi khôi phục",
+            key="restore_confirm",
+        )
+        if st.button(
+            "♻️ Khôi phục dữ liệu",
+            disabled=not (imported_file and accept_replace),
+            use_container_width=True,
+        ):
+            if st.session_state.background_jobs:
+                st.warning("Hãy đợi các phiên đang chạy xong trước khi khôi phục.")
+            else:
+                try:
+                    contents = imported_file.getvalue()
+                    if len(contents) > 7 * 1024 * 1024:
+                        raise ValueError("File sao lưu vượt giới hạn 7 MB.")
+                    parsed = normalize_sessions(
+                        json.loads(contents.decode("utf-8-sig"))
+                    )
+                    if not parsed["workspaces"]:
+                        raise ValueError("File sao lưu không có phiên hợp lệ.")
+                    st.session_state.workspaces = {
+                        ident: {**blank_session(rec.get("name", "Phiên cũ")), **rec}
+                        for ident, rec in parsed["workspaces"].items()
+                    }
+                    st.session_state.selected_session = parsed["selected_session"]
+                    st.session_state.saved_session_order = parsed["saved_session_order"]
+                    st.session_state["_cloud_saved_hash"] = ""
+                    _save_cloud_state(force=True)
+                    st.session_state["_session_flash"] = (
+                        "✅ Đã khôi phục các phiên từ bản sao lưu."
+                    )
+                    st.rerun()
+                except (ValueError, UnicodeError, TypeError, RuntimeError) as exc:
+                    st.error(f"Không khôi phục được: {exc}")
+
+    st.divider()
     with st.expander("📥 Phụ đề YouTube dự phòng", expanded=False):
         st.caption(
             "Mặc định thử lấy phụ đề trực tiếp. Nếu YouTube chặn IP Cloud, "
