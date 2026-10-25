@@ -84,6 +84,27 @@ for _sid, _record in st.session_state.workspaces.items():
         _record["saved_order"] = st.session_state.saved_session_order
 
 
+def rename_saved_session(saved_id):
+    """Persist a changed name immediately when the inline text field is edited."""
+    if saved_id not in st.session_state.workspaces:
+        return
+    item = st.session_state.workspaces[saved_id]
+    widget_key = f"inline_session_name_{saved_id}"
+    new_name = st.session_state.get(widget_key, "").strip()[:80]
+    if not new_name:
+        st.session_state[widget_key] = item["name"]
+        st.session_state["session_name_message"] = "Tên phiên không được để trống."
+        return
+    if any(
+        other_id != saved_id and other["name"].casefold() == new_name.casefold()
+        for other_id, other in st.session_state.workspaces.items()
+    ):
+        st.session_state[widget_key] = item["name"]
+        st.session_state["session_name_message"] = "Tên phiên đã tồn tại. Hãy chọn tên khác."
+        return
+    item["name"] = new_name
+
+
 # On a rerun after creating or opening a session, set the active session directly.
 # The saved-session buttons are the only navigation controls; no top dropdown.
 if "_open_session_next" in st.session_state:
@@ -141,7 +162,43 @@ with st.sidebar:
         st.rerun()
 
     st.divider()
-    st.caption("Chỉ phiên hiện tại được hiển thị. Các phiên trước không thể mở lại vì danh sách phiên đã được ẩn. Dữ liệu không lưu vĩnh viễn khi đóng app.")
+    st.markdown("**📚 Danh sách phiên đã lưu**")
+    st.caption("Sửa tên ngay tại ô bên trái (nhấn Enter để lưu), hoặc nhấn Mở để xem lại.")
+    name_message = st.session_state.pop("session_name_message", None)
+    if name_message:
+        st.warning(name_message)
+
+    saved_sessions = sorted(
+        st.session_state.workspaces.items(),
+        key=lambda pair: pair[1].get("saved_order", 0),
+        reverse=True,
+    )
+    for saved_id, saved_record in saved_sessions:
+        name_col, open_col = st.columns([3, 1.25], gap="small")
+        with name_col:
+            st.text_input(
+                f"Đổi tên phiên {saved_id[:8]}",
+                value=saved_record["name"],
+                key=f"inline_session_name_{saved_id}",
+                label_visibility="collapsed",
+                on_change=rename_saved_session,
+                args=(saved_id,),
+                help="Sửa tên phiên trực tiếp tại đây, nhấn Enter để lưu.",
+            )
+        with open_col:
+            if st.button(
+                "✓ Mở" if saved_id == sid else "Mở",
+                key=f"open_saved_session_{saved_id}",
+                use_container_width=True,
+                disabled=saved_id == sid,
+            ):
+                sync_form(sid)
+                st.session_state["_open_session_next"] = saved_id
+                st.rerun()
+    st.caption(
+        f"{len(saved_sessions)} phiên đang được giữ trong phiên truy cập này. "
+        "Khi đóng tab hoặc máy chủ khởi động lại, dữ liệu có thể mất."
+    )
 
     st.divider()
     st.subheader("🔑 Cấu hình API")
