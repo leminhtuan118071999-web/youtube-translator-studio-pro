@@ -31,7 +31,7 @@ def blank_session(name):
     return {
         "name": name, "url": "", "source": "", "title": "", "description": "",
         "translated": "", "prompts": "", "metadata": "", "language": "Tiếng Ba Lan",
-        "saved": True, "saved_order": 0,
+        "saved": False, "processed": False, "saved_order": 0,
     }
 
 
@@ -67,21 +67,33 @@ if "workspaces" not in st.session_state:
     st.session_state.workspaces = {first: record}
     st.session_state.selected_session = first
 
-# Every newly created or existing session is automatically listed without manual saving.
-# Keep the order stable on reruns, including state created by older app versions.
+# Existing workspaces may come from older versions; only completed work is saved.
 if "saved_session_order" not in st.session_state:
     st.session_state.saved_session_order = 0
-for _sid, _record in st.session_state.workspaces.items():
-    _record["saved"] = True
-    previous_order = _record.get("saved_order", 0)
-    if isinstance(previous_order, int) and previous_order > 0:
-        st.session_state.saved_session_order = max(
-            st.session_state.saved_session_order, previous_order
+for _id, _rec in st.session_state.workspaces.items():
+    old_order = _rec.get("saved_order", 0)
+    if isinstance(old_order, int) and old_order > 0:
+        st.session_state.saved_session_order = max(st.session_state.saved_session_order, old_order)
+    if "processed" not in _rec:
+        _rec["processed"] = any(
+            isinstance(_rec.get(field), str) and _rec[field].strip()
+            for field in ("source", "translated", "prompts", "metadata")
         )
-for _sid, _record in st.session_state.workspaces.items():
-    if not isinstance(_record.get("saved_order"), int) or _record["saved_order"] <= 0:
+    _rec["saved"] = bool(_rec["processed"])
+for _id, _rec in st.session_state.workspaces.items():
+    if not isinstance(_rec.get("saved_order"), int) or _rec["saved_order"] <= 0:
         st.session_state.saved_session_order += 1
-        _record["saved_order"] = st.session_state.saved_session_order
+        _rec["saved_order"] = st.session_state.saved_session_order
+
+
+def mark_session_processed(record):
+    """Only successful subtitle extraction, file import, translation, prompts or SEO is saved."""
+    record["processed"] = True
+    record["saved"] = True
+    if not isinstance(record.get("saved_order"), int) or record["saved_order"] <= 0:
+        st.session_state.saved_session_order += 1
+        record["saved_order"] = st.session_state.saved_session_order
+    st.session_state["_session_flash"] = "✅ Đã đưa phiên xử lý thành công vào danh sách."
 
 
 def rename_saved_session(saved_id):
@@ -103,6 +115,7 @@ def rename_saved_session(saved_id):
         st.session_state["session_name_message"] = "Tên phiên đã tồn tại. Hãy chọn tên khác."
         return
     item["name"] = new_name
+    st.session_state["editing_session_id"] = None
 
 
 # On a rerun after creating or opening a session, set the active session directly.
@@ -157,47 +170,66 @@ with st.sidebar:
         new_session["saved_order"] = 1
         st.session_state.saved_session_order = 1
         st.session_state.workspaces = {new_id: new_session}
+        st.session_state["editing_session_id"] = None
         st.session_state["_open_session_next"] = new_id
         st.session_state["_reset_delete_confirm_next"] = True
         st.rerun()
 
     st.divider()
-    st.markdown("**📚 Danh sách phiên đã lưu**")
-    st.caption("Sửa tên ngay tại ô bên trái (nhấn Enter để lưu), hoặc nhấn Mở để xem lại.")
+    st.markdown("**📚 Danh sách phiên đã chạy**")
+    st.caption("Nhấn vào tên để xem lại; nhấn ✏️ để đổi tên.")
     name_message = st.session_state.pop("session_name_message", None)
     if name_message:
         st.warning(name_message)
 
     saved_sessions = sorted(
-        st.session_state.workspaces.items(),
+        (
+            (saved_id, saved_record)
+            for saved_id, saved_record in st.session_state.workspaces.items()
+            if saved_record.get("processed", False)
+        ),
         key=lambda pair: pair[1].get("saved_order", 0),
         reverse=True,
     )
+    if not saved_sessions:
+        st.caption("Chưa có phiên nào xử lý thành công.")
     for saved_id, saved_record in saved_sessions:
-        name_col, open_col = st.columns([3, 1.25], gap="small")
+        name_col, edit_col = st.columns([5, 1], gap="small")
         with name_col:
-            st.text_input(
-                f"Đổi tên phiên {saved_id[:8]}",
-                value=saved_record["name"],
-                key=f"inline_session_name_{saved_id}",
-                label_visibility="collapsed",
-                on_change=rename_saved_session,
-                args=(saved_id,),
-                help="Sửa tên phiên trực tiếp tại đây, nhấn Enter để lưu.",
-            )
-        with open_col:
+            label = f"📄 {saved_record['name']}" + (" ✓" if saved_id == sid else "")
             if st.button(
-                "✓ Mở" if saved_id == sid else "Mở",
+                label,
                 key=f"open_saved_session_{saved_id}",
                 use_container_width=True,
-                disabled=saved_id == sid,
+                type="primary" if saved_id == sid else "secondary",
+                help="Nhấn tên phiên để mở lại nội dung",
             ):
-                sync_form(sid)
-                st.session_state["_open_session_next"] = saved_id
+                if saved_id != sid:
+                    sync_form(sid)
+                    st.session_state["_open_session_next"] = saved_id
+                    st.rerun()
+        with edit_col:
+            if st.button(
+                "✏️",
+                key=f"edit_session_{saved_id}",
+                use_container_width=True,
+                help="Đổi tên phiên",
+            ):
+                st.session_state["editing_session_id"] = (
+                    None if st.session_state.get("editing_session_id") == saved_id else saved_id
+                )
                 st.rerun()
+        if st.session_state.get("editing_session_id") == saved_id:
+            st.text_input(
+                "Tên mới (nhấn Enter để lưu)",
+                value=saved_record["name"],
+                key=f"inline_session_name_{saved_id}",
+                on_change=rename_saved_session,
+                args=(saved_id,),
+            )
     st.caption(
-        f"{len(saved_sessions)} phiên đang được giữ trong phiên truy cập này. "
-        "Khi đóng tab hoặc máy chủ khởi động lại, dữ liệu có thể mất."
+        f"{len(saved_sessions)} phiên đã chạy. "
+        "Các phiên chỉ được giữ trong kết nối Streamlit hiện tại."
     )
 
     st.divider()
@@ -341,6 +373,9 @@ def output(title, text):
     )
 
 
+flash = st.session_state.pop("_session_flash", None)
+if flash:
+    st.success(flash)
 st.info(f"📂 **Phiên đang mở:** {session['name']} — mọi kết quả chỉ thuộc phiên này.")
 session["url"] = st.text_input(
     "🔗 Dán link video YouTube",
@@ -357,7 +392,11 @@ if st.button("📥 Trích xuất phụ đề", key=f"extract_{sid}"):
             text = " ".join(item.text for item in items)
             session["source"] = text
             st.session_state[f"field_{sid}_source"] = text
-            st.success("Đã trích xuất phụ đề.")
+            if text.strip():
+                mark_session_processed(session)
+                st.rerun()
+            else:
+                st.warning("Không tìm thấy nội dung phụ đề.")
         except Exception as e:
             st.error("Không thể trích xuất phụ đề: " + str(e))
 
@@ -383,6 +422,9 @@ if upload and st.button("Dùng file phụ đề này", key=f"use_upload_{sid}"):
     else:
         session["source"] = upload.getvalue().decode("utf-8-sig", errors="replace")
         st.session_state[f"field_{sid}_source"] = session["source"]
+        if session["source"].strip():
+            mark_session_processed(session)
+            st.rerun()
 
 session["source"] = st.text_area(
     "📄 Phụ đề / văn bản gốc",
@@ -413,7 +455,9 @@ with tab_translate:
                         result.append(ai("Dịch chính xác sang " + language
                                          + ", giữ nguyên tên nhân vật, tự nhiên, chỉ xuất bản dịch:\n" + piece))
                 session["translated"] = "\n\n".join(result)
-                st.success("Đã dịch xong trong phiên hiện tại.")
+                if session["translated"].strip():
+                    mark_session_processed(session)
+                    st.rerun()
             except Exception as e:
                 st.error(str(e))
     output("Copy toàn bộ bản dịch", session["translated"])
@@ -429,6 +473,9 @@ with tab_visual:
                     session["prompts"] = ai(
                         "Create exactly 20 numbered cinematic image prompts in English, "
                         "following the story chronologically. Output only prompts:\n" + base)
+                    if session["prompts"].strip():
+                        mark_session_processed(session)
+                        st.rerun()
             except Exception as e:
                 st.error(str(e))
     output("Copy toàn bộ 20 prompt hình ảnh", session["prompts"])
@@ -448,6 +495,9 @@ with tab_seo:
                         "Viết nội dung YouTube bằng " + language
                         + ". Bao gồm tiêu đề 🎬, mô tả 📝 có emoji phù hợp và 15 từ khóa SEO. "
                         "Sát nghĩa, tự nhiên, không có ký tự markdown thừa:\n" + original)
+                    if session["metadata"].strip():
+                        mark_session_processed(session)
+                        st.rerun()
             except Exception as e:
                 st.error(str(e))
     output("Copy toàn bộ tiêu đề, mô tả và SEO", session["metadata"])
