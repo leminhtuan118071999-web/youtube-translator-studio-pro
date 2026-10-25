@@ -1,6 +1,7 @@
 import json
 import re
 import uuid
+import time
 from concurrent.futures import ThreadPoolExecutor
 from io import BytesIO
 
@@ -11,6 +12,11 @@ from youtube_transcript_api import YouTubeTranscriptApi
 from api_clients import PROVIDERS, generate_text, list_models, validate_base_url
 from background_jobs import JobProgress, run_full_job
 from transcript_sources import parse_uploaded_subtitles
+from persistent_store import (
+    backup_state, configured, get_config, sign_in, sign_up,
+    load_user, refresh_auth, save_user, settings_from_widgets,
+    restore_widget_settings, snapshot_hash, normalize_sessions,
+)
 
 st.set_page_config(page_title="YouTube Translator Studio Pro", page_icon="🎬", layout="wide")
 st.title("🎬 YouTube Translator Studio Pro")
@@ -59,6 +65,142 @@ def sync_form(sid):
         widget_key = f"field_{sid}_{field}"
         if widget_key in st.session_state:
             record[field] = st.session_state[widget_key]
+
+
+# Optional durable storage. When Supabase is not configured, users can
+# still use local browser-session mode and export a private JSON backup.
+try:
+    CLOUD_ENABLED = configured(st.secrets)
+except (FileNotFoundError, OSError):
+    CLOUD_ENABLED = False
+
+
+def _cloud_secrets():
+    return st.secrets
+
+
+def _refresh_login():
+    if not CLOUD_ENABLED or "cloud_auth" not in st.session_state:
+        return None
+    updated = refresh_auth(_cloud_secrets(), st.session_state.cloud_auth)
+    st.session_state.cloud_auth = updated
+    return updated
+
+
+if CLOUD_ENABLED:
+    if not st.session_state.get("cloud_auth"):
+        st.info(
+            "🔐 Đăng nhập để giữ lại các phiên, bản dịch và cấu hình API "
+            "cho những lần mở ứng dụng sau."
+        )
+        sign_in_tab, create_account_tab = st.tabs(
+            ["🔑 Đăng nhập", "➕ Tạo tài khoản"]
+        )
+        with sign_in_tab:
+            with st.form("studio_sign_in"):
+                login_email = st.text_input("Email đăng nhập", key="login_email")
+                login_password = st.text_input(
+                    "Mật khẩu", type="password", key="login_password"
+                )
+                do_login = st.form_submit_button(
+                    "Đăng nhập và mở phiên đã lưu", use_container_width=True
+                )
+            if do_login:
+                try:
+                    identity = sign_in(_cloud_secrets(), login_email, login_password)
+                    profile, api_config = load_user(_cloud_secrets(), identity)
+                    st.session_state.cloud_auth = identity
+                    st.session_state["_cloud_restore"] = {
+                        "profile": profile, "api": api_config
+                    }
+                    st.rerun()
+                except Exception as exc:
+                    st.error(f"Không thể đăng nhập/tải dữ liệu: {exc}")
+        with create_account_tab:
+            with st.form("studio_sign_up"):
+                new_email = st.text_input("Email", key="signup_email")
+                new_password = st.text_input(
+                    "Mật khẩu (tối thiểu 8 ký tự)",
+                    type="password", key="signup_password"
+                )
+                register = st.form_submit_button(
+                    "Tạo tài khoản", use_container_width=True
+                )
+            if register:
+                if len(new_password) < 8:
+                    st.error("Mật khẩu phải có ít nhất 8 ký tự.")
+                else:
+                    try:
+                        sign_up(_cloud_secrets(), new_email, new_password)
+                        st.success(
+                            "Đã gửi yêu cầu tạo tài khoản. Nếu Supabase yêu cầu "
+                            "xác nhận email, hãy kiểm tra hộp thư rồi đăng nhập."
+                        )
+                    except Exception as exc:
+                        st.error(str(exc))
+        st.stop()
+    try:
+        _refresh_login()
+    except Exception as exc:
+        st.error(
+            f"Phiên đăng nhập hoặc kết nối lưu trữ có vấn đề: {exc}. "
+            "Hãy đăng xuất rồi đăng nhập lại."
+        )
+        if st.button("Đăng xuất và đăng nhập lại"):
+            st.session_state.clear()
+            st.rerun()
+        st.stop()
+
+
+def _restore_cloud_profile():
+    pending = st.session_state.pop("_cloud_restore", None)
+    if pending is None:
+        return
+    profile = pending.get("profile")
+    if profile:
+        workspaces = {}
+        for session_id, row in profile["workspaces"].items():
+            blank = blank_session(row.get("name", "Phiên đã lưu"))
+            blank.update(row)
+            workspaces[session_id] = blank
+        if workspaces:
+            st.session_state.workspaces = workspaces
+            st.session_state.selected_session = profile["selected_session"]
+            st.session_state.saved_session_order = profile["saved_session_order"]
+    api_config = pending.get("api", {})
+    restore_widget_settings(st.session_state, api_config)
+    st.session_state["_cloud_saved_hash"] = (
+        snapshot_hash(profile, api_config) if profile is not None else ""
+    )
+
+
+_restore_cloud_profile()
+
+
+def _save_cloud_state(force=False):
+    """Save results plus encrypted per-provider API settings for this user."""
+    if not CLOUD_ENABLED or not st.session_state.get("cloud_auth"):
+        return
+    active = st.session_state.get("selected_session")
+    if active in st.session_state.get("workspaces", {}):
+        sync_form(active)
+    payload = backup_state(
+        st.session_state.workspaces, active,
+        st.session_state.get("saved_session_order", 0)
+    )
+    settings = settings_from_widgets(st.session_state)
+    fingerprint = snapshot_hash(payload, settings)
+    if fingerprint == st.session_state.get("_cloud_saved_hash"):
+        return
+    try:
+        auth = _refresh_login()
+        save_user(_cloud_secrets(), auth, payload, settings)
+        st.session_state["_cloud_saved_hash"] = fingerprint
+        st.session_state.pop("_cloud_save_error", None)
+    except Exception as exc:
+        st.session_state["_cloud_save_error"] = str(exc)[:350]
+        if force:
+            raise
 
 
 # Data belong to this browser's current Streamlit session, never a shared server file.
