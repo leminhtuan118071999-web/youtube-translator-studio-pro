@@ -16,6 +16,8 @@ jobs:
       - name: Install dependencies
         run: pip install -r requirements.txt
       - name: Check Python syntax
-        run: python -m py_compile streamlit_app.py api_clients.py background_jobs.py transcript_sources.py persistent_store.py test_persistent_store.py test_api_clients.py test_background_jobs.py test_transcript_sources.py
+        run: python -m py_compile streamlit_app.py api_clients.py background_jobs.py transcript_sources.py persistent_store.py test_persistent_store.py test_api_clients.py test_background_jobs.py test_transcript_sources.py test_streamlit_smoke.py
       - name: Run API provider unit tests
         run: python -m unittest -v test_api_clients.py test_background_jobs.py test_transcript_sources.py test_persistent_store.py
+      - name: Run Streamlit UI smoke tests
+        run: python -m unittest -v test_streamlit_smoke.py
