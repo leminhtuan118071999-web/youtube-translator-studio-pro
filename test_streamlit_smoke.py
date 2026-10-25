@@ -71,6 +71,78 @@ class StreamlitSmokeTests(unittest.TestCase):
         self.assertIn(app.session_state["selected_session"],
                       app.session_state["workspaces"])
 
+    def test_delete_one_purges_all_content_and_stages_browser_sync(self):
+        from persistent_store import backup_state
+        app = self.app.run()
+        first = app.session_state["selected_session"]
+        app.session_state["workspaces"][first].update({
+            "processed": True,
+            "saved": True,
+            "translated": "SENSITIVE_DELETED_TRANSLATION",
+            "prompts": "SENSITIVE_DELETED_PROMPTS",
+            "new_description": "SENSITIVE_DELETED_SEO",
+        })
+        app.session_state["api_key_Groq"] = "preserve-provider-secret"
+        next(btn for btn in app.button if btn.label == "➕ Tạo phiên mới").click()
+        app.run()
+        second = app.session_state["selected_session"]
+        app.session_state["workspaces"][second]["processed"] = True
+        app.run()
+        next(btn for btn in app.button if btn.key == f"delete_session_{first}").click()
+        app.run()
+        next(btn for btn in app.button if btn.key == f"confirm_delete_{first}").click()
+        app.run()
+        state = app.session_state
+        self.assertFalse(app.exception, [str(x.message) for x in app.exception])
+        self.assertNotIn(first, state["workspaces"])
+        self.assertIn(second, state["workspaces"])
+        self.assertTrue(state["_browser_delete_revision"])
+        self.assertEqual(state["api_key_Groq"], "preserve-provider-secret")
+        snapshot = backup_state(
+            state["workspaces"], state["selected_session"],
+            state["saved_session_order"],
+        )
+        payload = str(snapshot)
+        self.assertNotIn("SENSITIVE_DELETED_TRANSLATION", payload)
+        self.assertNotIn("SENSITIVE_DELETED_PROMPTS", payload)
+        self.assertNotIn("SENSITIVE_DELETED_SEO", payload)
+
+    def test_delete_all_purges_every_session_and_stages_browser_sync(self):
+        from persistent_store import backup_state
+        app = self.app.run()
+        first = app.session_state["selected_session"]
+        app.session_state["workspaces"][first].update({
+            "processed": True, "saved": True, "translated": "FIRST_OLD_TRANSLATION",
+        })
+        next(btn for btn in app.button if btn.label == "➕ Tạo phiên mới").click()
+        app.run()
+        second = app.session_state["selected_session"]
+        app.session_state["workspaces"][second].update({
+            "processed": True, "saved": True, "translated": "SECOND_OLD_TRANSLATION",
+        })
+        app.session_state["api_key_Groq"] = "preserve-provider-secret"
+        app.run()
+        next(check for check in app.checkbox
+             if check.key == "confirm_delete_all_sessions").set_value(True)
+        app.run()
+        next(btn for btn in app.button if btn.key == "delete_all_sessions").click()
+        app.run()
+        self.assertFalse(app.exception, [str(x.message) for x in app.exception])
+        state = app.session_state
+        self.assertEqual(len(state["workspaces"]), 1)
+        self.assertNotIn(first, state["workspaces"])
+        self.assertNotIn(second, state["workspaces"])
+        self.assertIn(state["selected_session"], state["workspaces"])
+        self.assertEqual(state["background_jobs"], {})
+        self.assertTrue(state["_browser_delete_revision"])
+        self.assertEqual(state["api_key_Groq"], "preserve-provider-secret")
+        payload = str(backup_state(
+            state["workspaces"], state["selected_session"],
+            state["saved_session_order"],
+        ))
+        self.assertNotIn("FIRST_OLD_TRANSLATION", payload)
+        self.assertNotIn("SECOND_OLD_TRANSLATION", payload)
+
     def test_claude_provider_is_selectable_and_exposes_api_key(self):
         app = self.app.run()
         selector = next(
