@@ -2,7 +2,8 @@ import json
 import unittest
 from unittest.mock import patch
 
-from background_jobs import JobProgress, run_full_job, chunk_text, youtube_id
+from background_jobs import JobProgress, run_full_job, chunk_text, youtube_id, overview
+from api_clients import RateLimitError
 
 
 class BackgroundJobsTests(unittest.TestCase):
@@ -119,6 +120,73 @@ class BackgroundJobsTests(unittest.TestCase):
         result = run_full_job(config, JobProgress())
         self.assertFalse(result["ok"])
         self.assertNotIn("SupaKeyBroken", result["error"])
+
+    @patch("background_jobs.time.sleep", return_value=None)
+    @patch("background_jobs.fetch_subtitles", return_value=("A complete transcript.", "English"))
+    @patch("background_jobs.generate_text")
+    def test_429_retries_failed_translation_without_redoing_completed_work(self, api, subs, sleep):
+        calls = {"translate": 0}
+        def fake_api(provider, base_url, model, api_key, prompt):
+            if "CHỈ xuất bản dịch" in prompt:
+                calls["translate"] += 1
+                if calls["translate"] == 1:
+                    raise RateLimitError("Too many tokens", retry_after=2)
+                return "Tłumaczenie."
+            if "ĐÚNG 20 prompt" in prompt:
+                return json.dumps({"prompts": [f"Scena {n}" for n in range(20)]})
+            if "Soạn YouTube tiêu đề" in prompt:
+                return json.dumps({"title":"Tytuł","description":"Opis","tags":["tag1","tag2"]})
+            self.fail("Unexpected query")
+        api.side_effect = fake_api
+        progress = JobProgress()
+        result = run_full_job(self.config.copy(), progress)
+        self.assertTrue(result["ok"], result["error"])
+        self.assertEqual(calls["translate"], 2)
+        self.assertIn("Tłumaczenie", result["fields"]["translated"])
+        self.assertGreaterEqual(sleep.call_count, 1)
+
+    @patch("background_jobs.time.sleep", return_value=None)
+    @patch("background_jobs.fetch_subtitles", return_value=("A transcript.", "English"))
+    @patch("background_jobs.generate_text", side_effect=RateLimitError("TPM limit", retry_after=1))
+    def test_exhausted_retry_budget_preserves_source(self, api, subs, sleep):
+        progress = JobProgress()
+        result = run_full_job(self.config.copy(), progress)
+        self.assertFalse(result["ok"])
+        self.assertIn("3 lần", result["error"])
+        self.assertEqual(api.call_count, 4)
+        self.assertIn("source", result["fields"])
+        self.assertNotIn("translated", result["fields"])
+
+    @patch("background_jobs.fetch_subtitles", return_value=("A transcript.", "English"))
+    @patch("background_jobs.generate_text", side_effect=RateLimitError("TPD limit", retry_after=60, can_retry=False))
+    def test_daily_quota_not_retried(self, api, subs):
+        result = run_full_job(self.config.copy(), JobProgress())
+        self.assertFalse(result["ok"])
+        self.assertEqual(api.call_count, 1)
+        self.assertIn("ngày", result["error"])
+
+    @patch("background_jobs.fetch_subtitles")
+    @patch("background_jobs.generate_text")
+    def test_groq_translation_is_split_into_small_chunks(self, api, subs):
+        content = "Story. " * 1800
+        subs.return_value = (content, "English")
+        prompt_lengths = []
+        def fake_ai(_provider, _url, _model, _key, prompt):
+            if "CHỈ xuất bản dịch" in prompt:
+                prompt_lengths.append(len(prompt))
+                return "Translation."
+            if "ĐÚNG 20 prompt" in prompt:
+                return json.dumps({"prompts": [f"Scene {n}" for n in range(20)]})
+            if "Soạn YouTube tiêu đề" in prompt:
+                return json.dumps({"title":"Title","description":"Description","tags":["tag1"]})
+            if "Summarize" in prompt or "Condense" in prompt:
+                return "Brief scene events."
+            self.fail("Unexpected prompt")
+        api.side_effect = fake_ai
+        result = run_full_job(self.config.copy(), JobProgress())
+        self.assertTrue(result["ok"], result["error"])
+        self.assertGreater(len(prompt_lengths), 3)
+        self.assertLessEqual(max(prompt_lengths), 2600)
 
     def test_cancel_does_not_touch_provider(self):
         progress = JobProgress()
