@@ -157,6 +157,91 @@ def _error(response, token):
     return RuntimeError(f"HTTP {response.status_code}: {detail}. {hint}")
 
 
+def _extract_text_parts(parts):
+    """Read visible answer text, never provider reasoning or tool-call payloads."""
+    if isinstance(parts, str):
+        return parts.strip()
+    if not isinstance(parts, list):
+        return ""
+    chunks = []
+    for part in parts:
+        if not isinstance(part, dict):
+            continue
+        kind = part.get("type", "text")
+        if kind not in ("text", "output_text"):
+            continue
+        value = part.get("text", "")
+        if isinstance(value, str) and value.strip():
+            chunks.append(value.strip())
+    return "\n".join(chunks)
+
+
+def _read_provider_answer(payload, kind, provider, model):
+    """Parse text from documented response shapes; explain non-text completions."""
+    if not isinstance(payload, dict):
+        raise RuntimeError("API trả phản hồi không phải JSON object.")
+    finish_reason = "không rõ"
+    if kind == "anthropic":
+        answer = _extract_text_parts(payload.get("content", []))
+        finish_reason = str(payload.get("stop_reason") or "không rõ")
+    else:
+        choices = payload.get("choices")
+        if isinstance(choices, list) and choices:
+            choice = choices[0] if isinstance(choices[0], dict) else {}
+            message = choice.get("message") or {}
+            if not isinstance(message, dict):
+                message = {}
+            answer = _extract_text_parts(message.get("content"))
+            finish_reason = str(choice.get("finish_reason") or "không rõ")
+            if not answer and message.get("tool_calls"):
+                finish_reason = "tool_calls"
+        else:
+            # Some OpenAI-compatible proxy servers return Responses-style bodies.
+            output = payload.get("output", [])
+            answer = "\n".join(
+                _extract_text_parts(item.get("content", []))
+                for item in output if isinstance(item, dict)
+                and item.get("type") == "message"
+            ).strip() if isinstance(output, list) else ""
+            # Gemini-compatible / v1beta-style fallback.
+            if not answer and isinstance(payload.get("candidates"), list):
+                candidate = payload["candidates"][0] if payload["candidates"] else {}
+                candidate = candidate if isinstance(candidate, dict) else {}
+                content = candidate.get("content") or {}
+                parts = content.get("parts", []) if isinstance(content, dict) else []
+                answer = _extract_text_parts(parts)
+                finish_reason = str(candidate.get("finishReason") or "không rõ")
+            if not answer and isinstance(payload.get("output_text"), str):
+                answer = payload["output_text"].strip()
+    if answer:
+        return answer
+
+    usage = payload.get("usage", {})
+    completion = usage.get("completion_tokens") if isinstance(usage, dict) else None
+    used = f", completion_tokens={completion}" if isinstance(completion, int) else ""
+    desc = f"{provider} / {model}, finish_reason={finish_reason}{used}"
+    if finish_reason in ("length", "max_tokens"):
+        raise RuntimeError(
+            f"API đã hết giới hạn token đầu ra trước khi sinh bản dịch ({desc}). "
+            "Hãy tăng max completion tokens hoặc chọn model ít reasoning hơn."
+        )
+    if finish_reason == "tool_calls":
+        raise RuntimeError(
+            f"Model chỉ gửi lệnh gọi công cụ, không có văn bản để dịch ({desc}). "
+            "Hãy chọn model chat tạo nội dung văn bản."
+        )
+    if finish_reason in ("content_filter", "safety", "SAFETY"):
+        raise RuntimeError(
+            f"Nhà cung cấp chặn nội dung đầu ra ({desc}). "
+            "Hãy kiểm tra nội dung và chính sách của model."
+        )
+    raise RuntimeError(
+        f"API trả về thành công nhưng không có nội dung văn bản ({desc}). "
+        "Có thể model chỉ tạo phần reasoning mà chưa tạo câu trả lời cuối; "
+        "hãy thử model chat khác hoặc giảm mức reasoning."
+    )
+
+
 def generate_text(provider, base_url, model, api_key, prompt):
     if provider not in PROVIDERS:
         raise ValueError("Nhà cung cấp API không hợp lệ.")
@@ -175,6 +260,15 @@ def generate_text(provider, base_url, model, api_key, prompt):
         }
     else:
         body = {"model": model, "messages": [{"role": "user", "content": prompt}]}
+        # Groq GPT-OSS uses reasoning tokens. Reserve enough output tokens for
+        # the final translation, not just internal reasoning. These options
+        # are documented for GPT-OSS; don't send them to other providers/models.
+        if provider == "Groq" and model in (
+            "openai/gpt-oss-20b", "openai/gpt-oss-120b"
+        ):
+            body["reasoning_effort"] = "low"
+            body["max_completion_tokens"] = 8192
+            body["include_reasoning"] = False
     try:
         response = _request("POST", endpoint, api_headers(kind, token), json=body)
     except requests.RequestException as exc:
@@ -182,27 +276,10 @@ def generate_text(provider, base_url, model, api_key, prompt):
     if not response.ok:
         raise _error(response, token)
     try:
-        obj = response.json()
-        if kind == "anthropic":
-            chunks = [
-                item.get("text", "") for item in obj.get("content", [])
-                if item.get("type") == "text"
-            ]
-        else:
-            message = obj["choices"][0]["message"]
-            content = message.get("content")
-            if isinstance(content, str):
-                chunks = [content]
-            elif isinstance(content, list):
-                chunks = [item.get("text", "") for item in content if isinstance(item, dict)]
-            else:
-                chunks = []
-        answer = "\n".join(str(piece) for piece in chunks if piece).strip()
-        if not answer:
-            raise ValueError("Không có nội dung văn bản.")
-        return answer
-    except (KeyError, IndexError, ValueError, TypeError) as exc:
-        raise RuntimeError("API có phản hồi nhưng không trả nội dung văn bản. Kiểm tra model.") from exc
+        payload = response.json()
+    except ValueError as exc:
+        raise RuntimeError("API trả HTTP 200 nhưng không phải JSON hợp lệ.") from exc
+    return _read_provider_answer(payload, kind, provider, model)
 
 
 def list_models(provider, base_url, api_key):
