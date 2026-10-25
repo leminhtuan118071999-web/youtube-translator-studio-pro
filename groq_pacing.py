@@ -5,8 +5,9 @@ to organizations, so this gate coordinates jobs sharing an API key on this
 Streamlit server only. Provider 429 headers remain authoritative.
 """
 from collections import deque
+from contextlib import contextmanager
 from hashlib import sha256
-from threading import Lock
+from threading import Lock, local
 import time
 
 
@@ -33,6 +34,17 @@ class GroqRequestGate:
         self._lock = Lock()
         self._history = {}
         self._pause_until = {}
+        self._thread_progress = local()
+
+    @contextmanager
+    def reporting(self, progress):
+        """Route pacing status to the calling job, not another worker."""
+        previous = getattr(self._thread_progress, "value", None)
+        self._thread_progress.value = progress
+        try:
+            yield
+        finally:
+            self._thread_progress.value = previous
 
     @staticmethod
     def _id(key, model):
@@ -41,6 +53,7 @@ class GroqRequestGate:
 
     def acquire(self, key, model, prompt, progress=None):
         """Reserve a request without holding the lock while waiting."""
+        progress = progress or getattr(self._thread_progress, "value", None)
         identity = self._id(key, model)
         cost = estimated_tokens(prompt)
         while True:
