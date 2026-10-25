@@ -64,6 +64,13 @@ PROVIDERS = {
         "kind": "chat",
     },
 
+    "API bên thứ ba (tùy chỉnh)": {
+        "base_url": "",
+        "model": "",
+        "secret": "",
+        "kind": "chat",
+        "auth": "bearer",
+    },
     "API tương thích OpenAI (tùy chỉnh)": {
         "base_url": "",
         "model": "",
@@ -151,13 +158,35 @@ def api_endpoint(base_url, kind, resource):
     return base + ("/chat/completions" if resource == "chat" else "/models")
 
 
-def provider_base_url(provider, base_url):
+def resolve_provider_config(provider, api_format=None, auth_mode=None):
+    """Choose protocol and auth per request, without shared mutable state.
+
+    Only the explicitly selected third-party provider accepts these overrides.
+    """
+    if provider not in PROVIDERS:
+        raise ValueError("Nhà cung cấp API không hợp lệ.")
+    preset = PROVIDERS[provider]
+    if provider != "API bên thứ ba (tùy chỉnh)":
+        return preset["kind"], preset.get("auth", "bearer")
+    kind = api_format or "chat"
+    method = auth_mode or "bearer"
+    if kind not in ("chat", "anthropic"):
+        raise ValueError("Chuẩn API bên thứ ba không hợp lệ.")
+    if method not in ("bearer", "api_key"):
+        raise ValueError("Kiểu xác thực API bên thứ ba không hợp lệ.")
+    return kind, method
+
+
+def provider_base_url(provider, base_url, kind=None):
     """Claude Code-style gateways configure an API origin without /v1.
 
     Convert the origin to the equivalent native Anthropic Messages API path.
     If a gateway specifies an explicit API path, use that path unchanged.
     """
-    if provider == "Claude Gateway (AUTH_TOKEN)":
+    if (
+        provider == "Claude Gateway (AUTH_TOKEN)"
+        or (provider == "API bên thứ ba (tùy chỉnh)" and kind == "anthropic")
+    ):
         raw = (base_url or "").strip().rstrip("/")
         # A plain HTTPS origin must use /v1/messages for Anthropic Messages.
         if not urlsplit(raw).path.strip("/"):
@@ -176,6 +205,8 @@ def api_headers(kind, token, auth_mode="api_key"):
         else:
             headers["x-api-key"] = token
         return headers
+    if auth_mode == "api_key":
+        return {"x-api-key": token, "Content-Type": "application/json"}
     return {"Authorization": "Bearer " + token, "Content-Type": "application/json"}
 
 
@@ -365,18 +396,18 @@ def _read_provider_answer(payload, kind, provider, model):
     )
 
 
-def generate_text(provider, base_url, model, api_key, prompt):
-    if provider not in PROVIDERS:
-        raise ValueError("Nhà cung cấp API không hợp lệ.")
+def generate_text(
+    provider, base_url, model, api_key, prompt, *,
+    api_format=None, auth_mode=None,
+):
+    kind, selected_auth = resolve_provider_config(provider, api_format, auth_mode)
     token = (api_key or "").strip()
     if not token:
         raise ValueError("Chưa nhập API key.")
     model = (model or "").strip()
     if not model or len(model) > 180 or any(ch.isspace() for ch in model):
         raise ValueError("Hãy nhập Model ID chính xác (không chứa khoảng trắng).")
-    kind = PROVIDERS[provider]["kind"]
-    auth_mode = PROVIDERS[provider].get("auth", "api_key")
-    endpoint = api_endpoint(provider_base_url(provider, base_url), kind, "chat")
+    endpoint = api_endpoint(provider_base_url(provider, base_url, kind), kind, "chat")
     if kind == "anthropic":
         # Claude/Gateway traffic should request only the output budget each
         # operation needs. A simple connectivity check must not reserve 8192
@@ -420,7 +451,7 @@ def generate_text(provider, base_url, model, api_key, prompt):
     if provider == "Groq":
         groq_request_gate.acquire(token, model, prompt)
     try:
-        response = _request("POST", endpoint, api_headers(kind, token, auth_mode), json=body)
+        response = _request("POST", endpoint, api_headers(kind, token, selected_auth), json=body)
     except requests.RequestException as exc:
         raise RuntimeError("Không kết nối được nhà cung cấp AI. Hãy kiểm tra Base URL và mạng.") from exc
     if not response.ok:
@@ -438,17 +469,16 @@ def generate_text(provider, base_url, model, api_key, prompt):
     return _read_provider_answer(payload, kind, provider, model)
 
 
-def list_models(provider, base_url, api_key):
-    if provider not in PROVIDERS:
-        raise ValueError("Nhà cung cấp API không hợp lệ.")
+def list_models(
+    provider, base_url, api_key, *, api_format=None, auth_mode=None,
+):
+    kind, selected_auth = resolve_provider_config(provider, api_format, auth_mode)
     token = (api_key or "").strip()
     if not token:
         raise ValueError("Hãy nhập API key trước khi quét Model.")
-    kind = PROVIDERS[provider]["kind"]
-    auth_mode = PROVIDERS[provider].get("auth", "api_key")
-    url = api_endpoint(provider_base_url(provider, base_url), kind, "models")
+    url = api_endpoint(provider_base_url(provider, base_url, kind), kind, "models")
     try:
-        response = _request("GET", url, api_headers(kind, token, auth_mode))
+        response = _request("GET", url, api_headers(kind, token, selected_auth))
     except requests.RequestException as exc:
         raise RuntimeError("Không lấy được danh sách Model. Kiểm tra mạng và Base URL.") from exc
     if not response.ok:
