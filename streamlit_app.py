@@ -521,13 +521,91 @@ session["url"] = st.text_input(
 )
 match = re.search(r"(?:v=|youtu\.be/|/shorts/|/live/)([\w-]{11})", session["url"])
 vid = match.group(1) if match else None
+
+if st.button("🚀 BẮT ĐẦU TẠO TOÀN BỘ", type="primary",
+             use_container_width=True, key=f"run_all_{sid}"):
+    if not key.strip():
+        st.error("Hãy nhập API key hợp lệ và chọn model trước khi bắt đầu.")
+    elif not vid and not (st.session_state.get(f"field_{sid}_source") or session["source"]).strip():
+        st.warning("Hãy dán link YouTube hoặc nhập phụ đề/văn bản gốc trước khi bắt đầu.")
+    else:
+        progress = st.progress(0, text="Khởi tạo quy trình...")
+        try:
+            if vid:
+                progress.progress(5, text="📥 Đang lấy phụ đề hiện có từ YouTube...")
+                source_text, caption_language = fetch_best_transcript(vid)
+                session["source"] = source_text
+                st.session_state[f"field_{sid}_source"] = source_text
+                st.caption(f"Phụ đề được trích xuất từ bản {caption_language}.")
+                # YouTube oEmbed may provide a title, but it doesn't return descriptions.
+                if not session.get("title", "").strip():
+                    try:
+                        meta_response = requests.get(
+                            "https://www.youtube.com/oembed",
+                            params={"url": f"https://www.youtube.com/watch?v={vid}",
+                                    "format": "json"},
+                            timeout=8,
+                        )
+                        if meta_response.ok:
+                            original_title = str(meta_response.json().get("title", "")).strip()
+                            if original_title:
+                                session["title"] = original_title
+                                st.session_state[f"field_{sid}_title"] = original_title
+                    except (requests.RequestException, ValueError):
+                        pass
+            else:
+                source_text = st.session_state.get(f"field_{sid}_source", session["source"])
+                session["source"] = source_text
+
+            if not source_text.strip():
+                raise ValueError("Không có phụ đề hoặc văn bản để dịch.")
+            mark_session_processed(session)
+            # Clear only previously GENERATED fields; never delete original input.
+            for field in ("translated", "prompts", "metadata",
+                          "new_title", "new_description", "seo_tags"):
+                session[field] = ""
+            progress.progress(15, text=f"🌍 Đang dịch toàn bộ sang {language}...")
+
+            def report_part(idx, count):
+                progress.progress(
+                    min(65, 15 + int(50 * idx / count)),
+                    text=f"🌍 Dịch phần {idx}/{count} sang {language}...",
+                )
+            session["translated"] = translate_full_script(
+                source_text, language, report=report_part
+            )
+            progress.progress(70, text=f"🎨 Tạo 20 prompt hình ảnh bằng {language}...")
+            prompt_items = create_20_prompts(session["translated"], language)
+            session["prompts"] = json.dumps(prompt_items, ensure_ascii=False)
+            progress.progress(85, text=f"📝 Tạo tiêu đề, mô tả và SEO bằng {language}...")
+            (
+                session["new_title"], session["new_description"], session["seo_tags"]
+            ) = create_target_metadata(
+                session["translated"], session.get("title", ""),
+                session.get("description", ""), language
+            )
+            session["metadata"] = "\n\n".join([
+                session["new_title"], session["new_description"], session["seo_tags"]
+            ])
+            progress.progress(100, text="✅ Đã tạo xong tất cả các phần!")
+            st.session_state["_session_flash"] = (
+                f"✅ Hoàn tất phiên {session['name']}: phụ đề, bản dịch, "
+                f"20 prompt, tiêu đề, mô tả và SEO ({language})."
+            )
+            st.rerun()
+        except Exception as exc:
+            st.error(f"Quy trình dừng trước khi hoàn tất: {exc}")
+            st.info(
+                "Các bước đã thành công vẫn được giữ lại trong phiên. "
+                "Bạn có thể tạo lại riêng từng mục bằng các nút bên dưới."
+            )
+
 if st.button("📥 Trích xuất phụ đề", key=f"extract_{sid}"):
     if not vid:
         st.warning("Hãy nhập link YouTube hợp lệ.")
     else:
         try:
-            items = YouTubeTranscriptApi().fetch(vid, languages=["vi", "en", "pl"])
-            text = " ".join(item.text for item in items)
+            text, caption_language = fetch_best_transcript(vid)
             session["source"] = text
             st.session_state[f"field_{sid}_source"] = text
             if text.strip():
