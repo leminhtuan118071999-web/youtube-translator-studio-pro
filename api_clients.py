@@ -10,6 +10,8 @@ from urllib.parse import urlsplit
 
 import requests
 
+from groq_pacing import groq_request_gate
+
 
 PROVIDERS = {
     "Groq": {
@@ -317,12 +319,22 @@ def generate_text(provider, base_url, model, api_key, prompt):
             else:
                 body["max_completion_tokens"] = 2200
             body["include_reasoning"] = False
+    # A process-wide, per-key/model 8K TPM soft cap prevents overlapping
+    # Streamlit background sessions from flooding Groq in the same minute.
+    if provider == "Groq":
+        groq_request_gate.acquire(token, model, prompt)
     try:
         response = _request("POST", endpoint, api_headers(kind, token), json=body)
     except requests.RequestException as exc:
         raise RuntimeError("Không kết nối được nhà cung cấp AI. Hãy kiểm tra Base URL và mạng.") from exc
     if not response.ok:
-        raise _error(response, token)
+        failure = _error(response, token)
+        if provider == "Groq" and isinstance(failure, RateLimitError):
+            if failure.can_retry:
+                groq_request_gate.cooldown(
+                    token, model, (failure.retry_after or 30.0) + 3.0
+                )
+        raise failure
     try:
         payload = response.json()
     except ValueError as exc:
