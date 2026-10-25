@@ -52,7 +52,7 @@ Tài liệu tích hợp Supadata: https://github.com/supadata-ai/skills/blob/mai
 - Tối đa 3 tác vụ đồng thời trong một phiên kết nối; máy chủ chạy tối đa 3 luồng worker. Nút **Xóa tất cả phiên đã lưu** yêu cầu xác nhận, hủy các tác vụ chưa chạy và yêu cầu tác vụ đang chạy ngừng ở bước tiếp theo.
 - Nếu phụ đề hoặc API lỗi ở bất cứ bước nào, phiên vẫn giữ trong danh sách kèm lý do lỗi. Các phần đã xử lý thành công xuất hiện khi bạn mở lại phiên; có thể thử chạy lại. Worker chia sẻ kết quả từng bước với giao diện thay vì chỉ đến cuối mới lưu.
 
-**Giới hạn kỹ thuật:** Đây là xử lý nền trong bộ nhớ của tiến trình Streamlit, **không phải hệ thống hàng đợi bền vững**. Phải giữ app/tab còn kết nối để danh sách phiên tự cập nhật; nếu tab đóng/tải lại thành kết nối mới, hoặc Streamlit Cloud ngủ/khởi động lại, công việc đang chạy và dữ liệu có thể mất. Không thể bảo đảm tác vụ tiếp tục khi máy chủ khởi động lại. Muốn chạy qua khởi động lại và lưu vĩnh viễn cần dịch vụ job queue/bộ nhớ lưu trữ riêng có xác thực.
+**Giới hạn kỹ thuật:** Xử lý nền vẫn chạy trong bộ nhớ Streamlit, không phải hàng đợi bền vững. Nếu tab bị đóng hoặc máy chủ khởi động lại trong lúc đang chạy, tác vụ có thể dừng. Với Supabase, phần kết quả đã được đồng bộ vẫn được giữ để xem lại; chưa có Supabase thì dữ liệu có thể mất. Muốn đảm bảo tác vụ vẫn hoàn thành sau khi server khởi động lại cần job queue riêng.
 
 ## 📁 Phần quản lý phiên ở góc trái (đã tối giản)
 
@@ -108,7 +108,7 @@ App hỗ trợ lựa chọn **Groq, Google Gemini, OpenAI, OpenRouter, DeepSeek,
 Tại thanh bên trái:
 
 1. **CHỌN NỀN TẢNG AI**: chọn nhà cung cấp. Mỗi nền tảng có Base URL và model mặc định, nhưng bạn có thể sửa.
-2. **🔐 API Key**: nhập khóa của nhà cung cấp tương ứng. App giữ khóa trong kết nối hiện tại, không lưu trong dữ liệu phiên hay GitHub. Với ứng dụng riêng, có thể cấu hình các khóa tại **App settings → Secrets** bằng tên: `GROQ_API_KEY`, `GEMINI_API_KEY`, `OPENAI_API_KEY`, `OPENROUTER_API_KEY`, `DEEPSEEK_API_KEY`, `TOGETHER_API_KEY`, `ANTHROPIC_API_KEY`.
+2. **🔐 API Key**: nhập khóa của nhà cung cấp tương ứng. Khi có Supabase, key sẽ được mã hóa và lưu theo tài khoản để sử dụng ở lần đăng nhập sau; nếu không có Supabase thì chỉ giữ trong kết nối. Key không lưu trong JSON phiên hoặc GitHub. Với ứng dụng riêng, có thể cấu hình các khóa tại **App settings → Secrets** bằng tên: `GROQ_API_KEY`, `GEMINI_API_KEY`, `OPENAI_API_KEY`, `OPENROUTER_API_KEY`, `DEEPSEEK_API_KEY`, `TOGETHER_API_KEY`, `ANTHROPIC_API_KEY`.
 3. **🌐 Base URL**: nhập địa chỉ gốc HTTPS của nhà cung cấp. Không thêm đuôi `/chat/completions`, `/messages` hoặc `/models`. App tự thêm endpoint.
 4. **🤖 Model ID**: nhập model bạn có quyền sử dụng, ví dụ `openai/gpt-oss-120b` khi chọn Groq.
 5. **🔎 Quét Model từ API**: gọi `GET {base_url}/models` (hoặc endpoint tương đương), nếu dịch vụ hỗ trợ; chọn một model từ kết quả và bấm **📌 Dùng Model đã chọn**.
