@@ -122,6 +122,22 @@ App có hai cách kết nối Claude:
 
 **Bảo mật:** Không chia sẻ ảnh chụp có token thật, không dán token vào GitHub hay nội dung công khai. Nếu token đã lộ, hãy thu hồi và tạo mới từ bên cấp token. Chỉ dùng gateway đáng tin cậy, vì token và nội dung sẽ được chuyển tới máy chủ của gateway. LMT Studio Pro không xác nhận hoặc bảo đảm chất lượng của các gateway bên thứ ba.
 
+## 🌐 API bên thứ ba – tự nhập Key, Base URL và Model ID
+
+Trong sidebar, mở **🔑 Cấu hình API đa nền tảng**, chọn **API bên thứ ba (tùy chỉnh)**. Người dùng có thể nhập riêng:
+
+- **📡 Chuẩn API:** OpenAI Chat Completions (endpoint `/chat/completions`) hoặc Anthropic Messages (endpoint `/messages`).
+- **🔏 Kiểu xác thực:** `Authorization: Bearer <token>` hoặc header `x-api-key`.
+- **🔐 API Key**, **🌐 Base URL**, **🤖 Model ID:** nhập theo hướng dẫn của bên cung cấp dịch vụ, không bắt buộc phải là Claude/Groq hay nhà cung cấp có sẵn.
+
+Ví dụ: dịch vụ OpenAI-compatible thường nhập Base URL `https://provider.example/v1`, chọn **OpenAI Chat Completions** và **Bearer Token**. Gateway tương thích Claude Code có thể nhập Base URL `https://provider.example`, chọn **Anthropic Messages** và **Bearer Token**; khi Base URL chỉ là tên miền gốc, ứng dụng tự thêm `/v1/messages`. Nếu cung cấp đường dẫn gốc API khác, app nối `/messages` sau đường dẫn đó.
+
+Bấm **🧪 Kiểm tra kết nối API** để gửi một tin nhắn thử và xem lỗi HTTP nếu có. **🔎 Quét Model từ API** không nhất thiết khả dụng ở gateway bên thứ ba: có thể nhập Model ID bằng tay rồi thử kết nối. Việc điền đủ ba trường không bảo đảm máy chủ cung cấp model đó hay dịch vụ của họ hoạt động (ví dụ HTTP 502).
+
+Cấu hình riêng này được dùng xuyên suốt quá trình tạo bản dịch, prompt và SEO. Khi Supabase được kết nối, URL, model, lựa chọn giao thức/cách xác thực và API key được mã hóa/lưu theo tài khoản tương tự các provider khác; nếu chưa kết nối Supabase thì các thông số chỉ tồn tại trong phiên Streamlit đang mở.
+
+**Bảo mật:** Chỉ nhập key từ dịch vụ bạn tin tưởng; app chặn Base URL không phải HTTPS công khai và không theo chuyển hướng. Không gửi key hoặc token vào ảnh chụp, GitHub hay đoạn chat. Token từng xuất hiện công khai cần được thu hồi trước khi dùng tiếp.
+
 ## 🔑 Cấu hình API đa nền tảng
 
 **Giao diện thu gọn:** Thanh bên trái hiển thị hai mục đóng mặc định: **📥 Phụ đề YouTube dự phòng** và **🔑 Cấu hình API đa nền tảng**. Nhấn tiêu đề để mở khi cần nhập/sửa key, Base URL hoặc Model; nhấn lại để thu gọn. Các thông số đã nhập vẫn được dùng khi khung đóng, không cần giữ khung mở khi bấm **BẮT ĐẦU TẠO TOÀN BỘ**.
