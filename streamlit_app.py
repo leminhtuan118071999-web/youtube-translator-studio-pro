@@ -437,8 +437,29 @@ def archive_previous_session(session_id):
     return True
 
 
+def _clear_session_widgets(session_id):
+    """Remove any inputs and transient data tied to this single session.
+
+    Provider API keys/settings belong to the user, not to a video session,
+    so they are explicitly not touched by deletion.
+    """
+    named_widgets = {
+        f"field_{session_id}_url",
+        f"field_{session_id}_language",
+        f"inline_session_name_{session_id}",
+    }
+    prefixes = (f"thumb_{session_id}_",)
+    for widget_key in list(st.session_state):
+        if widget_key in named_widgets or widget_key.startswith(prefixes):
+            st.session_state.pop(widget_key, None)
+
+
 def delete_saved_session(session_id):
-    """Delete exactly one session and cancel only its associated worker."""
+    """Purge one session's work, checkpoints and saved-view data.
+
+    The following _persist_and_rerun saves the reduced workspace list to
+    Supabase or local browser storage. Other session data remains untouched.
+    """
     if session_id not in st.session_state.workspaces:
         return
     removed_name = st.session_state.workspaces[session_id].get("name", "Phiên")
@@ -447,6 +468,7 @@ def delete_saved_session(session_id):
         job["progress"].cancel()
         job["future"].cancel()
     del st.session_state.workspaces[session_id]
+    _clear_session_widgets(session_id)
     if not st.session_state.workspaces:
         # Keep the app usable even after deleting its very last session.
         new_id = uuid.uuid4().hex
@@ -465,7 +487,8 @@ def delete_saved_session(session_id):
         st.session_state["editing_session_id"] = None
     st.session_state["confirm_delete_session_id"] = None
     st.session_state["_session_flash"] = (
-        f"🗑️ Đã xóa riêng phiên '{removed_name}'. Các phiên khác được giữ nguyên."
+        f"🗑️ Đã xóa phiên '{removed_name}' cùng nội dung, bản dịch, "
+        "prompt, SEO và dữ liệu bản lưu liên quan. Các phiên khác được giữ nguyên."
     )
 
 
@@ -571,7 +594,7 @@ with st.sidebar:
     if st.session_state.pop("_reset_delete_confirm_next", False):
         st.session_state["confirm_delete_all_sessions"] = False
     confirm_all = st.checkbox(
-        "Tôi xác nhận xóa tất cả phiên",
+        "Tôi xác nhận xóa tất cả phiên và dữ liệu",
         key="confirm_delete_all_sessions",
     )
     if st.button(
@@ -589,8 +612,15 @@ with st.sidebar:
         for job in st.session_state.background_jobs.values():
             job["progress"].cancel()
             job["future"].cancel()
+        for old_session_id in list(st.session_state.workspaces):
+            _clear_session_widgets(old_session_id)
         st.session_state.background_jobs = {}
         st.session_state.workspaces = {new_id: new_session}
+        st.session_state["confirm_delete_session_id"] = None
+        st.session_state["_session_flash"] = (
+            "🗑️ Đã xóa toàn bộ danh sách phiên và dữ liệu liên quan. "
+            "Các kết quả cũ không còn trong app hoặc bản lưu hiện tại."
+        )
         st.session_state["editing_session_id"] = None
         st.session_state["_open_session_next"] = new_id
         st.session_state["_reset_delete_confirm_next"] = True
@@ -667,7 +697,11 @@ with st.sidebar:
                 )
                 _persist_and_rerun()
         if st.session_state.get("confirm_delete_session_id") == saved_id:
-            st.warning(f"Xác nhận xóa phiên '{saved_record['name']}'? Thao tác này không thể hoàn tác.")
+            st.warning(
+                f"Xác nhận xóa phiên '{saved_record['name']}' và toàn bộ "
+                "dữ liệu liên quan (bản dịch, prompt, SEO, trạng thái, phụ đề) "
+                "trong app và bản lưu? Thao tác này không thể hoàn tác."
+            )
             confirm_col, cancel_col = st.columns(2, gap="small")
             with confirm_col:
                 if st.button(
