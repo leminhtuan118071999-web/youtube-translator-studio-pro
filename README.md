@@ -101,6 +101,16 @@ Nếu API trả về không có text, app sẽ giải thích `finish_reason` (v�
 
 Nếu còn lỗi sau khi cập nhật, chọn model văn bản khác trong menu Model ID, ví dụ `llama-3.3-70b-versatile` khi nhà cung cấp Groq và API key của bạn được phép sử dụng; kiểm tra kết nối API, sau đó dùng **BẮT ĐẦU TẠO TOÀN BỘ** để chạy lại phiên.
 
+## 🛠️ Lỗi Claude Gateway HTTP 502 / 503 / 504
+
+Nếu bấm **🧪 Kiểm tra kết nối API** và nhận `HTTP 502: Upstream service temporarily unavailable` từ một Claude Gateway bên thứ ba, điều này cho thấy gateway hoặc dịch vụ phía sau đang gặp lỗi tạm thời. **Không thể khẳng định API key sai chỉ từ mã lỗi 502.** Đừng cố thay model hoặc nhập lại token nhiều lần khi chưa có thông tin từ nhà cung cấp.
+
+LMT Studio Pro đã tách riêng các mã 502/503/504 với lỗi 401/403 (xác thực/quyền) và lỗi 429 (quota). Khi nhấn **BẮT ĐẦU TẠO TOÀN BỘ**, mỗi yêu cầu gặp 502/503/504 sẽ được thử lại tối đa 3 lần với khoảng chờ tăng dần và khả năng hủy. Những đoạn đã dịch trước đó không bị dịch lại. Việc thử lại lệnh POST có thể phát sinh chi phí trùng nếu upstream thực tế đã xử lý xong nhưng gateway không gửi được kết quả, nên số lần thử được giới hạn.
+
+Khi kiểm tra kết nối Claude/Gateway bằng yêu cầu ngắn, ứng dụng chỉ yêu cầu tối đa 128 token đầu ra thay vì dự phòng 8.192 token. Những tác vụ dịch, prompt, SEO có ngân sách đầu ra riêng. Đây là biện pháp giảm tải, **không thể sửa gateway đang ngừng hoạt động**.
+
+Nếu gateway liên tục trả 502: thử lại khi dịch vụ phục hồi, kiểm tra thông báo trạng thái của nhà cung cấp, hoặc chuyển sang **Claude (Anthropic)** chính thức với API key Anthropic riêng. Không đưa token vào ảnh chụp màn hình hoặc GitHub.
+
 ## 🔗 Claude Code Gateway (AUTH_TOKEN) – dịch vụ API qua máy chủ trung gian
 
 App có hai cách kết nối Claude:
