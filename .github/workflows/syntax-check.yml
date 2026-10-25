@@ -1,4 +1,4 @@
-name: Check Streamlit Python syntax
+name: Test Streamlit application
 
 on:
   push:
@@ -6,9 +6,16 @@ on:
   pull_request:
 
 jobs:
-  python-syntax:
+  python-checks:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
-      - name: Check main app syntax
-        run: python -m py_compile streamlit_app.py
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+      - name: Install dependencies
+        run: pip install -r requirements.txt
+      - name: Check Python syntax
+        run: python -m py_compile streamlit_app.py api_clients.py test_api_clients.py
+      - name: Run API provider unit tests
+        run: python -m unittest -v test_api_clients.py
