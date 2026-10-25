@@ -167,6 +167,13 @@ def run_full_job(snapshot, progress):
             try:
                 # Coordinate TPM pacing with other Streamlit jobs using Groq.
                 with groq_request_gate.reporting(progress):
+                    if snapshot["provider"] == "API bên thứ ba (tùy chỉnh)":
+                        return generate_text(
+                            snapshot["provider"], snapshot["base_url"],
+                            snapshot["model"], api_key, prompt,
+                            api_format=snapshot.get("api_format", "chat"),
+                            auth_mode=snapshot.get("auth_mode", "bearer"),
+                        )
                     return generate_text(
                         snapshot["provider"], snapshot["base_url"],
                         snapshot["model"], api_key, prompt
