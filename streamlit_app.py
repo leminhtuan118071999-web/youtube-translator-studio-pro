@@ -26,6 +26,7 @@ from persistent_store import (
 from browser_session_store import (
     STORAGE_KEY, encode_browser_backup, decode_browser_backup,
 )
+from copy_buttons import copy_all_button
 
 st.set_page_config(page_title="LMT Studio Pro", page_icon="🎬", layout="wide")
 st.title("🎬 LMT Studio Pro")
@@ -1397,8 +1398,13 @@ with tab_translate:
                 _persist_and_rerun()
             except Exception as exc:
                 st.error(str(exc))
+    copy_all_button(
+        "📋 Copy toàn bộ bản dịch",
+        session["translated"],
+        key=f"copy_all_translation_{sid}",
+    )
     with st.expander(f"🌍 Bản dịch hoàn chỉnh ({language}) — Nhấn để xem toàn bộ", expanded=False):
-        st.caption("📋 Mở để đọc toàn bộ nội dung; nhấn biểu tượng sao chép để Copy đầy đủ.")
+        st.caption("Nội dung đầy đủ; vẫn có thể Copy trong khung hoặc tải TXT.")
         output("📋 Copy toàn bộ bản dịch", session["translated"])
 
 with tab_visual:
@@ -1421,6 +1427,10 @@ with tab_visual:
         all_prompts = "\n\n".join(
             f"Cảnh {index:02d}\n{description}"
             for index, description in enumerate(prompt_items, start=1)
+        )
+        copy_all_button(
+            "📋 Copy toàn bộ 20 prompt", all_prompts,
+            key=f"copy_all_prompts_{sid}",
         )
         output("📋 Copy toàn bộ các prompt", all_prompts)
     else:
@@ -1448,18 +1458,34 @@ with tab_seo:
                 st.error(str(exc))
 
     st.subheader(f"🎬 Tiêu đề đã dịch ({language})")
+    copy_all_button(
+        "📋 Copy toàn bộ tiêu đề", session.get("new_title", ""),
+        key=f"copy_all_title_{sid}",
+    )
     output("📋 Copy riêng tiêu đề", session.get("new_title", ""))
+    copy_all_button(
+        "📋 Copy toàn bộ mô tả", session.get("new_description", ""),
+        key=f"copy_all_description_{sid}",
+    )
     with st.expander(f"📝 Mô tả đã dịch ({language}) — Nhấn để xem toàn bộ", expanded=False):
         output("📋 Copy riêng mô tả", session.get("new_description", ""))
     st.subheader(f"🔎 Từ khóa SEO ({language})")
+    copy_all_button(
+        "📋 Copy toàn bộ từ khóa SEO", session.get("seo_tags", ""),
+        key=f"copy_all_seo_{sid}",
+    )
     output("📋 Copy riêng từ khóa SEO", session.get("seo_tags", ""))
     # Legacy SEO content remains viewable if a saved older session did
     # not have separately generated title, description, and SEO fields.
     if not any(session.get(field) for field in ("new_title", "new_description", "seo_tags")) and session.get("metadata", "").strip():
         st.caption("Nội dung SEO từ bản cũ (chưa được tách các mục):")
+        copy_all_button(
+            "📋 Copy toàn bộ SEO phiên cũ", session["metadata"],
+            key=f"copy_all_legacy_seo_{sid}",
+        )
         output("📋 Copy nội dung SEO phiên cũ", session["metadata"])
 
-st.caption("Nút Copy nằm ở góc phải khung nội dung. Mỗi tài khoản có dữ liệu riêng khi bật Supabase.")
+st.caption("📋 Nút Copy toàn bộ nằm ngay bên ngoài từng mục và sao chép đầy đủ nội dung, kể cả khi khung xem đang thu gọn.")
 
 # Automatically save changed sessions and ALL manually-entered API provider
 # settings/keys, encrypted, after widgets update on each Streamlit rerun.
