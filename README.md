@@ -4,7 +4,7 @@
 
 ## 🚀 Tạo toàn bộ bằng một nút
 
-1. Ở thanh bên trái, chọn **🌍 Ngôn ngữ đích**, nhà cung cấp AI, Base URL, Model ID và nhập API key.
+1. Ở thanh bên trái, chọn nhà cung cấp AI, Base URL, Model ID và nhập API key. **🌍 Ngôn ngữ đích** được chọn ở khu vực chính, ngay trên nút **🚀 BẮT ĐẦU TẠO TOÀN BỘ**.
 2. Dán link YouTube vào ô **🔗 Dán link video YouTube** rồi nhấn **🚀 BẮT ĐẦU TẠO TOÀN BỘ**. Phụ đề gốc sẽ được xử lý nội bộ, không hiển thị ô nhập văn bản gốc.
 3. App tự động: tìm phụ đề thủ công hoặc phụ đề tự động có sẵn trên YouTube → dịch toàn bộ nội dung sang ngôn ngữ đích → tạo **20 prompt hình ảnh bằng ngôn ngữ đích** → tạo **tiêu đề, mô tả, từ khóa SEO bằng ngôn ngữ đích**.
 4. Sau khi chạy, app chỉ hiển thị nội dung đã được xử lý theo **ngôn ngữ đích** trong các tab kết quả. Có nút Copy bản dịch đầy đủ, **Copy toàn bộ 20 prompt** (không còn danh sách Copy từng cảnh), và **Copy riêng tiêu đề, mô tả, từ khóa SEO** (không còn khối Copy gộp toàn bộ tiêu đề • mô tả • SEO). Có nút tải TXT bổ sung.
@@ -39,7 +39,7 @@ Tài liệu tích hợp Supadata: https://github.com/supadata-ai/skills/blob/mai
 
 ## 📁 Phần quản lý phiên ở góc trái (đã tối giản)
 
-Đầu thanh bên trái là **🌍 Ngôn ngữ đích**, đã mở rộng thêm tiếng Ý, Bồ Đào Nha, Hà Lan, Thụy Điển, Séc, Romania, Hungary, Ukraine và nhiều ngôn ngữ châu Âu khác. Mỗi phiên có ngôn ngữ đích riêng.
+Ô **🌍 Ngôn ngữ đích** nằm ở khu vực chính, ngay trước nút **🚀 BẮT ĐẦU TẠO TOÀN BỘ**, với tiếng Ý, Bồ Đào Nha, Hà Lan, Thụy Điển, Séc, Romania, Hungary, Ukraine và nhiều ngôn ngữ châu Âu khác. Mỗi phiên có ngôn ngữ đích riêng.
 
 Ngay bên dưới là **📁 Quản lý phiên làm việc**:
 1. Nhấn **➕ Tạo phiên mới**: nếu phiên cũ đang xử lý, app **không dừng tác vụ cũ**; bạn có thể bắt đầu công việc khác. Khi phiên cũ hoàn thành, app tự lưu kết quả vào **📚 Danh sách phiên đã chạy** trong kết nối hiện tại. Phiên chưa chạy sẽ không vào danh sách.
