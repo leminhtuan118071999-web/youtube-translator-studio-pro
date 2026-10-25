@@ -66,6 +66,30 @@ class BrowserSessionBackupTests(unittest.TestCase):
         new_snapshot = decode_browser_backup(encode_browser_backup(self.payload))
         self.assertEqual(list(new_snapshot["workspaces"]), [self.second_id])
 
+    def test_delete_all_replaces_snapshot_with_new_empty_workspace(self):
+        old_ids = set(self.payload["workspaces"])
+        fresh_id = uuid.uuid4().hex
+        self.payload = {
+            "selected_session": fresh_id,
+            "saved_session_order": 1,
+            "workspaces": {
+                fresh_id: {
+                    "name": "Phiên 1",
+                    "processed": False,
+                    "saved": False,
+                    "saved_order": 1,
+                    "translated": "",
+                    "prompts": "",
+                    "metadata": "",
+                }
+            },
+        }
+        reloaded = decode_browser_backup(encode_browser_backup(self.payload))
+        self.assertEqual(set(reloaded["workspaces"]), {fresh_id})
+        self.assertTrue(old_ids.isdisjoint(reloaded["workspaces"]))
+        self.assertNotIn("Bản dịch", str(reloaded))
+        self.assertNotIn("Provider failed", str(reloaded))
+
     def test_key_is_scoped_to_lmt_studio(self):
         self.assertIn("lmt-studio-pro", STORAGE_KEY)
 
