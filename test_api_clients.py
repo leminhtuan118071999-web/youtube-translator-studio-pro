@@ -4,6 +4,7 @@ from unittest.mock import Mock, patch
 
 from api_clients import (
     PROVIDERS,
+    RateLimitError,
     api_endpoint,
     generate_text,
     list_models,
@@ -105,7 +106,7 @@ class ApiClientTests(unittest.TestCase):
         self.assertEqual(result, "Tekst przetłumaczony")
         body = req.call_args.kwargs["json"]
         self.assertEqual(body["reasoning_effort"], "low")
-        self.assertEqual(body["max_completion_tokens"], 8192)
+        self.assertEqual(body["max_completion_tokens"], 2200)
         self.assertFalse(body["include_reasoning"])
 
     @patch("api_clients.socket.getaddrinfo", return_value=PUBLIC_ADDR)
@@ -223,6 +224,68 @@ class ApiClientTests(unittest.TestCase):
             list_models("Groq", PROVIDERS["Groq"]["base_url"], "secret"),
             ["model-a", "model-z"],
         )
+
+    @patch("api_clients.socket.getaddrinfo", return_value=PUBLIC_ADDR)
+    @patch("api_clients._request")
+    def test_groq_429_uses_retry_after_header(self, req, _dns):
+        resp = Mock()
+        resp.ok = False
+        resp.status_code = 429
+        resp.headers = {"retry-after": "11.5"}
+        resp.json.return_value = {
+            "error": {"message": "Rate limit reached for TPM. Please try again in 11.52s."}
+        }
+        req.return_value = resp
+        with self.assertRaises(RateLimitError) as error:
+            generate_text("Groq", PROVIDERS["Groq"]["base_url"],
+                          "openai/gpt-oss-120b", "secret-key", "Translate")
+        self.assertAlmostEqual(error.exception.retry_after, 11.5)
+        self.assertTrue(error.exception.can_retry)
+
+    @patch("api_clients.socket.getaddrinfo", return_value=PUBLIC_ADDR)
+    @patch("api_clients._request")
+    def test_429_reads_delay_from_message_if_header_missing(self, req, _dns):
+        resp = Mock()
+        resp.ok = False
+        resp.status_code = 429
+        resp.headers = {}
+        resp.json.return_value = {
+            "error": {"message": "Rate limit reached. Please try again in 11.52s."}
+        }
+        req.return_value = resp
+        with self.assertRaises(RateLimitError) as error:
+            generate_text("Groq", PROVIDERS["Groq"]["base_url"],
+                          "openai/gpt-oss-120b", "secret", "Translate")
+        self.assertAlmostEqual(error.exception.retry_after, 11.52)
+
+    @patch("api_clients.socket.getaddrinfo", return_value=PUBLIC_ADDR)
+    @patch("api_clients._request")
+    def test_429_daily_quota_does_not_retry(self, req, _dns):
+        resp = Mock()
+        resp.ok = False
+        resp.status_code = 429
+        resp.headers = {}
+        resp.json.return_value = {
+            "error": {"message": "Tokens per day (TPD) quota exceeded"}
+        }
+        req.return_value = resp
+        with self.assertRaises(RateLimitError) as error:
+            generate_text("Groq", PROVIDERS["Groq"]["base_url"],
+                          "openai/gpt-oss-120b", "secret", "Translate")
+        self.assertFalse(error.exception.can_retry)
+
+    @patch("api_clients.socket.getaddrinfo", return_value=PUBLIC_ADDR)
+    @patch("api_clients._request")
+    def test_groq_prompts_reserve_more_output_than_translation(self, req, _dns):
+        resp = Mock()
+        resp.ok = True
+        resp.json.return_value = {
+            "choices": [{"finish_reason": "stop", "message": {"content": "{}"}}]
+        }
+        req.return_value = resp
+        generate_text("Groq", PROVIDERS["Groq"]["base_url"],
+                      "openai/gpt-oss-120b", "secret", "Hãy viết ĐÚNG 20 prompt")
+        self.assertEqual(req.call_args.kwargs["json"]["max_completion_tokens"], 3600)
 
     @patch("api_clients.socket.getaddrinfo", return_value=PUBLIC_ADDR)
     @patch("api_clients._request")
