@@ -10,6 +10,9 @@ from streamlit.testing.v1 import AppTest
 class StreamlitSmokeTests(unittest.TestCase):
     def setUp(self):
         self.app = AppTest.from_file("streamlit_app.py", default_timeout=20)
+        # AppTest has no browser localStorage or JavaScript component runtime.
+        # Exercise the codec independently; UI tests begin after hydration.
+        self.app.session_state["_browser_sessions_restored"] = True
 
     def test_app_loads_and_can_create_new_session(self):
         app = self.app.run()
