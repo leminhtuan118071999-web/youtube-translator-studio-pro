@@ -1,26 +1,35 @@
 # 🎬 YouTube Translator Studio Pro
 
-Ứng dụng Streamlit tạo mới, dựa trên quy trình bạn mô tả và video demo, có thêm:
+Ứng dụng Streamlit tạo mới dành cho việc xử lý nội dung YouTube.
 
-- Lấy phụ đề có sẵn từ link YouTube (khi YouTube cho phép), hoặc nhập thủ công / nạp TXT, SRT, VTT.
-- Dịch đa ngôn ngữ bằng Gemini hoặc OpenAI API.
-- Copy **toàn bộ** ở mỗi phần: phụ đề, bản dịch, tiêu đề, mô tả, prompt hình ảnh, SEO.
-- Tạo tối đa 20 prompt hình ảnh theo câu chuyện.
-- Dịch hoặc tạo tiêu đề, mô tả và từ khóa SEO.
-- Xem, tải thumbnail YouTube chất lượng cao nhất sẵn có.
-- Quản lý dự án và tải bản sao lưu JSON.
+## Chức năng hiện có
 
-## Triển khai trên Streamlit Community Cloud
+- Trích xuất phụ đề sẵn có từ đường link YouTube khi có thể truy cập; hỗ trợ nhập văn bản hoặc tải tệp TXT.
+- Dịch nội dung sang nhiều ngôn ngữ bằng Gemini API key riêng.
+- Sinh 20 prompt hình ảnh tiếng Anh và nội dung SEO.
+- Copy toàn bộ bản dịch, prompt, tiêu đề và mô tả bằng biểu tượng sao chép trong khung văn bản. **Đã bỏ phần Copy phụ đề gốc theo yêu cầu.**
+- Xem trước và tải thumbnail YouTube theo chất lượng sẵn có.
+- **Quản lý các phiên riêng biệt:** tạo phiên, đặt tên, đổi tên, chọn phiên, nhân bản và xóa phiên.
+- **Lưu từng phiên** ra tệp JSON; **sao lưu tất cả** hoặc **khôi phục** tệp JSON khi mở lại.
 
-1. Mở https://share.streamlit.io → **Create app** → **Yup, I have an app**.
-2. Repository: `leminhtuan118071999-web/youtube-translator-studio-pro`; branch: `main`; main file: `streamlit_app.py`.
-3. Chọn subdomain nếu muốn và nhấn **Deploy**.
-4. Để dịch AI, vào **App settings → Secrets** và nhập `GEMINI_API_KEY = "..." ` hoặc `OPENAI_API_KEY = "..."`. Không đẩy API key lên GitHub.
+## Cách sử dụng phiên làm việc
 
-**Lưu ý:** ChatGPT Plus không bao gồm phí API. Việc lấy phụ đề từ YouTube đôi khi bị máy chủ từ chối, và app không tự nhận dạng giọng nói ở video không có phụ đề.
+1. Trong thanh bên trái, tìm mục **📁 Quản lý phiên làm việc**.
+2. Nhập tên video/dự án rồi bấm **➕ Tạo phiên mới**.
+3. Mỗi phiên có phụ đề, bản dịch, 20 prompt, tiêu đề, mô tả và SEO riêng.
+4. Dùng **Chọn phiên** để chuyển giữa các phiên; có thể **Đổi tên** hoặc **Nhân bản**.
+5. Khi muốn giữ nội dung lâu dài, bấm **💾 Lưu phiên hiện tại (.json)**. Để lưu mọi phiên, bấm **📦 Sao lưu tất cả phiên (.json)**.
+6. Lần sử dụng tiếp theo, chọn tệp bằng **📂 Chọn file JSON đã lưu** rồi bấm **♻️ Khôi phục phiên từ file**.
 
-## Mã nguồn
+**Giới hạn lưu trữ:** Các phiên trong app được giữ bằng `st.session_state` trong phiên kết nối Streamlit đang mở. **Chúng không tự đồng bộ qua thiết bị hoặc được giữ vĩnh viễn sau khi đóng tab/khởi động lại server.** Để không mất nội dung, hãy tải JSON và khôi phục khi quay lại. API key không có trong tệp JSON.
 
-Mã nguồn gốc gồm `streamlit_app.py`, `ai_utils.py`, `state_utils.py`, `youtube_utils.py` và các bài test. Để triển khai nhanh, repo này sử dụng một bundle ZIP được giải nén tự động lúc khởi chạy; có thể giải nén `app_bundle.b64` (nội dung base64 của ZIP) để chỉnh sửa toàn bộ mã nguồn đọc được.
+## Triển khai
 
-Tài liệu triển khai: https://docs.streamlit.io/deploy/streamlit-community-cloud/deploy-your-app/deploy
+1. Vào https://share.streamlit.io/ và triển khai từ repository `leminhtuan118071999-web/youtube-translator-studio-pro`.
+2. Chọn branch `main` và main file `streamlit_app.py`.
+3. Nhập Gemini API key tại thanh bên trong app; key không nằm trong tệp sao lưu.
+4. Nếu app đang mở, tải lại trang sau khi commit mới được triển khai.
+
+ChatGPT Plus không bao gồm quyền dùng Gemini API. Video không có phụ đề hoặc bị YouTube chặn có thể không trích xuất được.
+
+Tài liệu Streamlit: https://docs.streamlit.io/deploy/streamlit-community-cloud/deploy-your-app/deploy
