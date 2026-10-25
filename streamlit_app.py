@@ -377,101 +377,101 @@ with st.sidebar:
     )
 
     st.divider()
-    st.subheader("📥 Phụ đề YouTube dự phòng")
-    st.caption(
-        "Mặc định thử lấy phụ đề trực tiếp. Nếu YouTube chặn IP Cloud, "
-        "app sẽ tự thử dịch vụ Supadata khi bạn nhập key bên dưới."
-    )
-    try:
-        backup_key_secret = str(st.secrets.get("SUPADATA_API_KEY", "") or "")
-    except Exception:
-        backup_key_secret = ""
-    transcript_api_key_entered = st.text_input(
-        "Supadata API key (khác API dịch)",
-        type="password",
-        key="supadata_api_key_input",
-        placeholder="Nhập key nếu YouTube chặn trích xuất",
-        help="Chỉ gửi key cho api.supadata.ai để lấy phụ đề. Có thể cấu hình SUPADATA_API_KEY trong Streamlit Secrets.",
-    )
-    transcript_api_key = transcript_api_key_entered.strip() or backup_key_secret.strip()
-    st.markdown("[🔗 Lấy API key phụ đề Supadata](https://supadata.ai/)")
-    st.caption("Dịch vụ phụ đề có giới hạn lượt và có thể tính phí. Không bắt buộc nếu bạn dùng file phụ đề.")
+    with st.expander("📥 Phụ đề YouTube dự phòng", expanded=False):
+        st.caption(
+            "Mặc định thử lấy phụ đề trực tiếp. Nếu YouTube chặn IP Cloud, "
+            "app sẽ tự thử dịch vụ Supadata khi bạn nhập key bên dưới."
+        )
+        try:
+            backup_key_secret = str(st.secrets.get("SUPADATA_API_KEY", "") or "")
+        except Exception:
+            backup_key_secret = ""
+        transcript_api_key_entered = st.text_input(
+            "Supadata API key (khác API dịch)",
+            type="password",
+            key="supadata_api_key_input",
+            placeholder="Nhập key nếu YouTube chặn trích xuất",
+            help="Chỉ gửi key cho api.supadata.ai để lấy phụ đề. Có thể cấu hình SUPADATA_API_KEY trong Streamlit Secrets.",
+        )
+        transcript_api_key = transcript_api_key_entered.strip() or backup_key_secret.strip()
+        st.markdown("[🔗 Lấy API key phụ đề Supadata](https://supadata.ai/)")
+        st.caption("Dịch vụ phụ đề có giới hạn lượt và có thể tính phí. Không bắt buộc nếu bạn dùng file phụ đề.")
 
     st.divider()
-    st.subheader("🔑 Cấu hình API đa nền tảng")
-    provider = st.selectbox(
-        "CHỌN NỀN TẢNG AI",
-        list(PROVIDERS),
-        key="api_provider",
-        help="Hỗ trợ các nhà cung cấp API dùng Chat Completions và Anthropic Messages.",
-    )
-    preset = PROVIDERS[provider]
-    provider_id = provider
-    secret_name = preset["secret"]
-    try:
-        stored_key = str(st.secrets.get(secret_name, "") or "") if secret_name else ""
-    except Exception:
-        stored_key = ""
-    entered_key = st.text_input(
-        "🔐 API Key",
-        key=f"api_key_{provider_id}",
-        type="password",
-        placeholder="Nhập API key riêng của nền tảng đã chọn",
-        help="Chỉ dùng cho phiên hiện tại; có thể cấu hình bằng Streamlit Secrets.",
-    )
-    key = entered_key.strip() or stored_key.strip()
-
-    base_url = st.text_input(
-        "🌐 Base URL",
-        value=preset["base_url"],
-        key=f"api_base_{provider_id}",
-        placeholder="https://your-provider.com/v1",
-        help="Nhập gốc của API, ví dụ https://api.groq.com/openai/v1. Không thêm /chat/completions.",
-    ).strip()
-
-    model_widget_key = f"api_model_id_{provider_id}"
-    pending = st.session_state.pop(f"pending_model_{provider_id}", None)
-    if pending:
-        st.session_state[model_widget_key] = pending
-    model = st.text_input(
-        "🤖 Model ID",
-        value=preset["model"],
-        key=model_widget_key,
-        placeholder="Ví dụ: openai/gpt-oss-120b",
-        help="Điền đúng model ID mà key của bạn được phép sử dụng.",
-    ).strip()
-
-    if st.button("🔎 Quét Model từ API", use_container_width=True, key=f"scan_{provider_id}"):
-        try:
-            with st.spinner("Đang lấy danh sách Model..."):
-                available = list_models(provider, base_url, key)
-            st.session_state[f"models_found_{provider_id}"] = available
-            if not available:
-                st.warning("API không trả về danh sách Model. Bạn vẫn có thể nhập Model ID thủ công.")
-        except Exception as exc:
-            st.error(str(exc))
-
-    discovered = st.session_state.get(f"models_found_{provider_id}", [])
-    if discovered:
-        scan_choice = st.selectbox(
-            f"Model khả dụng ({len(discovered)})",
-            discovered,
-            key=f"model_picker_{provider_id}",
+    with st.expander("🔑 Cấu hình API đa nền tảng", expanded=False):
+        provider = st.selectbox(
+            "CHỌN NỀN TẢNG AI",
+            list(PROVIDERS),
+            key="api_provider",
+            help="Hỗ trợ các nhà cung cấp API dùng Chat Completions và Anthropic Messages.",
         )
-        if st.button("📌 Dùng Model đã chọn", key=f"set_model_{provider_id}", use_container_width=True):
-            st.session_state[f"pending_model_{provider_id}"] = scan_choice
-            st.rerun()
+        preset = PROVIDERS[provider]
+        provider_id = provider
+        secret_name = preset["secret"]
+        try:
+            stored_key = str(st.secrets.get(secret_name, "") or "") if secret_name else ""
+        except Exception:
+            stored_key = ""
+        entered_key = st.text_input(
+            "🔐 API Key",
+            key=f"api_key_{provider_id}",
+            type="password",
+            placeholder="Nhập API key riêng của nền tảng đã chọn",
+            help="Chỉ dùng cho phiên hiện tại; có thể cấu hình bằng Streamlit Secrets.",
+        )
+        key = entered_key.strip() or stored_key.strip()
 
-    if key:
-        st.caption("✅ Đã nhập API key" + (" (Secrets)" if not entered_key else ""))
-    else:
-        st.caption("⚠️ Chưa nhập API key.")
-    st.caption(
-        "Các API tương thích OpenAI dùng endpoint /chat/completions; "
-        "Claude dùng /messages. Chỉ nhập Base URL HTTPS công khai, đáng tin cậy."
-    )
-    test_api = st.button("🧪 Kiểm tra kết nối API", use_container_width=True)
-    st.caption("API key không được ghi vào GitHub hoặc dữ liệu phiên. Dịch vụ API có thể tính phí.")
+        base_url = st.text_input(
+            "🌐 Base URL",
+            value=preset["base_url"],
+            key=f"api_base_{provider_id}",
+            placeholder="https://your-provider.com/v1",
+            help="Nhập gốc của API, ví dụ https://api.groq.com/openai/v1. Không thêm /chat/completions.",
+        ).strip()
+
+        model_widget_key = f"api_model_id_{provider_id}"
+        pending = st.session_state.pop(f"pending_model_{provider_id}", None)
+        if pending:
+            st.session_state[model_widget_key] = pending
+        model = st.text_input(
+            "🤖 Model ID",
+            value=preset["model"],
+            key=model_widget_key,
+            placeholder="Ví dụ: openai/gpt-oss-120b",
+            help="Điền đúng model ID mà key của bạn được phép sử dụng.",
+        ).strip()
+
+        if st.button("🔎 Quét Model từ API", use_container_width=True, key=f"scan_{provider_id}"):
+            try:
+                with st.spinner("Đang lấy danh sách Model..."):
+                    available = list_models(provider, base_url, key)
+                st.session_state[f"models_found_{provider_id}"] = available
+                if not available:
+                    st.warning("API không trả về danh sách Model. Bạn vẫn có thể nhập Model ID thủ công.")
+            except Exception as exc:
+                st.error(str(exc))
+
+        discovered = st.session_state.get(f"models_found_{provider_id}", [])
+        if discovered:
+            scan_choice = st.selectbox(
+                f"Model khả dụng ({len(discovered)})",
+                discovered,
+                key=f"model_picker_{provider_id}",
+            )
+            if st.button("📌 Dùng Model đã chọn", key=f"set_model_{provider_id}", use_container_width=True):
+                st.session_state[f"pending_model_{provider_id}"] = scan_choice
+                st.rerun()
+
+        if key:
+            st.caption("✅ Đã nhập API key" + (" (Secrets)" if not entered_key else ""))
+        else:
+            st.caption("⚠️ Chưa nhập API key.")
+        st.caption(
+            "Các API tương thích OpenAI dùng endpoint /chat/completions; "
+            "Claude dùng /messages. Chỉ nhập Base URL HTTPS công khai, đáng tin cậy."
+        )
+        test_api = st.button("🧪 Kiểm tra kết nối API", use_container_width=True)
+        st.caption("API key không được ghi vào GitHub hoặc dữ liệu phiên. Dịch vụ API có thể tính phí.")
 
 
 def ai(prompt):
