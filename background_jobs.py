@@ -95,18 +95,49 @@ def parse_object(value, field):
 
 
 def overview(text, call, progress):
-    if len(text) <= 24000:
+    """Keep story context under the 8K TPM ceiling with hierarchical summaries."""
+    max_brief = 7000
+    if len(text) <= max_brief:
         return text
-    all_chunks = list(chunk_text(text, 15000))
-    briefs = []
-    for idx, chunk in enumerate(all_chunks, 1):
+
+    pieces = list(chunk_text(text, 6000))
+    summaries = []
+    for idx, section in enumerate(pieces, 1):
         progress.check_cancelled()
-        briefs.append(call(
-            "Summarize chronological events, character consistency and visual "
-            "details without inventing anything. 180-280 words. "
-            f"Part {idx}/{len(all_chunks)}:\n" + chunk
+        summaries.append(call(
+            "Summarize events, named characters, settings and visual details of "
+            "this part in 80-130 words. Keep chronology. Do not invent facts. "
+            f"Part {idx}/{len(pieces)}:\n" + section
         ))
-    return "\n".join(briefs)
+    combined = "\n".join(
+        f"Part {idx}: {value}"
+        for idx, value in enumerate(summaries, 1)
+    )
+    # Cover every part of long videos without sending a >8K TPM single
+    # request to Groq. Each condensation uses bounded input and output.
+    for _ in range(5):
+        if len(combined) <= max_brief:
+            return combined
+        progress.check_cancelled()
+        groups = list(chunk_text(combined, 6000))
+        short = []
+        for idx, group in enumerate(groups, 1):
+            short.append(call(
+                "Condense the following ordered plot beats into at most 100 words "
+                "while retaining main characters, changes, and the chronological "
+                f"events. Do not invent facts. Group {idx}/{len(groups)}:\n"
+                + group
+            ))
+        updated = "\n".join(short)
+        if len(updated) >= len(combined):
+            break
+        combined = updated
+    if len(combined) > 9000:
+        raise ValueError(
+            "Không thể tóm tắt toàn bộ video vừa giới hạn token của model. "
+            "Hãy thử model có hạn mức lớn hơn."
+        )
+    return combined
 
 
 def run_full_job(snapshot, progress):
