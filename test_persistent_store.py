@@ -58,6 +58,21 @@ class PersistentStoreTests(unittest.TestCase):
         self.assertEqual(state["api_key_Groq"], "groq-super-secret")
         self.assertEqual(state["supadata_api_key_input"], "supadata-secret")
 
+    def test_third_party_protocol_and_auth_are_retained(self):
+        settings = {
+            "api_provider": "API bên thứ ba (tùy chỉnh)",
+            "api_key_API bên thứ ba (tùy chỉnh)": "private-token",
+            "api_base_API bên thứ ba (tùy chỉnh)": "https://api.example.net/v1",
+            "api_model_id_API bên thứ ba (tùy chỉnh)": "unique-model",
+            "api_format_API bên thứ ba (tùy chỉnh)": "Anthropic Messages",
+            "api_auth_mode_API bên thứ ba (tùy chỉnh)": "x-api-key",
+        }
+        saved = settings_from_widgets(settings)
+        restored = {}
+        restore_widget_settings(restored, saved)
+        self.assertEqual(restored, settings)
+
+
     @patch("persistent_store._request")
     def test_save_encrypts_keys_and_uses_account_jwt(self, call):
         ident = uuid.uuid4().hex
