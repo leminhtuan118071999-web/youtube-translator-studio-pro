@@ -95,7 +95,6 @@ if vid:
 file=st.file_uploader("Tải file phụ đề (.txt)",type=["txt"])
 if file and st.button("Dùng file này"): st.session_state.source=file.getvalue().decode("utf-8-sig",errors="replace")
 st.session_state.source=st.text_area("📄 Phụ đề / văn bản gốc",value=st.session_state.source,height=190)
-output("📋 Copy toàn bộ phụ đề gốc",st.session_state.source)
 title=st.text_input("🎬 Tiêu đề gốc")
 description=st.text_area("📝 Mô tả gốc",height=110)
 output("Copy tiêu đề gốc",title)
