@@ -92,6 +92,34 @@ class BackgroundJobsTests(unittest.TestCase):
         snapshot["translated"] = "not same as internal"
         self.assertEqual(progress.partial_result()["translated"], "First part")
 
+    @patch("background_jobs.fetch_subtitles")
+    @patch("background_jobs.generate_text")
+    def test_uploaded_subtitles_bypass_blocked_youtube(self, api, download):
+        def mock_ai(_provider, _url, _model, _key, prompt):
+            if "CHỈ xuất bản dịch" in prompt:
+                return "Przetłumaczony tekst."
+            if "ĐÚNG 20 prompt" in prompt:
+                return json.dumps({"prompts": ["Scena " + str(i) for i in range(20)]})
+            if "Soạn YouTube tiêu đề" in prompt:
+                return json.dumps({"title":"Tytuł","description":"Opis","tags":["a","b"]})
+            self.fail("Unexpected text request")
+        api.side_effect = mock_ai
+        config = self.config.copy()
+        config["uploaded_source"] = "Subtitle supplied by user"
+        config["supadata_key"] = ""
+        result = run_full_job(config, JobProgress())
+        self.assertTrue(result["ok"], result["error"])
+        self.assertEqual(result["fields"]["source"], "Subtitle supplied by user")
+        download.assert_not_called()
+
+    @patch("background_jobs.fetch_subtitles", side_effect=RuntimeError("Supadata SupaKeyBroken"))
+    def test_supadata_credentials_are_redacted_from_error(self, download):
+        config = self.config.copy()
+        config["supadata_key"] = "SupaKeyBroken"
+        result = run_full_job(config, JobProgress())
+        self.assertFalse(result["ok"])
+        self.assertNotIn("SupaKeyBroken", result["error"])
+
     def test_cancel_does_not_touch_provider(self):
         progress = JobProgress()
         progress.cancel()
