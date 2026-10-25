@@ -10,7 +10,8 @@ import streamlit as st
 from PIL import Image
 from youtube_transcript_api import YouTubeTranscriptApi
 from api_clients import (PROVIDERS, TransientProviderError, generate_text, list_models,
-                         validate_base_url, migrate_claude_settings)
+                         validate_base_url, migrate_claude_settings,
+                         migrate_free_provider_settings)
 from background_jobs import JobProgress, run_full_job
 from transcript_sources import parse_uploaded_subtitles
 from persistent_store import (
@@ -178,6 +179,7 @@ def _restore_cloud_profile():
 _restore_cloud_profile()
 # Preserve API key and model values from the former 'Anthropic Claude' label.
 migrate_claude_settings(st.session_state)
+migrate_free_provider_settings(st.session_state)
 
 
 def _save_cloud_state(force=False):
@@ -740,6 +742,32 @@ with st.sidebar:
         preset = PROVIDERS[provider]
         provider_id = provider
         secret_name = preset["secret"]
+        # Apply profile changes before instantiating Streamlit input widgets.
+        pending_free = st.session_state.pop("_pending_free_provider", None)
+        if pending_free == provider and provider in ("Groq", "Google Gemini"):
+            st.session_state[f"api_model_id_{provider}"] = preset["model"]
+            st.session_state[f"api_base_{provider}"] = preset["base_url"]
+        if provider == "Groq":
+            st.caption(
+                "🟡 GroqCloud (khác Grok của xAI). Gói miễn phí có giới hạn "
+                "token/phút và số yêu cầu/ngày. Model gợi ý: "
+                "openai/gpt-oss-20b; không bảo đảm chạy video dài mà không chờ."
+            )
+            st.markdown(
+                "[Xem hạn mức Groq](https://console.groq.com/settings/limits)"
+            )
+        elif provider == "Google Gemini":
+            st.info(
+                "💠 Gemini dùng API Google chính thức (generateContent), "
+                "xác thực x-goog-api-key. Model Flash-Lite tiết kiệm, "
+                "thích hợp thử nghiệm gói miễn phí. "
+                "Gói miễn phí vẫn giới hạn lượt gọi."
+            )
+            st.markdown(
+                "[Lấy Gemini API key tại Google AI Studio]"
+                "(https://aistudio.google.com/apikey) "
+                "· [Kiểm tra hạn mức](https://aistudio.google.com/usage)"
+            )
         api_format = None
         api_auth_mode = None
         if provider == "API bên thứ ba (tùy chỉnh)":
@@ -861,6 +889,17 @@ with st.sidebar:
                 "không thể dịch. Nhập Model ID đúng rồi nhấn "
                 "'Kiểm tra kết nối API'."
             )
+
+        if provider in ("Groq", "Google Gemini"):
+            if st.button(
+                "⚡ Áp dụng cấu hình phù hợp gói miễn phí",
+                key=f"free_profile_{provider}",
+                use_container_width=True,
+                help="Chỉ đặt lại Base URL và model của nhà cung cấp này; "
+                     "không xóa hoặc thay API key đã nhập.",
+            ):
+                st.session_state["_pending_free_provider"] = provider
+                _persist_and_rerun()
 
         model_widget_key = f"api_model_id_{provider_id}"
         pending = st.session_state.pop(f"pending_model_{provider_id}", None)
