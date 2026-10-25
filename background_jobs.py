@@ -13,6 +13,7 @@ import requests
 from youtube_transcript_api import YouTubeTranscriptApi
 
 from api_clients import RateLimitError, generate_text
+from groq_pacing import groq_request_gate
 from transcript_sources import fetch_with_fallback
 
 
@@ -148,13 +149,17 @@ def run_full_job(snapshot, progress):
 
     def call(prompt):
         """Retry only the failed API request, not earlier completed chunks."""
-        for attempt in range(4):
+        max_retries = 6
+        for attempt in range(max_retries + 1):
             progress.check_cancelled()
             try:
-                return generate_text(
-                    snapshot["provider"], snapshot["base_url"],
-                    snapshot["model"], api_key, prompt
-                )
+                # The shared Groq gate can show a per-session wait indicator,
+                # and cancellation is checked throughout the pacing delay.
+                with groq_request_gate.reporting(progress):
+                    return generate_text(
+                        snapshot["provider"], snapshot["base_url"],
+                        snapshot["model"], api_key, prompt
+                    )
             except RateLimitError as exc:
                 if not exc.can_retry:
                     raise RuntimeError(
@@ -162,20 +167,19 @@ def run_full_job(snapshot, progress):
                         "Cần chờ ngày mới hoặc dùng nhà cung cấp/model khác. "
                         + str(exc)
                     ) from exc
-                if attempt == 3:
+                if attempt == max_retries:
                     raise RuntimeError(
-                        "Đã tự động thử lại 3 lần nhưng API vẫn vượt giới hạn "
-                        "token/phút. Các kết quả đã xong được giữ lại. "
+                        f"Đã tự động thử lại {max_retries} lần nhưng API vẫn vượt "
+                        "giới hạn token/phút. Các kết quả đã xong được giữ lại. "
                         "Hãy thử lại sau hoặc chọn model khác. " + str(exc)
                     ) from exc
-                pause = min(120.0, max(2.0, float(exc.retry_after or 30.0) + 2))
-                # The progress bar remains visible in the saved session list.
+                pause = min(120.0, max(2.0, float(exc.retry_after or 30.0) + 3))
                 remaining = pause
                 while remaining > 0:
                     progress.update(
                         progress.snapshot()[0],
                         f"⏳ Groq giới hạn TPM: chờ {int(remaining + 0.99)} giây, "
-                        f"tự thử lại lần {attempt + 1}/3..."
+                        f"tự thử lại lần {attempt + 1}/{max_retries}..."
                     )
                     progress.check_cancelled()
                     step = min(1.0, remaining)
