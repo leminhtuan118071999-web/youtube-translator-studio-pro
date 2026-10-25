@@ -4,6 +4,10 @@ import uuid
 import time
 from concurrent.futures import ThreadPoolExecutor
 from io import BytesIO
+from pathlib import Path
+
+import streamlit.components.v1 as components
+from streamlit.runtime import exists as streamlit_runtime_exists
 
 import requests
 import streamlit as st
@@ -18,6 +22,9 @@ from persistent_store import (
     backup_state, configured, get_config, sign_in, sign_up,
     load_user, refresh_auth, save_user, settings_from_widgets,
     restore_widget_settings, snapshot_hash, normalize_sessions,
+)
+from browser_session_store import (
+    STORAGE_KEY, encode_browser_backup, decode_browser_backup,
 )
 
 st.set_page_config(page_title="LMT Studio Pro", page_icon="🎬", layout="wide")
@@ -218,6 +225,79 @@ def _persist_and_rerun():
         )
         return
     st.rerun()
+
+
+# No Supabase? Restore sessions from this browser's localStorage before we
+# initialize a new empty workspace. Local storage is origin/browser-specific
+# and intentionally NEVER contains API keys.
+@st.cache_resource
+def _browser_component():
+    return components.declare_component(
+        "lmt_browser_session_backup",
+        path=str(Path(__file__).parent / "browser_sessions_frontend"),
+    )
+
+
+BROWSER_LOCAL_ENABLED = not CLOUD_ENABLED and streamlit_runtime_exists()
+if BROWSER_LOCAL_ENABLED and not st.session_state.get("_browser_sessions_restored"):
+    stored = _browser_component()(
+        mode="read", storageKey=STORAGE_KEY,
+        key="browser_session_loader", default=None,
+    )
+    if stored is None:
+        st.caption("💾 Đang khôi phục các phiên đã lưu trong trình duyệt...")
+        if st.button("Tiếp tục không dùng bộ nhớ trình duyệt"):
+            st.session_state["_browser_sessions_restored"] = True
+            st.session_state["_browser_sessions_disabled"] = True
+            st.rerun()
+        st.stop()
+    st.session_state["_browser_sessions_restored"] = True
+    if stored.get("ok") and stored.get("value"):
+        try:
+            restored = decode_browser_backup(stored["value"])
+            st.session_state.workspaces = {
+                ident: {**blank_session(rec.get("name", "Phiên đã lưu")), **rec}
+                for ident, rec in restored["workspaces"].items()
+            }
+            st.session_state.selected_session = restored["selected_session"]
+            st.session_state.saved_session_order = restored["saved_session_order"]
+            st.session_state["_browser_restore_success"] = True
+        except (ValueError, TypeError) as exc:
+            st.session_state["_browser_restore_error"] = str(exc)
+            st.session_state["_browser_sessions_disabled"] = True
+    elif not stored.get("ok"):
+        st.session_state["_browser_restore_error"] = stored.get(
+            "message", "Trình duyệt không cho phép sử dụng localStorage."
+        )
+        st.session_state["_browser_sessions_disabled"] = True
+    st.rerun()
+
+
+def _save_browser_sessions():
+    """Persist ONLY session content; never save API keys in browser storage."""
+    if not BROWSER_LOCAL_ENABLED or st.session_state.get("_browser_sessions_disabled"):
+        return
+    selected = st.session_state.get("selected_session")
+    if selected in st.session_state.get("workspaces", {}):
+        sync_form(selected)
+    try:
+        state = backup_state(
+            st.session_state.workspaces, selected,
+            st.session_state.get("saved_session_order", 0),
+        )
+        payload = encode_browser_backup(state)
+        outcome = _browser_component()(
+            mode="write", storageKey=STORAGE_KEY, payload=payload,
+            key="browser_session_writer", default=None,
+        )
+        if isinstance(outcome, dict) and not outcome.get("ok", True):
+            st.session_state["_browser_save_error"] = outcome.get(
+                "message", "Trình duyệt không cho phép lưu bản sao."
+            )
+            st.session_state["_browser_sessions_disabled"] = True
+    except (ValueError, TypeError) as exc:
+        st.session_state["_browser_save_error"] = str(exc)
+        st.session_state["_browser_sessions_disabled"] = True
 
 
 # Data belong to this browser's current Streamlit session, never a shared server file.
@@ -644,12 +724,20 @@ with st.sidebar:
                     st.session_state.clear()
                     st.rerun()
         else:
-            st.warning(
-                "Chưa kết nối kho lưu trữ Supabase. Hiện chỉ có thể sao lưu "
-                "thủ công. Để tự lưu qua các lần đăng nhập, cần thêm "
-                "SUPABASE_URL, SUPABASE_ANON_KEY và SESSION_ENCRYPTION_KEY "
-                "vào Streamlit Secrets và chạy supabase_schema.sql."
+            st.info(
+                "💾 Danh sách phiên tự lưu vào trình duyệt này và khôi phục "
+                "sau khi tải lại/mở lại app. Không lưu API key. "
+                "Để đồng bộ qua nhiều máy, hãy cấu hình Supabase."
             )
+            st.caption(
+                "Lưu trong bộ nhớ cục bộ của trình duyệt, không đồng bộ "
+                "giữa thiết bị hay trình duyệt. Đừng xóa dữ liệu website "
+                "hoặc dùng chế độ ẩn danh nếu muốn giữ các phiên."
+            )
+            if st.session_state.get("_browser_restore_error"):
+                st.warning(st.session_state["_browser_restore_error"])
+            if st.session_state.get("_browser_save_error"):
+                st.warning(st.session_state["_browser_save_error"])
         try:
             portable = backup_state(
                 st.session_state.workspaces, st.session_state.selected_session,
@@ -1382,6 +1470,15 @@ st.caption("Nút Copy nằm ở góc phải khung nội dung. Mỗi tài khoản
 # Automatically save changed sessions and ALL manually-entered API provider
 # settings/keys, encrypted, after widgets update on each Streamlit rerun.
 _save_cloud_state()
+_save_browser_sessions()
+if not CLOUD_ENABLED and st.session_state.get("_browser_restore_success"):
+    st.caption("💾 Đã khôi phục danh sách phiên từ trình duyệt này.")
+if not CLOUD_ENABLED and st.session_state.get("_browser_save_error"):
+    st.warning(
+        "⚠️ Không thể tự lưu danh sách phiên: "
+        + st.session_state["_browser_save_error"]
+        + " Hãy tải bản sao lưu JSON tại mục 💾 Lưu dữ liệu và sao lưu."
+    )
 if CLOUD_ENABLED:
     if st.session_state.get("_cloud_save_error"):
         st.warning(
