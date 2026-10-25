@@ -6,12 +6,13 @@
 
 Đầu thanh bên trái là **🌍 Ngôn ngữ đích**, đã mở rộng thêm tiếng Ý, Bồ Đào Nha, Hà Lan, Thụy Điển, Séc, Romania, Hungary, Ukraine và nhiều ngôn ngữ châu Âu khác. Mỗi phiên có ngôn ngữ đích riêng.
 
-Ngay bên dưới là **📁 Quản lý phiên làm việc**:
-1. **Chọn phiên**: chọn phiên hiện có.
-2. **Tên phiên** + **💾 Lưu tên phiên**: đặt/đổi tên, đồng thời đưa phiên vào danh sách đã lưu.
-3. **➕ Tạo phiên mới**: mở phiên trống, tách nội dung của các phiên cũ.
-4. **🗑️ Xóa tất cả phiên đã lưu**: yêu cầu đánh dấu xác nhận rồi xóa tất cả phiên trong kết nối hiện tại.
-5. **📚 Danh sách phiên đã lưu**: nằm ngay dưới nút xóa. Hiển thị tên phiên theo thứ tự mới lưu trước; bấm một tên để chuyển đến đúng phiên.
+Ngay bên dưới là **📁 Quản lý phiên làm việc** (không còn ô **Chọn phiên**):
+1. **Tên phiên** + **💾 Lưu tên phiên**: đặt/đổi tên và đưa phiên vào danh sách đã lưu.
+2. **➕ Tạo phiên mới**: mở một phiên trống, tách riêng phụ đề và kết quả của phiên cũ.
+3. **🗑️ Xóa tất cả phiên đã lưu**: cần xác nhận trước khi xóa tất cả phiên đang giữ trong kết nối hiện tại.
+4. **📚 Danh sách phiên đã lưu**: ngay bên dưới nút xóa, mới lưu ở trên. Nhấn trực tiếp tên phiên để mở lại nội dung đã làm; phiên đang mở có dấu ✓.
+
+Không cần chọn phiên từ menu ở trên. Chỉ những phiên đã bấm **Lưu tên phiên** mới xuất hiện trong danh sách.
 
 Dữ liệu mỗi phiên được tách riêng: link YouTube, phụ đề gốc, bản dịch, tiêu đề, mô tả, prompt ảnh, nội dung SEO, ngôn ngữ dịch.
 
