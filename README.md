@@ -1,4 +1,4 @@
-# 🎬 YouTube Translator Studio Pro
+# 🎬 LMT Studio Pro
 
 Ứng dụng Streamlit xử lý video YouTube: trích xuất phụ đề có sẵn (khi YouTube cho phép), dịch bằng Gemini/OpenAI API, tạo 20 prompt hình ảnh, dịch tiêu đề/mô tả và SEO, xem và tải thumbnail.
 
