@@ -1,5 +1,3 @@
-import copy
-import json
 import re
 import uuid
 from io import BytesIO
@@ -46,40 +44,6 @@ def sync_form(sid):
             record[field] = st.session_state[widget_key]
 
 
-def export_data(session_ids):
-    sync_form(st.session_state.selected_session)
-    sessions = []
-    for sid in session_ids:
-        item = st.session_state.workspaces[sid]
-        sessions.append({"name": item["name"], **{f: item.get(f, "") for f in FIELDS}})
-    return json.dumps({"format": "youtube-translator-studio-pro", "version": 1,
-                       "sessions": sessions}, ensure_ascii=False, indent=2)
-
-
-def import_data(payload):
-    if not isinstance(payload, dict) or payload.get("format") != "youtube-translator-studio-pro":
-        raise ValueError("Đây không phải file sao lưu của YouTube Translator Studio Pro.")
-    items = payload.get("sessions")
-    if not isinstance(items, list) or not items or len(items) > 100:
-        raise ValueError("File sao lưu không có phiên hợp lệ hoặc có quá nhiều phiên.")
-    imported = []
-    for incoming in items:
-        if not isinstance(incoming, dict):
-            raise ValueError("Dữ liệu phiên không hợp lệ.")
-        record = blank_session(unique_name(str(incoming.get("name") or "Phiên khôi phục")))
-        for field in FIELDS:
-            val = incoming.get(field, record[field])
-            if not isinstance(val, str) or len(val) > 500000:
-                raise ValueError(f"Dữ liệu '{field}' không hợp lệ hoặc quá lớn.")
-            record[field] = val
-        if record["language"] not in LANGUAGES:
-            record["language"] = LANGUAGES[0]
-        sid = uuid.uuid4().hex
-        st.session_state.workspaces[sid] = record
-        imported.append(sid)
-    return imported
-
-
 # Data belong to this browser's current Streamlit session, never a shared server file.
 if "workspaces" not in st.session_state:
     first = uuid.uuid4().hex
@@ -110,73 +74,49 @@ with st.sidebar:
     session = st.session_state.workspaces[sid]
     st.caption(f"Đang làm việc: {session['name']}")
 
-    new_title = st.text_input("Tên phiên mới", placeholder="Ví dụ: Video 01 - Tiếng Ba Lan")
-    if st.button("➕ Tạo phiên mới", use_container_width=True):
-        sync_form(sid)
-        newid = uuid.uuid4().hex
-        st.session_state.workspaces[newid] = blank_session(unique_name(new_title))
-        st.session_state["_open_session_next"] = newid
-        st.rerun()
-
-    renamed = st.text_input("Đổi tên phiên hiện tại", value=session["name"], key=f"rename_{sid}")
-    cols = st.columns(2)
-    if cols[0].button("✏️ Đổi tên", use_container_width=True):
-        proposed = renamed.strip()[:80]
+    saved_name = st.text_input(
+        "Tên phiên",
+        value=session["name"],
+        key=f"saved_name_{sid}",
+        placeholder="Ví dụ: Video 01 - Tiếng Ba Lan",
+    )
+    if st.button("💾 Lưu tên phiên", use_container_width=True):
+        proposed = saved_name.strip()[:80]
         if not proposed:
             st.warning("Hãy nhập tên phiên.")
         elif any(p["name"].casefold() == proposed.casefold() and k != sid
                  for k, p in st.session_state.workspaces.items()):
-            st.warning("Tên phiên này đã tồn tại.")
+            st.warning("Tên phiên này đã tồn tại. Hãy đặt tên khác.")
         else:
+            sync_form(sid)
             session["name"] = proposed
+            st.success("Đã lưu tên phiên.")
             st.rerun()
-    if cols[1].button("📑 Nhân bản", use_container_width=True):
+
+    if st.button("➕ Tạo phiên mới", use_container_width=True):
         sync_form(sid)
         newid = uuid.uuid4().hex
-        duplicate = copy.deepcopy(session)
-        duplicate["name"] = unique_name(session["name"] + " - Bản sao")
-        st.session_state.workspaces[newid] = duplicate
+        st.session_state.workspaces[newid] = blank_session(unique_name("Phiên mới"))
         st.session_state["_open_session_next"] = newid
         st.rerun()
 
-    if len(st.session_state.workspaces) > 1:
-        confirmed = st.checkbox("Xác nhận xóa phiên hiện tại", key=f"confirm_delete_{sid}")
-        if st.button("🗑️ Xóa phiên", disabled=not confirmed, use_container_width=True):
-            del st.session_state.workspaces[sid]
-            st.session_state["_open_session_next"] = next(iter(st.session_state.workspaces))
-            st.rerun()
+    confirm_all = st.checkbox(
+        "Tôi xác nhận xóa tất cả phiên",
+        key="confirm_delete_all_sessions",
+    )
+    if st.button(
+        "🗑️ Xóa tất cả phiên đã lưu",
+        type="secondary",
+        disabled=not confirm_all,
+        use_container_width=True,
+    ):
+        new_id = uuid.uuid4().hex
+        st.session_state.workspaces = {new_id: blank_session("Phiên 1")}
+        st.session_state["_open_session_next"] = new_id
+        st.session_state["confirm_delete_all_sessions"] = False
+        st.rerun()
 
-    st.divider()
-    st.markdown("**💾 Lưu và khôi phục phiên**")
-    st.download_button(
-        "💾 Lưu phiên hiện tại (.json)",
-        data=export_data([sid]),
-        file_name=f"youtube-phien-{sid[:8]}.json",
-        mime="application/json",
-        use_container_width=True,
-    )
-    st.download_button(
-        "📦 Sao lưu tất cả phiên (.json)",
-        data=export_data(list(st.session_state.workspaces)),
-        file_name="youtube-tat-ca-phien.json",
-        mime="application/json",
-        use_container_width=True,
-    )
-    file_backup = st.file_uploader("📂 Chọn file JSON đã lưu", type=["json"], key="restore_sessions")
-    if st.button("♻️ Khôi phục phiên từ file", use_container_width=True):
-        if file_backup is None:
-            st.warning("Hãy chọn file JSON trước.")
-        elif file_backup.size > 8 * 1024 * 1024:
-            st.error("File sao lưu vượt quá 8 MB.")
-        else:
-            try:
-                payload = json.loads(file_backup.getvalue().decode("utf-8-sig"))
-                new_ids = import_data(payload)
-                st.session_state["_open_session_next"] = new_ids[0]
-                st.rerun()
-            except (ValueError, TypeError, UnicodeError, json.JSONDecodeError) as e:
-                st.error(f"Không khôi phục được: {e}")
-    st.caption("Các phiên được giữ riêng khi đang mở app. Để giữ lại sau khi đóng trình duyệt, hãy tải file JSON và khôi phục khi quay lại. Không lưu API key vào file.")
+    st.caption("Dữ liệu các phiên được giữ trong phiên truy cập hiện tại; chưa tự lưu vĩnh viễn khi đóng app.")
 
     st.divider()
     st.subheader("🔑 Cấu hình AI Gemini")
@@ -355,4 +295,4 @@ with tab_seo:
                 st.error(str(e))
     output("Copy toàn bộ tiêu đề, mô tả và SEO", session["metadata"])
 
-st.caption("Nút Copy nằm ở góc phải khung nội dung. Các phiên không chia sẻ dữ liệu với nhau; hãy sao lưu JSON để sử dụng lại sau khi đóng app.")
+st.caption("Nút Copy nằm ở góc phải khung nội dung. Các phiên không chia sẻ dữ liệu với nhau trong phiên truy cập hiện tại.")
