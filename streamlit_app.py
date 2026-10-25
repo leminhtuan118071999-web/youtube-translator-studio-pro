@@ -25,7 +25,7 @@ LANGUAGES = [
     "Tiếng Macedonia", "Tiếng Việt", "Tiếng Nhật", "Tiếng Hàn",
 ]
 FIELDS = ("url", "source", "title", "description", "translated", "prompts", "metadata", "language", "new_title", "new_description", "seo_tags")
-FORM_FIELDS = ("url", "source", "title", "description", "language")
+FORM_FIELDS = ("url", "language")
 
 
 def blank_session(name):
@@ -539,8 +539,8 @@ if st.button("🚀 BẮT ĐẦU TẠO TOÀN BỘ", type="primary",
              use_container_width=True, key=f"run_all_{sid}"):
     if not key.strip():
         st.error("Hãy nhập API key hợp lệ và chọn model trước khi bắt đầu.")
-    elif not vid and not (st.session_state.get(f"field_{sid}_source") or session["source"]).strip():
-        st.warning("Hãy dán link YouTube hoặc nhập phụ đề/văn bản gốc trước khi bắt đầu.")
+    elif not vid and not session["source"].strip():
+        st.warning("Hãy dán link video YouTube hợp lệ trước khi bắt đầu.")
     else:
         progress = st.progress(0, text="Khởi tạo quy trình...")
         try:
@@ -548,7 +548,6 @@ if st.button("🚀 BẮT ĐẦU TẠO TOÀN BỘ", type="primary",
                 progress.progress(5, text="📥 Đang lấy phụ đề hiện có từ YouTube...")
                 source_text, caption_language = fetch_best_transcript(vid)
                 session["source"] = source_text
-                st.session_state[f"field_{sid}_source"] = source_text
                 st.caption(f"Phụ đề được trích xuất từ bản {caption_language}.")
                 # YouTube oEmbed may provide a title, but it doesn't return descriptions.
                 if not session.get("title", "").strip():
@@ -563,11 +562,10 @@ if st.button("🚀 BẮT ĐẦU TẠO TOÀN BỘ", type="primary",
                             original_title = str(meta_response.json().get("title", "")).strip()
                             if original_title:
                                 session["title"] = original_title
-                                st.session_state[f"field_{sid}_title"] = original_title
                     except (requests.RequestException, ValueError):
                         pass
             else:
-                source_text = st.session_state.get(f"field_{sid}_source", session["source"])
+                source_text = session["source"]
                 session["source"] = source_text
 
             if not source_text.strip():
@@ -613,22 +611,6 @@ if st.button("🚀 BẮT ĐẦU TẠO TOÀN BỘ", type="primary",
                 "Bạn có thể tạo lại riêng từng mục bằng các nút bên dưới."
             )
 
-if st.button("📥 Trích xuất phụ đề", key=f"extract_{sid}"):
-    if not vid:
-        st.warning("Hãy nhập link YouTube hợp lệ.")
-    else:
-        try:
-            text, caption_language = fetch_best_transcript(vid)
-            session["source"] = text
-            st.session_state[f"field_{sid}_source"] = text
-            if text.strip():
-                mark_session_processed(session)
-                st.rerun()
-            else:
-                st.warning("Không tìm thấy nội dung phụ đề.")
-        except Exception as e:
-            st.error("Không thể trích xuất phụ đề: " + str(e))
-
 if vid:
     st.subheader("🖼️ Thumbnail gốc chất lượng cao")
     for quality in ["maxresdefault", "sddefault", "hqdefault", "mqdefault"]:
@@ -644,29 +626,8 @@ if vid:
         except Exception:
             continue
 
-upload = st.file_uploader("📄 Hoặc chọn file phụ đề .txt", type=["txt"], key=f"upload_{sid}")
-if upload and st.button("Dùng file phụ đề này", key=f"use_upload_{sid}"):
-    if upload.size > 4 * 1024 * 1024:
-        st.error("File phụ đề vượt giới hạn 4 MB.")
-    else:
-        session["source"] = upload.getvalue().decode("utf-8-sig", errors="replace")
-        st.session_state[f"field_{sid}_source"] = session["source"]
-        if session["source"].strip():
-            mark_session_processed(session)
-            st.rerun()
-
-session["source"] = st.text_area(
-    "📄 Phụ đề / văn bản gốc",
-    value=session["source"], height=190, key=f"field_{sid}_source"
-)
-session["title"] = st.text_input("🎬 Tiêu đề gốc", value=session["title"], key=f"field_{sid}_title")
-session["description"] = st.text_area(
-    "📝 Mô tả gốc", value=session["description"], height=110,
-    key=f"field_{sid}_description"
-)
-# The original subtitle copy section is deliberately omitted at the user's request.
-output("Copy tiêu đề gốc", session["title"])
-output("Copy mô tả gốc", session["description"])
+# Original transcript, title and description are retained internally for processing,
+# but only target-language results are shown to the user.
 
 tab_translate, tab_visual, tab_seo = st.tabs(
     ["🌍 Bản dịch", "🎨 20 prompt hình ảnh", "📝 Tiêu đề • Mô tả • SEO"]
