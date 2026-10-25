@@ -12,6 +12,7 @@ import requests
 from youtube_transcript_api import YouTubeTranscriptApi
 
 from api_clients import generate_text
+from transcript_sources import fetch_with_fallback
 
 
 class JobProgress:
@@ -56,23 +57,14 @@ def youtube_id(url):
     return match.group(1) if match else None
 
 
-def fetch_subtitles(video_id):
-    tracks = list(YouTubeTranscriptApi().list(video_id))
-    preferred = {"vi": 0, "en": 1, "pl": 2}
-    tracks.sort(key=lambda tr: (bool(tr.is_generated),
-                                preferred.get(tr.language_code, 10)))
-    for track in tracks:
-        try:
-            segments = track.fetch()
-            text = " ".join(
-                item.text.strip() for item in segments
-                if isinstance(getattr(item, "text", None), str) and item.text.strip()
-            )
-            if text.strip():
-                return text, track.language
-        except Exception:
-            continue
-    raise ValueError("Video không có phụ đề truy cập được; YouTube có thể đang hạn chế.")
+def fetch_subtitles(video_id, supadata_key="", progress=None):
+    """Attempt native YouTube subtitles, then a configured transcription service."""
+    text, language, provider_name = fetch_with_fallback(
+        video_id, supadata_key=supadata_key, progress=progress
+    )
+    if progress:
+        progress.update(9, f"✅ Lấy phụ đề thành công ({provider_name}).")
+    return text, language
 
 
 def chunk_text(text, limit=5500):
@@ -136,9 +128,17 @@ def run_full_job(snapshot, progress):
         title = snapshot.get("title", "")
         description = snapshot.get("description", "")
         language = snapshot["language"]
+        provided_source = (snapshot.get("uploaded_source") or "").strip()
         if vid:
-            progress.update(5, "📥 Đang trích xuất phụ đề YouTube...")
-            source, caption_lang = fetch_subtitles(vid)
+            if provided_source:
+                progress.update(6, "📄 Dùng file phụ đề đã tải lên...")
+                source, caption_lang = provided_source, "Phụ đề tải lên"
+            else:
+                progress.update(5, "📥 Đang lấy phụ đề YouTube...")
+                source, caption_lang = fetch_subtitles(
+                    vid, supadata_key=snapshot.get("supadata_key", ""),
+                    progress=progress
+                )
             fields["source"] = source
             progress.publish("source", source)
             fields["caption_language"] = str(caption_lang)
@@ -156,8 +156,10 @@ def run_full_job(snapshot, progress):
             if title:
                 fields["title"] = title
                 progress.publish("title", title)
+        if provided_source and not vid:
+            source = provided_source
         if not source.strip():
-            raise ValueError("Không lấy được phụ đề. Hãy kiểm tra link video.")
+            raise ValueError("Không có nội dung phụ đề để dịch.")
         if len(source) > 350000:
             raise ValueError("Phụ đề quá dài (hơn 350.000 ký tự).")
         fields["source"] = source
@@ -219,6 +221,10 @@ def run_full_job(snapshot, progress):
         progress.update(100, "✅ Hoàn thành. Đã lưu vào danh sách phiên.")
     except Exception as exc:
         # Redact credentials in provider error messages.
-        result["error"] = str(exc).replace(api_key, "[API KEY ĐÃ ẨN]")[:700]
+        safe_error = str(exc).replace(api_key, "[API KEY ĐÃ ẨN]")
+        extra_key = snapshot.get("supadata_key", "")
+        if extra_key:
+            safe_error = safe_error.replace(extra_key, "[KEY PHỤ ĐỀ ĐÃ ẨN]")
+        result["error"] = safe_error[:700]
         progress.update(100, "⚠️ Tác vụ kết thúc nhưng có lỗi.")
     return result
