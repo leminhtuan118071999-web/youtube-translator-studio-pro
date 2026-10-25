@@ -12,7 +12,7 @@ from urllib.parse import urlsplit
 import requests
 from youtube_transcript_api import YouTubeTranscriptApi
 
-from api_clients import RateLimitError, generate_text
+from api_clients import RateLimitError, TransientProviderError, generate_text
 from groq_pacing import groq_request_gate
 from transcript_sources import fetch_with_fallback
 
@@ -147,14 +147,25 @@ def run_full_job(snapshot, progress):
     fields = result["fields"]
     api_key = snapshot["api_key"]
 
+    def _wait_for_retry(seconds, description):
+        """Keep the existing job cancelable while its progress shows the wait."""
+        remaining = max(0.0, float(seconds))
+        while remaining > 0:
+            progress.check_cancelled()
+            pct, _ = progress.snapshot()
+            progress.update(pct, f"{description} ({int(remaining + 0.99)} giây)...")
+            step = min(1.0, remaining)
+            time.sleep(step)
+            remaining -= step
+
     def call(prompt):
-        """Retry only the failed API request, not earlier completed chunks."""
-        max_retries = 6
-        for attempt in range(max_retries + 1):
+        """Retry only the failed request; never repeat finished translation chunks."""
+        rate_attempt = 0
+        upstream_attempt = 0
+        while True:
             progress.check_cancelled()
             try:
-                # The shared Groq gate can show a per-session wait indicator,
-                # and cancellation is checked throughout the pacing delay.
+                # Coordinate TPM pacing with other Streamlit jobs using Groq.
                 with groq_request_gate.reporting(progress):
                     return generate_text(
                         snapshot["provider"], snapshot["base_url"],
@@ -167,25 +178,46 @@ def run_full_job(snapshot, progress):
                         "Cần chờ ngày mới hoặc dùng nhà cung cấp/model khác. "
                         + str(exc)
                     ) from exc
-                if attempt == max_retries:
+                if rate_attempt >= 6:
                     raise RuntimeError(
-                        f"Đã tự động thử lại {max_retries} lần nhưng API vẫn vượt "
-                        "giới hạn token/phút. Các kết quả đã xong được giữ lại. "
+                        "Đã tự động thử lại 6 lần nhưng API vẫn vượt giới hạn "
+                        "token/phút. Các kết quả đã xong được giữ lại. "
                         "Hãy thử lại sau hoặc chọn model khác. " + str(exc)
                     ) from exc
+                rate_attempt += 1
                 pause = min(120.0, max(2.0, float(exc.retry_after or 30.0) + 3))
-                remaining = pause
-                while remaining > 0:
-                    progress.update(
-                        progress.snapshot()[0],
-                        f"⏳ Groq giới hạn TPM: chờ {int(remaining + 0.99)} giây, "
-                        f"tự thử lại lần {attempt + 1}/{max_retries}..."
-                    )
-                    progress.check_cancelled()
-                    step = min(1.0, remaining)
-                    time.sleep(step)
-                    remaining -= step
-        raise RuntimeError("Không thực hiện được yêu cầu API.")
+                _wait_for_retry(
+                    pause,
+                    f"⏳ Groq giới hạn TPM: tự thử lại {rate_attempt}/6",
+                )
+            except TransientProviderError as exc:
+                # Only retry a temporary upstream failure, not bad credentials,
+                # unsupported models, or client errors. Limit duplicate POSTs
+                # because a failed gateway response may hide a successful billable
+                # request upstream.
+                if upstream_attempt >= 3:
+                    raise RuntimeError(
+                        "Gateway/dịch vụ AI phía sau vẫn gặp lỗi HTTP "
+                        f"{exc.status_code} sau 3 lần thử lại. "
+                        "Các kết quả đã xong được giữ lại. "
+                        "Đây có thể là sự cố bên nhà cung cấp; "
+                        "hãy thử lại sau hoặc chọn API khác. " + str(exc)
+                    ) from exc
+                upstream_attempt += 1
+                pause = min(
+                    40.0,
+                    max(
+                        2.0,
+                        float(exc.retry_after)
+                        if exc.retry_after is not None
+                        else 3.0 * (2 ** (upstream_attempt - 1)),
+                    ),
+                )
+                _wait_for_retry(
+                    pause,
+                    f"⏳ Gateway HTTP {exc.status_code}: "
+                    f"thử lại {upstream_attempt}/3",
+                )
 
     try:
         progress.check_cancelled()
