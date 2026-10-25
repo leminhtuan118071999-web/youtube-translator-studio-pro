@@ -37,6 +37,9 @@ def get_config(secrets):
     if not re.fullmatch(r"https://[A-Za-z0-9.-]+(?::443)?", url):
         raise ValueError("SUPABASE_URL phải là HTTPS domain, không chứa path hoặc thông tin đăng nhập.")
     key = str(secrets["SUPABASE_ANON_KEY"]).strip()
+    # Never allow privileged secret/service-role credentials: they bypass RLS.
+    if key.startswith("sb_secret_"):
+        raise ValueError("Hãy dùng Supabase publishable key, không dùng secret key.")
     encryption_key = str(secrets["SESSION_ENCRYPTION_KEY"]).strip()
     try:
         cipher = Fernet(encryption_key.encode("utf-8"))
@@ -72,8 +75,9 @@ def _request(method, endpoint, headers, **kwargs):
 
 
 def _anon_headers(anon_key):
-    return {"apikey": anon_key, "Authorization": "Bearer " + anon_key,
-            "Content-Type": "application/json"}
+    # Publishable keys are not JWTs. Send on apikey, not as a Bearer token.
+    # Signed-in Data API calls instead use the user's access_token as Bearer.
+    return {"apikey": anon_key, "Content-Type": "application/json"}
 
 
 def sign_in(secrets, email, password):
