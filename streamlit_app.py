@@ -9,7 +9,7 @@ import requests
 import streamlit as st
 from PIL import Image
 from youtube_transcript_api import YouTubeTranscriptApi
-from api_clients import (PROVIDERS, generate_text, list_models,
+from api_clients import (PROVIDERS, TransientProviderError, generate_text, list_models,
                          validate_base_url, migrate_claude_settings)
 from background_jobs import JobProgress, run_full_job
 from transcript_sources import parse_uploaded_subtitles
@@ -1024,6 +1024,15 @@ if test_api:
             with st.spinner("Đang kiểm tra Base URL, API Key và Model..."):
                 answer = ai("Hãy trả lời duy nhất từ OK.")
             st.success(f"✅ Kết nối {provider} thành công với Model {model}.")
+    except TransientProviderError as exc:
+        st.sidebar.warning(
+            f"⚠️ Máy chủ API/Gateway đang gặp lỗi HTTP {exc.status_code}. "
+            "Đây có thể là sự cố của gateway hoặc dịch vụ phía sau, "
+            "không khẳng định API key hay model sai. "
+            "Bạn có thể thử lại sau; nếu kéo dài, liên hệ đơn vị cấp gateway "
+            "hoặc chuyển sang API khác. "
+            "App sẽ tự thử lại có giới hạn khi chạy dịch toàn bộ."
+        )
     except Exception as exc:
         st.sidebar.error(str(exc))
 
