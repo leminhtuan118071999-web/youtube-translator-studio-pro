@@ -181,21 +181,23 @@ def run_full_job(snapshot, progress):
             except RateLimitError as exc:
                 if not exc.can_retry:
                     raise RuntimeError(
-                        "Tài khoản API đã hết giới hạn trong ngày. "
-                        "Cần chờ ngày mới hoặc dùng nhà cung cấp/model khác. "
-                        + str(exc)
+                        "Tài khoản API đã hết hạn mức trong ngày hoặc quota "
+                        "của model bằng 0. Kiểm tra giới hạn model trong "
+                        "bảng điều khiển nhà cung cấp, chọn model khả dụng "
+                        "hoặc chờ nhà cung cấp cấp lại quota. " + str(exc)
                     ) from exc
                 if rate_attempt >= 6:
                     raise RuntimeError(
                         "Đã tự động thử lại 6 lần nhưng API vẫn vượt giới hạn "
-                        "token/phút. Các kết quả đã xong được giữ lại. "
+                        "tốc độ hoặc quota. Các kết quả đã xong được giữ lại. "
                         "Hãy thử lại sau hoặc chọn model khác. " + str(exc)
                     ) from exc
                 rate_attempt += 1
                 pause = min(120.0, max(2.0, float(exc.retry_after or 30.0) + 3))
                 _wait_for_retry(
                     pause,
-                    f"⏳ Groq giới hạn TPM: tự thử lại {rate_attempt}/6",
+                    f"⏳ API {snapshot['provider']} giới hạn tốc độ: "
+                    f"tự thử lại {rate_attempt}/6",
                 )
             except TransientProviderError as exc:
                 # Only retry a temporary upstream failure, not bad credentials,
