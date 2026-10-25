@@ -179,6 +179,70 @@ class StreamlitSmokeTests(unittest.TestCase):
             for item in app.get("text_input")
         ))
 
+    def test_gemini_native_default_and_free_profile_without_losing_key(self):
+        app = self.app.run()
+        provider = next(
+            item for item in app.selectbox if item.label == "CHỌN NỀN TẢNG AI"
+        )
+        provider.set_value("Google Gemini")
+        app.run()
+        self.assertFalse(app.exception, [str(x.message) for x in app.exception])
+        self.assertEqual(
+            app.session_state["api_base_Google Gemini"],
+            "https://generativelanguage.googleapis.com/v1beta",
+        )
+        self.assertEqual(
+            app.session_state["api_model_id_Google Gemini"],
+            "gemini-3.5-flash-lite",
+        )
+        key = next(
+            item for item in app.get("text_input")
+            if item.key == "api_key_Google Gemini"
+        )
+        key.set_value("FAKE_TEST_KEY_NOT_REAL")
+        app.run()
+        model = next(
+            item for item in app.get("text_input")
+            if item.key == "api_model_id_Google Gemini"
+        )
+        model.set_value("gemini-3.8-flash")
+        app.run()
+        next(
+            button for button in app.button
+            if button.key == "free_profile_Google Gemini"
+        ).click()
+        app.run()
+        self.assertFalse(app.exception, [str(x.message) for x in app.exception])
+        self.assertEqual(
+            app.session_state["api_model_id_Google Gemini"],
+            "gemini-3.5-flash-lite",
+        )
+        self.assertEqual(
+            app.session_state["api_key_Google Gemini"],
+            "FAKE_TEST_KEY_NOT_REAL",
+        )
+
+    def test_groq_free_profile_is_selectable(self):
+        app = self.app.run()
+        self.assertFalse(app.exception, [str(x.message) for x in app.exception])
+        self.assertTrue(any(
+            button.key == "free_profile_Groq" for button in app.button
+        ))
+        next(
+            item for item in app.get("text_input")
+            if item.key == "api_model_id_Groq"
+        ).set_value("openai/gpt-oss-120b")
+        app.run()
+        next(
+            button for button in app.button
+            if button.key == "free_profile_Groq"
+        ).click()
+        app.run()
+        self.assertFalse(app.exception, [str(x.message) for x in app.exception])
+        self.assertEqual(
+            app.session_state["api_model_id_Groq"], "openai/gpt-oss-20b"
+        )
+
     def test_language_selector_is_next_to_start_action(self):
         app = self.app.run()
         self.assertFalse(app.exception, [str(exc.message) for exc in app.exception])
