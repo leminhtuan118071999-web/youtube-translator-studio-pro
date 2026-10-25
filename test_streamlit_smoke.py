@@ -86,6 +86,24 @@ class StreamlitSmokeTests(unittest.TestCase):
             "claude-sonnet-4-6",
         )
 
+    def test_claude_gateway_shows_separate_auth_token_field(self):
+        app = self.app.run()
+        selector = next(
+            item for item in app.selectbox if item.label == "CHỌN NỀN TẢNG AI"
+        )
+        self.assertIn("Claude Gateway (AUTH_TOKEN)", selector.options)
+        selector.set_value("Claude Gateway (AUTH_TOKEN)")
+        app.run()
+        self.assertFalse(app.exception, [str(x.message) for x in app.exception])
+        self.assertTrue(any(
+            item.label == "🔐 Gateway AUTH_TOKEN"
+            for item in app.get("text_input")
+        ))
+        self.assertEqual(
+            app.session_state["api_model_id_Claude Gateway (AUTH_TOKEN)"],
+            "claude-sonnet-4-6",
+        )
+
     def test_language_selector_is_next_to_start_action(self):
         app = self.app.run()
         self.assertFalse(app.exception, [str(exc.message) for exc in app.exception])
