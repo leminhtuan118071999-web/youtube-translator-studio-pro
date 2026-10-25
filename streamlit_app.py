@@ -534,6 +534,36 @@ with st.sidebar:
                     st.success("Đã đồng bộ dữ liệu lên tài khoản.")
                 except Exception as exc:
                     st.error(f"Chưa lưu được: {exc}")
+            if st.button("🧪 Kiểm tra lưu và đọc lại từ Supabase", use_container_width=True):
+                try:
+                    # Verify the round trip with the signed-in user's token,
+                    # including encrypted provider keys, without revealing them.
+                    _save_cloud_state(force=True)
+                    remote_payload, remote_settings = load_user(
+                        _cloud_secrets(), _refresh_login()
+                    )
+                    expected_payload = backup_state(
+                        st.session_state.workspaces,
+                        st.session_state.selected_session,
+                        st.session_state.saved_session_order,
+                    )
+                    expected_settings = settings_from_widgets(st.session_state)
+                    if remote_payload is None:
+                        raise RuntimeError("Chưa tìm thấy dữ liệu phiên trong Supabase.")
+                    if snapshot_hash(remote_payload, remote_settings) != snapshot_hash(
+                        expected_payload, expected_settings
+                    ):
+                        raise RuntimeError(
+                            "Dữ liệu đọc lại không khớp bản vừa lưu. "
+                            "Hãy tránh chỉnh sửa cùng tài khoản trên nhiều tab."
+                        )
+                    st.success(
+                        "✅ Đã kiểm tra lưu và đọc lại thành công: "
+                        "đúng tài khoản, đúng các phiên và cấu hình API mã hóa."
+                    )
+                except Exception as exc:
+                    st.error(f"⚠️ Kiểm tra Supabase chưa đạt: {exc}")
+
             if st.button("🚪 Đăng xuất", use_container_width=True):
                 try:
                     _save_cloud_state(force=True)
