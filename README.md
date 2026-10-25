@@ -2,6 +2,23 @@
 
 Ứng dụng Streamlit xử lý video YouTube: trích xuất phụ đề có sẵn (khi YouTube cho phép), dịch bằng Gemini/OpenAI API, tạo 20 prompt hình ảnh, dịch tiêu đề/mô tả và SEO, xem và tải thumbnail.
 
+## ☁️ Tự động lưu toàn bộ dữ liệu và cấu hình API qua lần đăng nhập sau
+
+Để lưu bền vững, admin kết nối một dự án Supabase có xác thực email và RLS. Khi đăng nhập, người dùng sẽ thấy lại mọi phiên đã đồng bộ: bản dịch, prompt ảnh, SEO, phụ đề, link video, tên phiên, trạng thái và cấu hình các nhà cung cấp API. Nhà cung cấp hiện chọn, Base URL, Model ID và API key do người dùng nhập đều được nhớ đến khi thay đổi. Supadata API key cũng được hỗ trợ.
+
+### Bật lưu trữ
+
+1. Tạo dự án Supabase tại https://supabase.com/dashboard và bật Email authentication.
+2. Mở SQL Editor của Supabase, chạy file [supabase_schema.sql](supabase_schema.sql) trong repository. Bảng có Row Level Security: tài khoản chỉ đọc/ghi dữ liệu của chính mình.
+3. Sinh Fernet key bằng Python và cryptography: `python -c "from cryptography.fernet import Fernet; print(Fernet.generate_key().decode())"`.
+4. Thêm vào Streamlit Cloud → App settings → Secrets ba giá trị: `SUPABASE_URL`, `SUPABASE_ANON_KEY`, `SESSION_ENCRYPTION_KEY`. Dùng giá trị riêng của dự án, tuyệt đối không commit các giá trị vào GitHub.
+5. Khởi động lại app. Màn hình tạo tài khoản/đăng nhập sẽ xuất hiện. Khi đăng nhập, dữ liệu của tài khoản được khôi phục và những thay đổi mới được tự lưu. Có thể chọn **Lưu ngay** trong thanh bên để chủ động đồng bộ trước khi thoát.
+
+**Bảo mật:** API key được mã hóa Fernet trên Streamlit server trước khi lưu vào Supabase, và dữ liệu được giới hạn cho từng tài khoản bằng RLS. Người quản trị sở hữu khóa Fernet vẫn có thể giải mã nên đây không phải mã hóa end-to-end. Đừng thay hoặc làm mất khóa Fernet; đừng dùng Supabase service-role key. Key từ Streamlit Secrets dùng chung trên máy chủ không được sao chép vào dữ liệu cá nhân.
+
+**Chưa kết nối Supabase:** App vẫn hoạt động nhưng chỉ lưu tạm trong kết nối. Phần **Lưu dữ liệu và sao lưu** cho phép tải và khôi phục JSON các phiên (không chứa API key). Sau khi có Supabase, việc lưu phiên và key mới tự động hoạt động.
+
+**Tác vụ đang chạy:** Kết quả đã đồng bộ vẫn tồn tại khi đóng app. Job đang chạy trong bộ nhớ vẫn có thể dừng khi đóng tab hoặc Streamlit Cloud khởi động lại; hệ thống tải lại phần kết quả đã lưu và cho phép chạy lại. Tránh mở nhiều tab cùng tài khoản để chỉnh sửa đồng thời.
 ## 🚀 Tạo toàn bộ bằng một nút
 
 1. Ở thanh bên trái, chọn nhà cung cấp AI, Base URL, Model ID và nhập API key. **🌍 Ngôn ngữ đích** được chọn ở khu vực chính, ngay trên nút **🚀 BẮT ĐẦU TẠO TOÀN BỘ**.
@@ -48,7 +65,7 @@ Ngay bên dưới là **📁 Quản lý phiên làm việc**:
 4. Để đổi tên, nhấn **✏️** cạnh tên, nhập tên mới rồi nhấn Enter. Phiên đang hoạt động có dấu ✓.
 5. **🗑️ Xóa tất cả phiên đã lưu** chỉ thực thi sau khi tích xác nhận.
 
-**Giới hạn lưu trữ quan trọng:** Khi bấm Tạo phiên mới, phiên cũ được tự động giữ trong danh sách **ở kết nối Streamlit đang mở**. Đây chưa phải lưu trữ vĩnh viễn: dữ liệu có thể mất khi tải lại trang, đóng tab hoặc Streamlit Cloud khởi động lại. Không dùng tệp trên máy chủ làm kho chung vì có nguy cơ lộ nội dung giữa nhiều người dùng. Muốn giữ phiên qua các lần đăng nhập, cần tích hợp lưu trữ bền vững có xác thực riêng cho từng người dùng.
+**Giới hạn:** Chưa cấu hình Supabase thì phiên chỉ được giữ trong kết nối Streamlit. Sau khi đăng nhập Supabase, các kết quả đã đồng bộ được lưu lâu dài. Công việc đang chạy vẫn có thể gián đoạn khi máy chủ khởi động lại.
 
 Dữ liệu mỗi phiên được tách riêng: link YouTube, phụ đề gốc, bản dịch, tiêu đề, mô tả, prompt ảnh, nội dung SEO, ngôn ngữ dịch.
 
