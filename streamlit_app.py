@@ -274,27 +274,59 @@ if BROWSER_LOCAL_ENABLED and not st.session_state.get("_browser_sessions_restore
 
 
 def _save_browser_sessions():
-    """Persist ONLY session content; never save API keys in browser storage."""
-    if not BROWSER_LOCAL_ENABLED or st.session_state.get("_browser_sessions_disabled"):
+    """Save current sessions and confirm deletion in the active browser.
+
+    With Supabase, its row is the source of truth; after a session deletion,
+    purge a leftover anonymous browser snapshot to prevent old local copies
+    from reappearing if cloud persistence is later disabled.
+    """
+    revision = st.session_state.get("_browser_delete_revision")
+    if not BROWSER_LOCAL_ENABLED and not (CLOUD_ENABLED and revision):
+        return
+    if st.session_state.get("_browser_sessions_disabled"):
+        if revision:
+            st.session_state["_browser_save_error"] = (
+                "Trình duyệt từ chối ghi/xóa bộ nhớ. Phiên đã được xóa trong "
+                "app nhưng chưa thể xác nhận cập nhật bản lưu trình duyệt."
+            )
+        return
+    if CLOUD_ENABLED and st.session_state.get("_cloud_save_error"):
+        # Never acknowledge deletion of a stale local copy before Supabase
+        # confirms the reduced set of sessions was saved successfully.
         return
     selected = st.session_state.get("selected_session")
-    if selected in st.session_state.get("workspaces", {}):
+    if BROWSER_LOCAL_ENABLED and selected in st.session_state.get("workspaces", {}):
         sync_form(selected)
     try:
-        state = backup_state(
-            st.session_state.workspaces, selected,
-            st.session_state.get("saved_session_order", 0),
-        )
-        payload = encode_browser_backup(state)
-        outcome = _browser_component()(
-            mode="write", storageKey=STORAGE_KEY, payload=payload,
-            key="browser_session_writer", default=None,
-        )
+        kwargs = {
+            "storageKey": STORAGE_KEY,
+            "key": "browser_session_writer",
+            "default": None,
+        }
+        if revision:
+            kwargs["revision"] = revision
+        if CLOUD_ENABLED:
+            kwargs["mode"] = "remove"
+        else:
+            state = backup_state(
+                st.session_state.workspaces, selected,
+                st.session_state.get("saved_session_order", 0),
+            )
+            kwargs["mode"] = "write"
+            kwargs["payload"] = encode_browser_backup(state)
+        outcome = _browser_component()(**kwargs)
         if isinstance(outcome, dict) and not outcome.get("ok", True):
             st.session_state["_browser_save_error"] = outcome.get(
-                "message", "Trình duyệt không cho phép lưu bản sao."
+                "message", "Trình duyệt không cho phép cập nhật bản lưu."
             )
             st.session_state["_browser_sessions_disabled"] = True
+        elif (
+            revision and isinstance(outcome, dict)
+            and outcome.get("ok") and outcome.get("revision") == revision
+        ):
+            st.session_state.pop("_browser_delete_revision", None)
+            st.session_state.pop("_browser_save_error", None)
+            st.session_state["_browser_delete_confirmed"] = True
     except (ValueError, TypeError) as exc:
         st.session_state["_browser_save_error"] = str(exc)
         st.session_state["_browser_sessions_disabled"] = True
@@ -469,6 +501,10 @@ def delete_saved_session(session_id):
         job["future"].cancel()
     del st.session_state.workspaces[session_id]
     _clear_session_widgets(session_id)
+    # Each deletion gets a unique browser-storage acknowledgement. Only the
+    # reduced snapshot is written; existing provider API settings are retained.
+    st.session_state["_browser_delete_revision"] = uuid.uuid4().hex
+    st.session_state.pop("_browser_delete_confirmed", None)
     if not st.session_state.workspaces:
         # Keep the app usable even after deleting its very last session.
         new_id = uuid.uuid4().hex
@@ -616,6 +652,8 @@ with st.sidebar:
             _clear_session_widgets(old_session_id)
         st.session_state.background_jobs = {}
         st.session_state.workspaces = {new_id: new_session}
+        st.session_state["_browser_delete_revision"] = uuid.uuid4().hex
+        st.session_state.pop("_browser_delete_confirmed", None)
         st.session_state["confirm_delete_session_id"] = None
         st.session_state["_session_flash"] = (
             "🗑️ Đã xóa toàn bộ danh sách phiên và dữ liệu liên quan. "
@@ -1537,6 +1575,10 @@ st.caption("Nút Copy nằm ở góc phải khung nội dung. Mỗi tài khoản
 # settings/keys, encrypted, after widgets update on each Streamlit rerun.
 _save_cloud_state()
 _save_browser_sessions()
+if st.session_state.pop("_browser_delete_confirmed", False):
+    st.caption("✅ Đã cập nhật bản lưu trình duyệt sau khi xóa phiên.")
+if st.session_state.get("_browser_delete_revision"):
+    st.caption("💾 Đang xác nhận xóa dữ liệu phiên khỏi bộ nhớ trình duyệt...")
 if not CLOUD_ENABLED and st.session_state.get("_browser_restore_success"):
     st.caption("💾 Đã khôi phục danh sách phiên từ trình duyệt này.")
 if not CLOUD_ENABLED and st.session_state.get("_browser_save_error"):
