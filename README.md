@@ -16,7 +16,7 @@
 
 **Bảo mật:** API key được mã hóa Fernet trên Streamlit server trước khi lưu vào Supabase, và dữ liệu được giới hạn cho từng tài khoản bằng RLS. Người quản trị sở hữu khóa Fernet vẫn có thể giải mã nên đây không phải mã hóa end-to-end. Đừng thay hoặc làm mất khóa Fernet; đừng dùng Supabase service-role key. Key từ Streamlit Secrets dùng chung trên máy chủ không được sao chép vào dữ liệu cá nhân.
 
-**Chưa kết nối Supabase:** App vẫn hoạt động nhưng chỉ lưu tạm trong kết nối. Phần **Lưu dữ liệu và sao lưu** cho phép tải và khôi phục JSON các phiên (không chứa API key). Sau khi có Supabase, việc lưu phiên và key mới tự động hoạt động.
+**Chưa kết nối Supabase:** App tự động nén và lưu **danh sách phiên, bản dịch, prompt, SEO, trạng thái và phiên đang chọn** vào `localStorage` của chính trình duyệt đang mở. Khi tải lại trang hoặc đóng rồi mở lại cùng địa chỉ Streamlit Cloud **trên đúng trình duyệt đó**, danh sách được khôi phục tự động; khi máy chủ khởi động lại, các tác vụ đang chạy được đánh dấu gián đoạn để có thể chạy lại. **Không đưa API key, token đăng nhập hoặc cấu hình bí mật vào bản lưu trình duyệt.** Nếu chưa có Supabase thì API key có thể cần nhập lại sau khi tải lại trang. Nếu dùng tab ẩn danh, xóa dữ liệu website, đổi trình duyệt/máy tính hoặc vượt hạn mức bộ nhớ trình duyệt thì dữ liệu có thể không còn hoặc không lưu được. Vẫn nên tải **bản sao lưu JSON** ở mục **💾 Lưu dữ liệu và sao lưu**; ứng dụng hiển thị cảnh báo khi không tự lưu được. Để đồng bộ nhiều thiết bị hoặc khôi phục an toàn theo tài khoản, dùng Supabase.
 
 **Tác vụ đang chạy:** Kết quả đã đồng bộ vẫn tồn tại khi đóng app. Job đang chạy trong bộ nhớ vẫn có thể dừng khi đóng tab hoặc Streamlit Cloud khởi động lại; hệ thống tải lại phần kết quả đã lưu và cho phép chạy lại. Tránh mở nhiều tab cùng tài khoản để chỉnh sửa đồng thời.
 ## 🚀 Tạo toàn bộ bằng một nút
@@ -52,7 +52,7 @@ Tài liệu tích hợp Supadata: https://github.com/supadata-ai/skills/blob/mai
 - Tối đa 3 tác vụ đồng thời trong một phiên kết nối; máy chủ chạy tối đa 3 luồng worker. Nút **Xóa tất cả phiên đã lưu** yêu cầu xác nhận, hủy các tác vụ chưa chạy và yêu cầu tác vụ đang chạy ngừng ở bước tiếp theo.
 - Nếu phụ đề hoặc API lỗi ở bất cứ bước nào, phiên vẫn giữ trong danh sách kèm lý do lỗi. Các phần đã xử lý thành công xuất hiện khi bạn mở lại phiên; có thể thử chạy lại. Worker chia sẻ kết quả từng bước với giao diện thay vì chỉ đến cuối mới lưu.
 
-**Giới hạn kỹ thuật:** Xử lý nền vẫn chạy trong bộ nhớ Streamlit, không phải hàng đợi bền vững. Nếu tab bị đóng hoặc máy chủ khởi động lại trong lúc đang chạy, tác vụ có thể dừng. Với Supabase, phần kết quả đã được đồng bộ vẫn được giữ để xem lại; chưa có Supabase thì dữ liệu có thể mất. Muốn đảm bảo tác vụ vẫn hoàn thành sau khi server khởi động lại cần job queue riêng.
+**Giới hạn kỹ thuật:** Xử lý nền vẫn chạy trong bộ nhớ Streamlit, không phải hàng đợi bền vững. Nếu tab bị đóng hoặc máy chủ khởi động lại trong lúc đang chạy, tác vụ có thể dừng. Với Supabase, phần kết quả đã đồng bộ được giữ theo tài khoản; nếu chưa có Supabase thì bản phiên đã lưu trong trình duyệt cùng máy có thể được khôi phục (không bảo đảm khi trình duyệt bị xóa dữ liệu). Muốn đảm bảo tác vụ vẫn hoàn thành sau khi server khởi động lại cần job queue riêng.
 
 ## 📁 Phần quản lý phiên ở góc trái (đã tối giản)
 
@@ -65,7 +65,7 @@ Ngay bên dưới là **📁 Quản lý phiên làm việc**:
 4. Để đổi tên, nhấn **✏️** cạnh tên, nhập tên mới rồi nhấn Enter. Phiên đang hoạt động có dấu ✓.
 5. Với mỗi phiên, nhấn **🗑️** bên cạnh tên rồi **✅ Xác nhận xóa** để xóa riêng phiên đó. Nếu phiên đang chạy, chỉ tác vụ của phiên bị xóa được yêu cầu dừng. **🗑️ Xóa tất cả phiên đã lưu** vẫn có xác nhận riêng.
 
-**Giới hạn:** Chưa cấu hình Supabase thì phiên chỉ được giữ trong kết nối Streamlit. Sau khi đăng nhập Supabase, các kết quả đã đồng bộ được lưu lâu dài. Công việc đang chạy vẫn có thể gián đoạn khi máy chủ khởi động lại.
+**Giới hạn:** Chưa cấu hình Supabase, danh sách phiên được tự lưu trong trình duyệt này (không lưu API key) và sẽ khôi phục khi mở lại cùng địa chỉ. Dữ liệu có thể mất nếu xóa site data hoặc vượt dung lượng, nên có bản sao lưu JSON dự phòng. Khi Supabase được bật, dữ liệu đồng bộ theo tài khoản. Công việc đang chạy vẫn có thể gián đoạn khi máy chủ khởi động lại.
 
 Dữ liệu mỗi phiên được tách riêng: link YouTube, phụ đề gốc, bản dịch, tiêu đề, mô tả, prompt ảnh, nội dung SEO, ngôn ngữ dịch.
 
