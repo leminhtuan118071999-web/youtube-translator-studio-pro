@@ -9,7 +9,8 @@ import requests
 import streamlit as st
 from PIL import Image
 from youtube_transcript_api import YouTubeTranscriptApi
-from api_clients import PROVIDERS, generate_text, list_models, validate_base_url
+from api_clients import (PROVIDERS, generate_text, list_models,
+                         validate_base_url, migrate_claude_settings)
 from background_jobs import JobProgress, run_full_job
 from transcript_sources import parse_uploaded_subtitles
 from persistent_store import (
@@ -175,6 +176,8 @@ def _restore_cloud_profile():
 
 
 _restore_cloud_profile()
+# Preserve API key and model values from the former 'Anthropic Claude' label.
+migrate_claude_settings(st.session_state)
 
 
 def _save_cloud_state(force=False):
@@ -724,6 +727,7 @@ with st.sidebar:
 
     st.divider()
     with st.expander("🔑 Cấu hình API đa nền tảng", expanded=False):
+        st.caption("Các nền tảng: Groq • Gemini • OpenAI • Claude (Anthropic) • OpenRouter • DeepSeek • Together AI")
         provider = st.selectbox(
             "CHỌN NỀN TẢNG AI",
             list(PROVIDERS),
@@ -733,16 +737,30 @@ with st.sidebar:
         preset = PROVIDERS[provider]
         provider_id = provider
         secret_name = preset["secret"]
+        if provider == "Claude (Anthropic)":
+            st.info(
+                "🟣 Claude API chính thức: nhập API key từ Anthropic Console. "
+                "Ứng dụng tự dùng Messages API, không cần Base URL tùy chỉnh."
+            )
+            st.markdown(
+                "[🔗 Lấy Claude API key tại Anthropic Console]"
+                "(https://platform.claude.com/settings/keys)"
+            )
         try:
             stored_key = str(st.secrets.get(secret_name, "") or "") if secret_name else ""
         except Exception:
             stored_key = ""
         entered_key = st.text_input(
-            "🔐 API Key",
+            "🔐 Claude API Key" if provider == "Claude (Anthropic)" else "🔐 API Key",
             key=f"api_key_{provider_id}",
             type="password",
-            placeholder="Nhập API key riêng của nền tảng đã chọn",
-            help="Chỉ dùng cho phiên hiện tại; có thể cấu hình bằng Streamlit Secrets.",
+            placeholder=("sk-ant-..." if provider == "Claude (Anthropic)" else
+                         "Nhập API key riêng của nền tảng đã chọn"),
+            help=(
+                "API key của Claude lấy từ Anthropic Console (khác tài khoản chat Claude)."
+                if provider == "Claude (Anthropic)"
+                else "API key của nhà cung cấp; nếu có Supabase, cấu hình được mã hóa khi lưu."
+            ),
         )
         key = entered_key.strip() or stored_key.strip()
 
@@ -762,7 +780,8 @@ with st.sidebar:
             "🤖 Model ID",
             value=preset["model"],
             key=model_widget_key,
-            placeholder="Ví dụ: openai/gpt-oss-120b",
+            placeholder=("Ví dụ: claude-sonnet-4-6" if provider == "Claude (Anthropic)"
+                         else "Ví dụ: openai/gpt-oss-120b"),
             help="Điền đúng model ID mà key của bạn được phép sử dụng.",
         ).strip()
 
