@@ -4,6 +4,7 @@ Never persist API keys. User-controlled Base URLs are validated to prevent
 requests to localhost, private networks and cloud metadata addresses.
 """
 import ipaddress
+import re
 import socket
 from urllib.parse import urlsplit
 
@@ -138,6 +139,33 @@ def _request(method, url, headers, **kwargs):
     return resp
 
 
+
+class RateLimitError(RuntimeError):
+    """429 from provider; safe retry delay excludes credentials."""
+
+    def __init__(self, message, retry_after=None, can_retry=True):
+        super().__init__(message)
+        self.retry_after = retry_after
+        self.can_retry = can_retry
+
+
+def _retry_seconds(response, message):
+    """Respect Retry-After header, then provider's stated 'try again' delay."""
+    try:
+        value = float(response.headers.get("retry-after", ""))
+        if 0 <= value <= 3600:
+            return value
+    except (ValueError, TypeError, AttributeError):
+        pass
+    match = re.search(
+        r"(?:try again in|retry after|thử lại sau)\s*(\d+(?:\.\d+)?)\s*s(?:ec(?:onds?)?)?",
+        str(message), flags=re.IGNORECASE
+    )
+    if match:
+        return min(3600.0, float(match.group(1)))
+    return 30.0
+
+
 def _error(response, token):
     try:
         payload = response.json()
@@ -154,7 +182,18 @@ def _error(response, token):
         404: "Kiểm tra Base URL và Model.",
         429: "Quá giới hạn tốc độ hoặc quota.",
     }.get(response.status_code, "Kiểm tra cấu hình và thử lại.")
-    return RuntimeError(f"HTTP {response.status_code}: {detail}. {hint}")
+    message = f"HTTP {response.status_code}: {detail}. {hint}"
+    if response.status_code == 429:
+        # Daily limits cannot be fixed by a short wait.
+        daily = bool(re.search(
+            r"(?:requests|tokens) per day|\bRPD\b|\bTPD\b|daily quota",
+            detail, re.IGNORECASE
+        ))
+        return RateLimitError(
+            message, retry_after=_retry_seconds(response, detail),
+            can_retry=not daily,
+        )
+    return RuntimeError(message)
 
 
 def _extract_text_parts(parts):
@@ -267,7 +306,16 @@ def generate_text(provider, base_url, model, api_key, prompt):
             "openai/gpt-oss-20b", "openai/gpt-oss-120b"
         ):
             body["reasoning_effort"] = "low"
-            body["max_completion_tokens"] = 8192
+            # Smaller reserved completions lower TPM cost and reduce 429s.
+            # Scenes need a larger budget; small translation chunks need less.
+            if "ĐÚNG 20 prompt" in prompt or "CHÍNH XÁC 20" in prompt:
+                body["max_completion_tokens"] = 3600
+            elif "Soạn YouTube tiêu đề" in prompt or "Viết nội dung YouTube" in prompt:
+                body["max_completion_tokens"] = 2200
+            elif "Summarize" in prompt:
+                body["max_completion_tokens"] = 1400
+            else:
+                body["max_completion_tokens"] = 2200
             body["include_reasoning"] = False
     try:
         response = _request("POST", endpoint, api_headers(kind, token), json=body)
