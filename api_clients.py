@@ -378,8 +378,21 @@ def generate_text(provider, base_url, model, api_key, prompt):
     auth_mode = PROVIDERS[provider].get("auth", "api_key")
     endpoint = api_endpoint(provider_base_url(provider, base_url), kind, "chat")
     if kind == "anthropic":
+        # Claude/Gateway traffic should request only the output budget each
+        # operation needs. A simple connectivity check must not reserve 8192
+        # tokens on an upstream proxy for a two-letter response.
+        if len(prompt) <= 80:
+            max_tokens = 128
+        elif "ĐÚNG 20 prompt" in prompt:
+            max_tokens = 5000
+        elif "Summarize" in prompt or "Condense" in prompt:
+            max_tokens = 1100
+        elif "CHỈ xuất bản dịch" in prompt:
+            max_tokens = 3600
+        else:
+            max_tokens = 3000
         body = {
-            "model": model, "max_tokens": 8192,
+            "model": model, "max_tokens": max_tokens,
             "messages": [{"role": "user", "content": prompt}],
         }
     else:
