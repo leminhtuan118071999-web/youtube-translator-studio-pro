@@ -193,6 +193,20 @@ def _request(method, url, headers, **kwargs):
 
 
 
+class TransientProviderError(RuntimeError):
+    """A provider/gateway responded with a retryable 502/503/504.
+
+    This means the server is temporarily unavailable; it does not prove the
+    key, the model or the request are invalid. A retried POST may be charged
+    again if an upstream completed the first request before the gateway failed.
+    """
+
+    def __init__(self, message, status_code, retry_after=None):
+        super().__init__(message)
+        self.status_code = status_code
+        self.retry_after = retry_after
+
+
 class RateLimitError(RuntimeError):
     """429 from provider; safe retry delay excludes credentials."""
 
@@ -234,8 +248,25 @@ def _error(response, token):
         403: "Tài khoản hoặc model chưa có quyền.",
         404: "Kiểm tra Base URL và Model.",
         429: "Quá giới hạn tốc độ hoặc quota.",
+        502: "Gateway/upstream tạm thời không phản hồi. Đây không nhất thiết là lỗi API key hoặc model; hãy thử lại sau.",
+        503: "Dịch vụ AI phía sau gateway hiện không khả dụng; hãy thử lại sau.",
+        504: "Gateway chờ upstream quá lâu và bị timeout; hãy thử lại sau.",
     }.get(response.status_code, "Kiểm tra cấu hình và thử lại.")
     message = f"HTTP {response.status_code}: {detail}. {hint}"
+    if response.status_code in (502, 503, 504):
+        # Respect a numerical Retry-After if provided; otherwise let the
+        # caller select a bounded backoff. Never retry 400/401/403/404.
+        retry_after = None
+        try:
+            delay = float(response.headers.get("retry-after", ""))
+            if 0 <= delay <= 180:
+                retry_after = delay
+        except (ValueError, TypeError, AttributeError):
+            pass
+        return TransientProviderError(
+            message, status_code=response.status_code,
+            retry_after=retry_after,
+        )
     if response.status_code == 429:
         # Daily limits cannot be fixed by a short wait.
         daily = bool(re.search(
