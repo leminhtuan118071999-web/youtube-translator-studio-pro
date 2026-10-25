@@ -265,6 +265,7 @@ class ApiClientTests(unittest.TestCase):
         self.assertNotIn("x-api-key", args[2])
         self.assertIn("anthropic-version", args[2])
         self.assertEqual(kwargs["json"]["model"], "claude-sonnet-4-6")
+        self.assertEqual(kwargs["json"]["max_tokens"], 128)
 
     @patch("api_clients.socket.getaddrinfo", return_value=PUBLIC_ADDR)
     @patch("api_clients._request")
@@ -346,6 +347,7 @@ class ApiClientTests(unittest.TestCase):
         self.assertTrue(args[1].endswith("/messages"))
         self.assertEqual(args[2]["x-api-key"], "secret")
         self.assertEqual(kwargs["json"]["messages"][0]["content"], "Translate")
+        self.assertEqual(kwargs["json"]["max_tokens"], 128)
 
     @patch("api_clients.socket.getaddrinfo", return_value=PUBLIC_ADDR)
     @patch("api_clients._request")
@@ -377,6 +379,23 @@ class ApiClientTests(unittest.TestCase):
                           "openai/gpt-oss-120b", "secret-key", "Translate")
         self.assertAlmostEqual(error.exception.retry_after, 11.5)
         self.assertTrue(error.exception.can_retry)
+
+    @patch("api_clients.socket.getaddrinfo", return_value=PUBLIC_ADDR)
+    @patch("api_clients._request")
+    def test_claude_connection_check_uses_small_completion_budget(self, req, _dns):
+        response = Mock()
+        response.ok = True
+        response.json.return_value = {
+            "content": [{"type": "text", "text": "OK"}],
+            "stop_reason": "end_turn",
+        }
+        req.return_value = response
+        text = generate_text(
+            "Claude Gateway (AUTH_TOKEN)", "https://proxy.example.com",
+            "claude-sonnet-4-6", "test-token", "Hãy trả lời duy nhất từ OK."
+        )
+        self.assertEqual(text, "OK")
+        self.assertEqual(req.call_args.kwargs["json"]["max_tokens"], 128)
 
     @patch("api_clients.socket.getaddrinfo", return_value=PUBLIC_ADDR)
     @patch("api_clients._request")
