@@ -100,6 +100,8 @@ with st.sidebar:
         st.session_state["_open_session_next"] = newid
         st.rerun()
 
+    if st.session_state.pop("_reset_delete_confirm_next", False):
+        st.session_state["confirm_delete_all_sessions"] = False
     confirm_all = st.checkbox(
         "Tôi xác nhận xóa tất cả phiên",
         key="confirm_delete_all_sessions",
@@ -113,7 +115,7 @@ with st.sidebar:
         new_id = uuid.uuid4().hex
         st.session_state.workspaces = {new_id: blank_session("Phiên 1")}
         st.session_state["_open_session_next"] = new_id
-        st.session_state["confirm_delete_all_sessions"] = False
+        st.session_state["_reset_delete_confirm_next"] = True
         st.rerun()
 
     st.caption("Dữ liệu các phiên được giữ trong phiên truy cập hiện tại; chưa tự lưu vĩnh viễn khi đóng app.")
