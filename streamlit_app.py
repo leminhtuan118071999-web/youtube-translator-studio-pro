@@ -206,6 +206,9 @@ def rename_saved_session(saved_id):
 if "_open_session_next" in st.session_state:
     st.session_state.selected_session = st.session_state.pop("_open_session_next")
 
+# Merge finished work before the sidebar reads the session list.
+collect_completed_jobs()
+
 with st.sidebar:
     # Set the language for the currently selected session at the VERY TOP.
     sid = st.session_state.selected_session
@@ -620,79 +623,75 @@ vid = match.group(1) if match else None
 
 if st.button("🚀 BẮT ĐẦU TẠO TOÀN BỘ", type="primary",
              use_container_width=True, key=f"run_all_{sid}"):
+    sync_form(sid)
     if not key.strip():
-        st.error("Hãy nhập API key hợp lệ và chọn model trước khi bắt đầu.")
+        st.error("Hãy nhập API key trước khi chạy.")
     elif not vid and not session["source"].strip():
-        st.warning("Hãy dán link video YouTube hợp lệ trước khi bắt đầu.")
+        st.warning("Hãy dán link YouTube hợp lệ trước khi bắt đầu.")
+    elif (
+        sid in st.session_state.background_jobs
+        and not st.session_state.background_jobs[sid]["future"].done()
+    ):
+        st.info("Phiên này đang chạy nền. Bạn có thể bấm Tạo phiên mới ngay.")
+    elif sum(
+        not job["future"].done()
+        for job in st.session_state.background_jobs.values()
+    ) >= 3:
+        st.warning("Tối đa 3 phiên được xử lý đồng thời. Hãy chờ một phiên hoàn tất.")
     else:
-        progress = st.progress(0, text="Khởi tạo quy trình...")
         try:
-            if vid:
-                progress.progress(5, text="📥 Đang lấy phụ đề hiện có từ YouTube...")
-                source_text, caption_language = fetch_best_transcript(vid)
-                session["source"] = source_text
-                st.caption(f"Phụ đề được trích xuất từ bản {caption_language}.")
-                # YouTube oEmbed may provide a title, but it doesn't return descriptions.
-                if not session.get("title", "").strip():
-                    try:
-                        meta_response = requests.get(
-                            "https://www.youtube.com/oembed",
-                            params={"url": f"https://www.youtube.com/watch?v={vid}",
-                                    "format": "json"},
-                            timeout=8,
-                        )
-                        if meta_response.ok:
-                            original_title = str(meta_response.json().get("title", "")).strip()
-                            if original_title:
-                                session["title"] = original_title
-                    except (requests.RequestException, ValueError):
-                        pass
-            else:
-                source_text = session["source"]
-                session["source"] = source_text
-
-            if not source_text.strip():
-                raise ValueError("Không có phụ đề hoặc văn bản để dịch.")
-            mark_session_processed(session)
-            # Clear only previously GENERATED fields; never delete original input.
-            for field in ("translated", "prompts", "metadata",
-                          "new_title", "new_description", "seo_tags"):
-                session[field] = ""
-            progress.progress(15, text=f"🌍 Đang dịch toàn bộ sang {language}...")
-
-            def report_part(idx, count):
-                progress.progress(
-                    min(65, 15 + int(50 * idx / count)),
-                    text=f"🌍 Dịch phần {idx}/{count} sang {language}...",
-                )
-            session["translated"] = translate_full_script(
-                source_text, language, report=report_part
-            )
-            progress.progress(70, text=f"🎨 Tạo 20 prompt hình ảnh bằng {language}...")
-            prompt_items = create_20_prompts(session["translated"], language)
-            session["prompts"] = json.dumps(prompt_items, ensure_ascii=False)
-            progress.progress(85, text=f"📝 Tạo tiêu đề, mô tả và SEO bằng {language}...")
-            (
-                session["new_title"], session["new_description"], session["seo_tags"]
-            ) = create_target_metadata(
-                session["translated"], session.get("title", ""),
-                session.get("description", ""), language
-            )
-            session["metadata"] = "\n\n".join([
-                session["new_title"], session["new_description"], session["seo_tags"]
-            ])
-            progress.progress(100, text="✅ Đã tạo xong tất cả các phần!")
+            validate_base_url(base_url)
+            if not model.strip():
+                raise ValueError("Hãy nhập Model ID.")
+            progress = JobProgress()
+            run_id = uuid.uuid4().hex
+            snapshot = {
+                "url": session["url"],
+                "source": session.get("source", ""),
+                "title": session.get("title", ""),
+                "description": session.get("description", ""),
+                "language": language,
+                "provider": provider,
+                "base_url": base_url,
+                "model": model,
+                "api_key": key,
+            }
+            # The worker receives an immutable snapshot of settings and never
+            # accesses Streamlit session state. API credentials aren't saved.
+            job_future = get_job_executor().submit(run_full_job, snapshot, progress)
+            session["job_state"] = "running"
+            session["job_error"] = ""
+            session["job_run_id"] = run_id
+            st.session_state.background_jobs[sid] = {
+                "future": job_future,
+                "progress": progress,
+                "run_id": run_id,
+            }
             st.session_state["_session_flash"] = (
-                f"✅ Hoàn tất phiên {session['name']}: phụ đề, bản dịch, "
-                f"20 prompt, tiêu đề, mô tả và SEO ({language})."
+                f"⏳ Phiên '{session['name']}' đã chạy nền. "
+                "Bạn có thể nhấn Tạo phiên mới, phiên này vẫn tiếp tục."
             )
             st.rerun()
         except Exception as exc:
-            st.error(f"Quy trình dừng trước khi hoàn tất: {exc}")
-            st.info(
-                "Các bước đã thành công vẫn được giữ lại trong phiên. "
-                "Bạn có thể tạo lại riêng từng mục bằng các nút bên dưới."
-            )
+            st.error(f"Không thể khởi động tác vụ: {exc}")
+
+
+@st.fragment(run_every="3s")
+def show_background_job_progress():
+    """Poll in the Streamlit thread; worker threads never call st.*."""
+    if collect_completed_jobs():
+        st.rerun()
+    for session_id, job in list(st.session_state.background_jobs.items()):
+        if session_id not in st.session_state.workspaces:
+            continue
+        percent, stage = job["progress"].snapshot()
+        name = st.session_state.workspaces[session_id]["name"]
+        st.progress(percent, text=f"{name}: {stage}")
+    if not st.session_state.background_jobs:
+        st.caption("Không có phiên nào đang chạy nền.")
+
+
+show_background_job_progress()
 
 if vid:
     st.subheader("🖼️ Thumbnail gốc chất lượng cao")
