@@ -1,6 +1,16 @@
 # 🎬 YouTube Translator Studio Pro
 
-Ứng dụng Streamlit xử lý video YouTube: trích xuất phụ đề có sẵn (khi YouTube cho phép), dịch bằng Gemini API, tạo 20 prompt hình ảnh, tạo tiêu đề/mô tả/SEO, xem và tải thumbnail.
+Ứng dụng Streamlit xử lý video YouTube: trích xuất phụ đề có sẵn (khi YouTube cho phép), dịch bằng Gemini/OpenAI API, tạo 20 prompt hình ảnh, dịch tiêu đề/mô tả và SEO, xem và tải thumbnail.
+
+## 🚀 Tạo toàn bộ bằng một nút
+
+1. Ở thanh bên trái, chọn **🌍 Ngôn ngữ đích**, nhà cung cấp AI (Gemini hoặc OpenAI), model và nhập API key.
+2. Dán link YouTube vào ô **🔗 Dán link video YouTube** rồi nhấn **🚀 BẮT ĐẦU TẠO TOÀN BỘ**. Nếu dùng văn bản đã nhập hoặc tải file TXT, có thể chạy không cần link (để trống URL).
+3. App tự động: tìm phụ đề thủ công hoặc phụ đề tự động có sẵn trên YouTube → dịch toàn bộ nội dung sang ngôn ngữ đích → tạo **20 prompt hình ảnh bằng ngôn ngữ đích** → tạo **tiêu đề, mô tả, từ khóa SEO bằng ngôn ngữ đích**.
+4. Các tab cho phép **Copy riêng** từng mục qua biểu tượng Copy trên khung nội dung (`st.code`): bản dịch đầy đủ, từng prompt từ 01–20, toàn bộ prompt, tiêu đề, mô tả, từ khóa SEO và cả bộ SEO. Có nút tải file .txt bổ sung.
+5. Thanh tiến trình hiển thị các bước đang chạy; nếu một bước lỗi, kết quả của các bước đã hoàn tất vẫn thuộc phiên hiện tại, và có thể dùng nút chạy lại từng mục.
+
+**Giới hạn:** YouTube có thể chặn truy cập phụ đề, hoặc video không có phụ đề, khiến thao tác tự động thất bại; app không tự nhận dạng giọng nói cho video không có phụ đề. Chất lượng dịch/prompt/SEO phụ thuộc model và API key, có thể phát sinh phí.
 
 ## 📁 Phần quản lý phiên ở góc trái (đã tối giản)
 
