@@ -167,7 +167,7 @@ def resolve_provider_config(provider, api_format=None, auth_mode=None):
         raise ValueError("Nhà cung cấp API không hợp lệ.")
     preset = PROVIDERS[provider]
     if provider != "API bên thứ ba (tùy chỉnh)":
-        return preset["kind"], preset.get("auth", "api_key")
+        return preset["kind"], preset.get("auth", "api_key" if preset["kind"] == "anthropic" else "bearer")
     kind = api_format or "chat"
     method = auth_mode or "bearer"
     if kind not in ("chat", "anthropic"):
