@@ -6,13 +6,15 @@
 
 Đầu thanh bên trái là **🌍 Ngôn ngữ đích**, đã mở rộng thêm tiếng Ý, Bồ Đào Nha, Hà Lan, Thụy Điển, Séc, Romania, Hungary, Ukraine và nhiều ngôn ngữ châu Âu khác. Mỗi phiên có ngôn ngữ đích riêng.
 
-Ngay bên dưới là **📁 Quản lý phiên làm việc** (không còn ô **Chọn phiên**):
-1. **Tên phiên** + **💾 Lưu tên phiên**: đặt/đổi tên và đưa phiên vào danh sách đã lưu.
-2. **➕ Tạo phiên mới**: mở một phiên trống, tách riêng phụ đề và kết quả của phiên cũ.
-3. **🗑️ Xóa tất cả phiên đã lưu**: cần xác nhận trước khi xóa tất cả phiên đang giữ trong kết nối hiện tại.
-4. **📚 Danh sách phiên đã lưu**: ngay bên dưới nút xóa, mới lưu ở trên. Nhấn trực tiếp tên phiên để mở lại nội dung đã làm; phiên đang mở có dấu ✓.
+Ngay bên dưới là **📁 Quản lý phiên làm việc** (không có ô “Chọn phiên”):
 
-Không cần chọn phiên từ menu ở trên. Chỉ những phiên đã bấm **Lưu tên phiên** mới xuất hiện trong danh sách.
+1. **Tự động lưu vào danh sách**: ngay khi app có phiên đầu tiên hoặc khi bấm **➕ Tạo phiên mới**, hệ thống đặt tên mặc định `Phiên 1`, `Phiên 2`… và thêm ngay vào **Danh sách phiên đã lưu**. Không cần bấm nút Lưu tên.
+2. **✏️ Tên phiên / Đổi tên phiên**: có thể đặt lại tên của phiên đang mở sau khi đã tạo hoặc sau khi chạy các chức năng. Nhập tên mới rồi bấm **✏️ Đổi tên phiên**; nội dung và kết quả đang có không bị mất.
+3. **➕ Tạo phiên mới**: tạo phiên trống mới, tách phụ đề, bản dịch, prompt và SEO.
+4. **🗑️ Xóa tất cả phiên đã lưu**: cần đánh dấu xác nhận trước khi xóa các phiên thuộc phiên truy cập hiện tại.
+5. **📚 Danh sách phiên đã lưu**: mới tạo ở trên; nhấn vào tên để mở lại toàn bộ nội dung của phiên. Phiên đang mở có dấu ✓.
+
+Việc đổi tên trên giao diện diễn ra khi Streamlit xử lý thao tác mới, không phải ngay trong lúc một yêu cầu AI đang chạy ở phía máy chủ.
 
 Dữ liệu mỗi phiên được tách riêng: link YouTube, phụ đề gốc, bản dịch, tiêu đề, mô tả, prompt ảnh, nội dung SEO, ngôn ngữ dịch.
 
