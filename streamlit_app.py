@@ -121,56 +121,139 @@ with st.sidebar:
     st.caption("Dữ liệu các phiên được giữ trong phiên truy cập hiện tại; chưa tự lưu vĩnh viễn khi đóng app.")
 
     st.divider()
-    st.subheader("🔑 Cấu hình AI Gemini")
-    key = st.text_input("Gemini API key", type="password")
-    model = st.text_input("Gemini model", value="gemini-3.8-flash")
+    st.subheader("🔑 Cấu hình API")
+    provider = st.radio(
+        "Nhà cung cấp AI", ["Google Gemini", "OpenAI"],
+        horizontal=True, key="api_provider",
+    )
+    provider_id = "gemini" if provider == "Google Gemini" else "openai"
+    secret_name = "GEMINI_API_KEY" if provider_id == "gemini" else "OPENAI_API_KEY"
+    try:
+        stored_key = str(st.secrets.get(secret_name, "") or "")
+    except (FileNotFoundError, KeyError):
+        stored_key = ""
+    except Exception:
+        stored_key = ""
+    entered_key = st.text_input(
+        f"API key ({'Gemini' if provider_id == 'gemini' else 'OpenAI'})",
+        type="password",
+        key=f"api_key_{provider_id}",
+        placeholder="Nhập API key của bạn",
+        help="Bạn có thể nhập riêng trong phiên này hoặc cấu hình tại Streamlit Cloud → App settings → Secrets.",
+    )
+    key = entered_key.strip() or stored_key.strip()
+    if key:
+        st.caption("✅ Đã có API key" + (" từ Secrets" if not entered_key else " trong phiên này"))
+    else:
+        st.caption("⚠️ Chưa có API key. Hãy nhập key để sử dụng chức năng AI.")
+
+    model_choices = (
+        ["gemini-3.8-flash", "gemini-3.5-flash-lite", "gemini-3.6-flash", "gemini-3.1-flash-lite", "Tự nhập model"]
+        if provider_id == "gemini"
+        else ["gpt-6-luna", "gpt-6.1-sol", "gpt-5.6-sol", "Tự nhập model"]
+    )
+    selected_model = st.selectbox(
+        "🤖 Model", model_choices, key=f"api_model_{provider_id}",
+        help="Model cần được hỗ trợ trong tài khoản API của bạn.",
+    )
+    if selected_model == "Tự nhập model":
+        model = st.text_input(
+            "Tên model API", key=f"custom_model_{provider_id}",
+            placeholder="Nhập tên model chính xác",
+        ).strip()
+    else:
+        model = selected_model
+    if provider_id == "gemini":
+        st.markdown("[🔗 Lấy Gemini API key](https://aistudio.google.com/apikey)")
+    else:
+        st.markdown("[🔗 Lấy OpenAI API key](https://platform.openai.com/api-keys)")
+    test_api = st.button("🧪 Kiểm tra kết nối API", use_container_width=True)
+    st.caption("Key được che và không ghi vào GitHub hay file phiên. ChatGPT Plus không bao gồm phí sử dụng API.")
+
+    st.divider()
     language = st.selectbox(
-        "Ngôn ngữ đích", LANGUAGES,
+        "🌍 Ngôn ngữ đích", LANGUAGES,
         index=LANGUAGES.index(session.get("language", LANGUAGES[0]))
         if session.get("language") in LANGUAGES else 0,
         key=f"field_{sid}_language",
     )
     session["language"] = language
-    st.caption("Cần Gemini API key riêng. Không đưa API key vào GitHub.")
+
+
+def describe_api_error(response, token):
+    try:
+        payload = response.json()
+        item = payload.get("error", {}) if isinstance(payload, dict) else {}
+        detail = item.get("message", "") if isinstance(item, dict) else ""
+    except ValueError:
+        detail = ""
+    if not detail:
+        detail = response.text[:400]
+    detail = str(detail).replace(token, "[API KEY ĐÃ ẨN]")[:650]
+    guidance = {
+        400: "Kiểm tra tên model, định dạng yêu cầu và quyền truy cập model.",
+        401: "API key không hợp lệ hoặc đã hết hiệu lực.",
+        403: "Key hoặc dự án không được cấp quyền sử dụng API/model này.",
+        404: "Model không tồn tại hoặc chưa có quyền truy cập. Hãy đổi model.",
+        429: "Đã vượt hạn mức hoặc tốc độ yêu cầu; kiểm tra quota/billing.",
+        500: "Máy chủ AI gặp lỗi tạm thời, hãy thử lại.",
+        503: "Dịch vụ AI đang quá tải, hãy thử lại.",
+    }.get(response.status_code, "Kiểm tra key, model và cấu hình API.")
+    return f"HTTP {response.status_code}: {detail}. {guidance}"
 
 
 def ai(prompt):
-    if not key.strip():
-        raise ValueError("Hãy nhập Gemini API key ở thanh bên trái.")
-    model_name = model.strip()
-    if not re.fullmatch(r"[a-zA-Z0-9._-]+", model_name):
-        raise ValueError("Tên model Gemini không hợp lệ.")
-    endpoint = f"https://generativelanguage.googleapis.com/v1beta/models/{model_name}:generateContent"
+    token = key.strip()
+    if not token:
+        raise ValueError("Bạn chưa nhập API key. Mở mục Cấu hình API bên trái.")
+    name = model.strip()
+    if not name or not re.fullmatch(r"[A-Za-z0-9._:-]+", name):
+        raise ValueError("Tên model không hợp lệ. Hãy chọn model có sẵn hoặc nhập chính xác.")
+    if provider_id == "gemini":
+        endpoint = "https://generativelanguage.googleapis.com/v1beta/models/" + name + ":generateContent"
+        headers = {"x-goog-api-key": token}
+        data = {"contents": [{"parts": [{"text": prompt}]}]}
+    else:
+        endpoint = "https://api.openai.com/v1/responses"
+        headers = {"Authorization": "Bearer " + token}
+        data = {"model": name, "input": prompt}
     try:
         response = requests.post(
-            endpoint, headers={"x-goog-api-key": key.strip()},
-            json={"contents": [{"parts": [{"text": prompt}]}]}, timeout=180
+            endpoint, headers=headers, json=data, timeout=180
         )
-    except requests.RequestException as e:
-        raise RuntimeError("Không kết nối được Gemini API. Hãy kiểm tra mạng.") from e
+    except requests.RequestException as exc:
+        raise RuntimeError("Không thể kết nối máy chủ AI. Kiểm tra mạng và thử lại.") from exc
     if not response.ok:
-        try:
-            error = response.json().get("error", {})
-            detail = str(error.get("message", response.text[:400]))
-        except (ValueError, AttributeError):
-            detail = response.text[:400]
-        detail = detail.replace(key.strip(), "[API KEY ĐÃ ẨN]")[:750]
-        raise RuntimeError(f"Gemini HTTP {response.status_code}: {detail}")
+        raise RuntimeError(describe_api_error(response, token))
     try:
-        chunks = response.json()["candidates"][0]["content"]["parts"]
-        result = "\n".join(p.get("text", "") for p in chunks).strip()
+        payload = response.json()
+        if provider_id == "gemini":
+            parts = payload["candidates"][0]["content"]["parts"]
+            result = "\n".join(str(part.get("text", "")) for part in parts).strip()
+        else:
+            chunks = []
+            for item in payload.get("output", []):
+                if item.get("type") != "message":
+                    continue
+                for content in item.get("content", []):
+                    if content.get("type") == "output_text":
+                        chunks.append(content.get("text", ""))
+            result = "\n".join(chunks).strip()
         if not result:
-            raise ValueError("Gemini không trả văn bản.")
+            raise ValueError("Không có nội dung văn bản trong phản hồi.")
         return result
-    except (KeyError, IndexError, TypeError, ValueError) as e:
-        raise RuntimeError("Không nhận được nội dung từ Gemini. Hãy thử lại.") from e
+    except (KeyError, IndexError, TypeError, ValueError) as exc:
+        raise RuntimeError("AI đã phản hồi nhưng chưa trả về văn bản. Thử đổi model hoặc thử lại.") from exc
 
 
-if st.sidebar.button("🧪 Kiểm tra kết nối Gemini"):
+if test_api:
     try:
-        st.sidebar.success("Kết nối OK: " + ai("Chỉ trả lời: OK")[:80])
-    except Exception as e:
-        st.sidebar.error(str(e))
+        with st.sidebar:
+            with st.spinner("Đang kiểm tra API..."):
+                answer = ai("Chỉ trả lời đúng một từ: OK")
+            st.success(f"✅ Kết nối {provider} thành công với model {model}.")
+    except Exception as exc:
+        st.sidebar.error(str(exc))
 
 
 def output(title, text):
