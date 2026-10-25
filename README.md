@@ -16,10 +16,21 @@ Dữ liệu mỗi phiên được tách riêng: link YouTube, phụ đề gốc,
 
 ## Các phần khác được giữ nguyên
 
-- Dịch văn bản, tạo prompt và SEO bằng Gemini API key của người dùng.
+- Dịch văn bản, tạo prompt và SEO bằng Gemini hoặc OpenAI API key của người dùng.
 - Copy bản dịch, prompt, tiêu đề và mô tả; **không còn Copy phụ đề gốc**.
 - Trích xuất phụ đề YouTube hoặc tải file TXT.
 - Xem trước và tải thumbnail nếu truy cập được.
+
+## 🔑 Cấu hình API
+
+Mở thanh bên trái, trong phần **Cấu hình API**:
+
+1. Chọn nhà cung cấp: **Google Gemini** hoặc **OpenAI**.
+2. Nhập API key vào ô được che (hoặc đặt `GEMINI_API_KEY` / `OPENAI_API_KEY` trong Streamlit Cloud → App settings → Secrets).
+3. Chọn model trong danh sách; có thể chọn **Tự nhập model** nếu cần.
+4. Bấm **🧪 Kiểm tra kết nối API**. Khi có lỗi HTTP, app sẽ hiển thị giải thích về key, model, quota hoặc quyền truy cập.
+
+Không đưa API key vào mã nguồn hay repository công khai. Key nhập trên giao diện chỉ dùng trong phiên truy cập Streamlit đang mở; cấu hình bằng Secrets dùng cho app server và có thể phát sinh chi phí. Người khác có quyền truy cập app có thể sử dụng API key đặt tại server để gọi AI, nên cần thiết lập kiểm soát truy cập nếu sử dụng Secrets cho app công khai.
 
 ## Triển khai
 
@@ -27,6 +38,6 @@ Repository: `leminhtuan118071999-web/youtube-translator-studio-pro`; branch: `ma
 
 Triển khai qua https://share.streamlit.io/ . Nếu app đã triển khai, Streamlit Community Cloud thường cập nhật sau khi commit; hãy làm mới trang để xem giao diện mới.
 
-ChatGPT Plus không bao gồm Gemini API key. Phụ đề có thể bị YouTube hạn chế trên hạ tầng Streamlit.
+ChatGPT Plus không bao gồm quyền sử dụng Google Gemini API hay OpenAI API. Phụ đề có thể bị YouTube hạn chế trên hạ tầng Streamlit.
 
 Tài liệu: https://docs.streamlit.io/deploy/streamlit-community-cloud/deploy-your-app/deploy
