@@ -727,7 +727,7 @@ with st.sidebar:
 
     st.divider()
     with st.expander("🔑 Cấu hình API đa nền tảng", expanded=False):
-        st.caption("Các nền tảng: Groq • Gemini • OpenAI • Claude (Anthropic) • Claude Gateway • OpenRouter • DeepSeek • Together AI")
+        st.caption("Groq • Gemini • OpenAI • Claude • Claude Gateway • API bên thứ ba • OpenRouter • DeepSeek • Together AI")
         pending_provider = st.session_state.pop("_pending_api_provider", None)
         if pending_provider in PROVIDERS:
             st.session_state["api_provider"] = pending_provider
@@ -740,6 +740,43 @@ with st.sidebar:
         preset = PROVIDERS[provider]
         provider_id = provider
         secret_name = preset["secret"]
+        api_format = None
+        api_auth_mode = None
+        if provider == "API bên thứ ba (tùy chỉnh)":
+            st.info(
+                "🌐 Tự nhập API Key, Base URL và Model ID của dịch vụ bên thứ ba. "
+                "Chọn đúng chuẩn API và kiểu xác thực mà nhà cung cấp hướng dẫn."
+            )
+            format_label = st.selectbox(
+                "📡 Chuẩn API",
+                ["OpenAI Chat Completions", "Anthropic Messages"],
+                key=f"api_format_{provider_id}",
+                help="OpenAI dùng /chat/completions; Anthropic dùng /messages.",
+            )
+            auth_label = st.selectbox(
+                "🔏 Kiểu xác thực",
+                ["Bearer Token", "x-api-key"],
+                key=f"api_auth_mode_{provider_id}",
+                help="Dùng Bearer Token hoặc x-api-key theo tài liệu bên cấp API.",
+            )
+            api_format = {
+                "OpenAI Chat Completions": "chat",
+                "Anthropic Messages": "anthropic",
+            }[format_label]
+            api_auth_mode = {
+                "Bearer Token": "bearer", "x-api-key": "api_key",
+            }[auth_label]
+            st.caption(
+                "Ví dụ OpenAI-compatible: https://provider.example/v1. "
+                "Với Anthropic Messages, có thể dùng domain gốc "
+                "(app tự thêm /v1) hoặc Base URL đã có đường dẫn API. "
+                "Không thêm /chat/completions hay /messages vào Base URL."
+            )
+            st.warning(
+                "Chỉ kết nối dịch vụ HTTPS đáng tin cậy: API key và nội dung "
+                "video được gửi tới máy chủ bên thứ ba. "
+                "Quét model có thể không được hỗ trợ; có thể nhập Model ID thủ công."
+            )
         if provider == "Claude Gateway (AUTH_TOKEN)":
             st.info(
                 "🔑 Dành cho dịch vụ gateway dùng ANTHROPIC_BASE_URL và "
@@ -841,7 +878,13 @@ with st.sidebar:
         if st.button("🔎 Quét Model từ API", use_container_width=True, key=f"scan_{provider_id}"):
             try:
                 with st.spinner("Đang lấy danh sách Model..."):
-                    available = list_models(provider, base_url, key)
+                    if provider == "API bên thứ ba (tùy chỉnh)":
+                        available = list_models(
+                            provider, base_url, key,
+                            api_format=api_format, auth_mode=api_auth_mode,
+                        )
+                    else:
+                        available = list_models(provider, base_url, key)
                 st.session_state[f"models_found_{provider_id}"] = available
                 if not available:
                     st.warning("API không trả về danh sách Model. Bạn vẫn có thể nhập Model ID thủ công.")
@@ -873,6 +916,11 @@ with st.sidebar:
 
 def ai(prompt):
     """Dispatch every translation / prompt / SEO request using the selected provider."""
+    if provider == "API bên thứ ba (tùy chỉnh)":
+        return generate_text(
+            provider, base_url, model, key, prompt,
+            api_format=api_format, auth_mode=api_auth_mode,
+        )
     return generate_text(provider, base_url, model, key, prompt)
 
 
@@ -1136,6 +1184,9 @@ if st.button("🚀 BẮT ĐẦU TẠO TOÀN BỘ", type="primary",
                 "model": model,
                 "api_key": key,
             }
+            if provider == "API bên thứ ba (tùy chỉnh)":
+                snapshot["api_format"] = api_format
+                snapshot["auth_mode"] = api_auth_mode
             # The worker receives an immutable snapshot of settings and never
             # accesses Streamlit session state. API credentials aren't saved.
             job_future = get_job_executor().submit(run_full_job, snapshot, progress)
