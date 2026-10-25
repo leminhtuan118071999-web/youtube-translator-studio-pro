@@ -480,10 +480,23 @@ def create_target_metadata(script, original_title, original_description, target_
     return title, description, tags
 
 
+def parse_saved_prompts(raw_text):
+    if not raw_text:
+        return []
+    try:
+        data = json.loads(raw_text)
+        if isinstance(data, list):
+            return [str(item).strip() for item in data if str(item).strip()]
+    except (ValueError, TypeError):
+        pass
+    old_items = re.split(r"(?m)^\s*\d{1,2}[.)]\s+", raw_text)
+    parsed = [part.strip() for part in old_items if part.strip()]
+    return parsed if len(parsed) > 1 else [raw_text.strip()]
+
+
 def render_prompt_blocks(prompts):
     for i, prompt in enumerate(prompts, start=1):
-        with st.expander(f"🎞️ Cảnh {i:02d}", expanded=(i == 1)):
-            st.caption(f"📋 Sao chép cảnh {i:02d} bằng biểu tượng Copy trong khung.")
+        with st.expander(f"🎞️ Cảnh {i:02d} — 📋 Copy riêng", expanded=(i == 1)):
             st.code(prompt, language=None, wrap_lines=True)
 
 
@@ -656,66 +669,87 @@ output("Copy tiêu đề gốc", session["title"])
 output("Copy mô tả gốc", session["description"])
 
 tab_translate, tab_visual, tab_seo = st.tabs(
-    ["🌍 Bản dịch", "🎨 20 prompt ảnh", "📝 YouTube SEO"]
+    ["🌍 Bản dịch", "🎨 20 prompt hình ảnh", "📝 Tiêu đề • Mô tả • SEO"]
 )
 with tab_translate:
-    if st.button("Dịch toàn bộ", type="primary", key=f"translate_{sid}"):
+    if st.button("🌍 Dịch lại toàn bộ", key=f"translate_{sid}"):
         if not session["source"].strip():
-            st.warning("Chưa có phụ đề hoặc văn bản gốc.")
+            st.warning("Hãy trích xuất phụ đề hoặc nhập văn bản trước.")
         else:
             try:
-                pieces = [session["source"][i:i+7000] for i in range(0, len(session["source"]), 7000)]
-                result = []
-                with st.spinner("Đang dịch..."):
-                    for piece in pieces:
-                        result.append(ai("Dịch chính xác sang " + language
-                                         + ", giữ nguyên tên nhân vật, tự nhiên, chỉ xuất bản dịch:\n" + piece))
-                session["translated"] = "\n\n".join(result)
-                if session["translated"].strip():
-                    mark_session_processed(session)
-                    st.rerun()
-            except Exception as e:
-                st.error(str(e))
-    output("Copy toàn bộ bản dịch", session["translated"])
+                with st.spinner(f"Đang dịch sang {language}..."):
+                    session["translated"] = translate_full_script(session["source"], language)
+                mark_session_processed(session)
+                st.rerun()
+            except Exception as exc:
+                st.error(str(exc))
+    st.subheader(f"🌍 Bản dịch hoàn chỉnh ({language})")
+    st.caption("📋 Nhấn biểu tượng sao chép góc phải khung bên dưới để Copy toàn bộ.")
+    output("📋 Copy toàn bộ bản dịch", session["translated"])
 
 with tab_visual:
-    if st.button("Tạo 20 prompt hình ảnh", key=f"prompts_{sid}"):
-        base = (session["translated"] or session["source"])[:25000]
-        if not base:
-            st.warning("Chưa có câu chuyện.")
+    if st.button("🎨 Tạo lại 20 prompt", key=f"prompts_{sid}"):
+        base = session["translated"] or session["source"]
+        if not base.strip():
+            st.warning("Chưa có nội dung câu chuyện.")
         else:
             try:
-                with st.spinner("Đang tạo prompt..."):
-                    session["prompts"] = ai(
-                        "Create exactly 20 numbered cinematic image prompts in English, "
-                        "following the story chronologically. Output only prompts:\n" + base)
-                    if session["prompts"].strip():
-                        mark_session_processed(session)
-                        st.rerun()
-            except Exception as e:
-                st.error(str(e))
-    output("Copy toàn bộ 20 prompt hình ảnh", session["prompts"])
+                with st.spinner(f"Đang tạo 20 prompt bằng {language}..."):
+                    generated = create_20_prompts(base, language)
+                session["prompts"] = json.dumps(generated, ensure_ascii=False)
+                mark_session_processed(session)
+                st.rerun()
+            except Exception as exc:
+                st.error(str(exc))
+    prompt_items = parse_saved_prompts(session.get("prompts", ""))
+    if prompt_items:
+        st.subheader(f"🎬 {len(prompt_items)} prompt theo cảnh ({language})")
+        st.caption("Mở từng cảnh để dùng nút Copy riêng của cảnh đó.")
+        render_prompt_blocks(prompt_items)
+        all_prompts = "\n\n".join(
+            f"Cảnh {index:02d}\n{description}"
+            for index, description in enumerate(prompt_items, start=1)
+        )
+        output("📋 Copy toàn bộ các prompt", all_prompts)
+    else:
+        st.caption("Chưa có prompt. Hãy nhấn Bắt đầu tạo toàn bộ hoặc Tạo lại 20 prompt.")
 
 with tab_seo:
-    if st.button("Tạo tiêu đề, mô tả và SEO", key=f"seo_{sid}"):
-        original = "\n".join([
-            session["title"], session["description"],
-            (session["translated"] or session["source"])[:16000],
-        ])
-        if not original.strip():
-            st.warning("Chưa có nội dung để tạo SEO.")
+    if st.button("📝 Tạo lại tiêu đề • mô tả • SEO", key=f"seo_{sid}"):
+        base = session["translated"] or session["source"]
+        if not base.strip():
+            st.warning("Chưa có bản dịch hoặc phụ đề.")
         else:
             try:
-                with st.spinner("Đang tạo nội dung SEO..."):
-                    session["metadata"] = ai(
-                        "Viết nội dung YouTube bằng " + language
-                        + ". Bao gồm tiêu đề 🎬, mô tả 📝 có emoji phù hợp và 15 từ khóa SEO. "
-                        "Sát nghĩa, tự nhiên, không có ký tự markdown thừa:\n" + original)
-                    if session["metadata"].strip():
-                        mark_session_processed(session)
-                        st.rerun()
-            except Exception as e:
-                st.error(str(e))
-    output("Copy toàn bộ tiêu đề, mô tả và SEO", session["metadata"])
+                with st.spinner(f"Đang tạo nội dung YouTube bằng {language}..."):
+                    (
+                        session["new_title"], session["new_description"], session["seo_tags"]
+                    ) = create_target_metadata(
+                        base, session["title"], session["description"], language
+                    )
+                session["metadata"] = "\n\n".join([
+                    session["new_title"], session["new_description"], session["seo_tags"]
+                ])
+                mark_session_processed(session)
+                st.rerun()
+            except Exception as exc:
+                st.error(str(exc))
+
+    st.subheader(f"🎬 Tiêu đề đã dịch ({language})")
+    output("📋 Copy riêng tiêu đề", session.get("new_title", ""))
+    st.subheader(f"📝 Mô tả đã dịch ({language})")
+    output("📋 Copy riêng mô tả", session.get("new_description", ""))
+    st.subheader(f"🔎 Từ khóa SEO ({language})")
+    output("📋 Copy riêng từ khóa SEO", session.get("seo_tags", ""))
+    if session.get("new_title") or session.get("new_description") or session.get("seo_tags"):
+        bundle = "\n\n".join(filter(None, [
+            session.get("new_title", ""),
+            session.get("new_description", ""),
+            session.get("seo_tags", ""),
+        ]))
+        output("📋 Copy toàn bộ tiêu đề • mô tả • SEO", bundle)
+    elif session.get("metadata", "").strip():
+        st.caption("Nội dung SEO từ bản cũ (chưa được tách các mục):")
+        output("📋 Copy nội dung SEO phiên cũ", session["metadata"])
 
 st.caption("Nút Copy nằm ở góc phải khung nội dung. Các phiên không chia sẻ dữ liệu với nhau trong phiên truy cập hiện tại.")
