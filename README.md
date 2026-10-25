@@ -8,17 +8,28 @@
 2. Dán link YouTube vào ô **🔗 Dán link video YouTube** rồi nhấn **🚀 BẮT ĐẦU TẠO TOÀN BỘ**. Phụ đề gốc sẽ được xử lý nội bộ, không hiển thị ô nhập văn bản gốc.
 3. App tự động: tìm phụ đề thủ công hoặc phụ đề tự động có sẵn trên YouTube → dịch toàn bộ nội dung sang ngôn ngữ đích → tạo **20 prompt hình ảnh bằng ngôn ngữ đích** → tạo **tiêu đề, mô tả, từ khóa SEO bằng ngôn ngữ đích**.
 4. Sau khi chạy, app chỉ hiển thị nội dung đã được xử lý theo **ngôn ngữ đích** trong các tab kết quả. Các tab cho phép **Copy riêng** qua biểu tượng Copy trên khung nội dung (`st.code`): bản dịch đầy đủ, từng prompt 01–20, toàn bộ prompt, tiêu đề, mô tả, từ khóa SEO và cả bộ SEO. Có nút tải TXT bổ sung.
-5. Thanh tiến trình hiển thị các bước đang chạy; nếu một bước lỗi, kết quả của các bước đã hoàn tất vẫn thuộc phiên hiện tại, và có thể dùng nút chạy lại từng mục.
+5. Thanh tiến trình theo dõi các tác vụ nền đang chạy; có thể chuyển sang phiên mới trong lúc phiên cũ vẫn xử lý. Nếu API lỗi, dữ liệu một phần vẫn được giữ để có thể chạy lại riêng từng mục.
 
 **Giới hạn:** YouTube có thể chặn truy cập phụ đề, hoặc video không có phụ đề, khiến thao tác tự động thất bại; app không tự nhận dạng giọng nói cho video không có phụ đề. Chất lượng dịch/prompt/SEO phụ thuộc model và API key, có thể phát sinh phí.
+
+## ⏳ Chạy nhiều phiên đồng thời
+
+- Nhấn **🚀 BẮT ĐẦU TẠO TOÀN BỘ** để tạo tác vụ chạy nền; ứng dụng **trả lại giao diện ngay** thay vì giữ người dùng ở trang chờ.
+- Trong lúc phiên A đang chạy (⏳ kèm phần trăm), nhấn **➕ Tạo phiên mới** rồi nhập URL cho phiên B và bắt đầu tiếp; công việc của A tiếp tục trên luồng riêng.
+- **📚 Danh sách phiên đã chạy** hiển thị cả phiên đang chạy (⏳), hoàn thành (✅) và những phiên lỗi còn giữ kết quả một phần (⚠️). Nhấn tên để mở phiên; nhấn ✏️ để đổi tên.
+- Sau khi API xử lý xong, kết quả của đúng phiên đó sẽ tự được đưa vào dữ liệu phiên và danh sách tự cập nhật. Có thể mở lại để copy bản dịch, 20 prompt, tiêu đề, mô tả, SEO.
+- Tối đa 3 tác vụ đồng thời trong một phiên kết nối; máy chủ chạy tối đa 3 luồng worker. Nút **Xóa tất cả phiên đã lưu** yêu cầu xác nhận, hủy các tác vụ chưa chạy và yêu cầu tác vụ đang chạy ngừng ở bước tiếp theo.
+- Nếu một bước API lỗi, phiên hiển thị trạng thái lỗi và những phần đã tạo thành công được giữ lại để xem hoặc chạy lại riêng.
+
+**Giới hạn kỹ thuật:** Đây là xử lý nền trong bộ nhớ của tiến trình Streamlit, **không phải hệ thống hàng đợi bền vững**. Phải giữ app/tab còn kết nối để danh sách phiên tự cập nhật; nếu tab đóng/tải lại thành kết nối mới, hoặc Streamlit Cloud ngủ/khởi động lại, công việc đang chạy và dữ liệu có thể mất. Không thể bảo đảm tác vụ tiếp tục khi máy chủ khởi động lại. Muốn chạy qua khởi động lại và lưu vĩnh viễn cần dịch vụ job queue/bộ nhớ lưu trữ riêng có xác thực.
 
 ## 📁 Phần quản lý phiên ở góc trái (đã tối giản)
 
 Đầu thanh bên trái là **🌍 Ngôn ngữ đích**, đã mở rộng thêm tiếng Ý, Bồ Đào Nha, Hà Lan, Thụy Điển, Séc, Romania, Hungary, Ukraine và nhiều ngôn ngữ châu Âu khác. Mỗi phiên có ngôn ngữ đích riêng.
 
 Ngay bên dưới là **📁 Quản lý phiên làm việc**:
-1. Nhấn **➕ Tạo phiên mới**: app **tự kiểm tra và lưu phiên cũ đã có kết quả xử lý** vào **📚 Danh sách phiên đã chạy** trước khi chuyển sang phiên trắng mới. Bạn không phải nhấn nút Lưu. Phiên chưa có phụ đề hoặc kết quả xử lý sẽ không được lưu.
-2. Sau khi **trích xuất phụ đề**, **nhập file TXT**, **dịch**, **tạo prompt** hoặc **tạo SEO** thành công, phiên tự động được đánh dấu đã chạy và xuất hiện tại **📚 Danh sách phiên đã chạy**. Các lần thử lỗi không được lưu.
+1. Nhấn **➕ Tạo phiên mới**: nếu phiên cũ đang xử lý, app **không dừng tác vụ cũ**; bạn có thể bắt đầu công việc khác. Khi phiên cũ hoàn thành, app tự lưu kết quả vào **📚 Danh sách phiên đã chạy** trong kết nối hiện tại. Phiên chưa chạy sẽ không vào danh sách.
+2. Khi đã nhấn **Bắt đầu tạo**, phiên sẽ xuất hiện là **⏳ đang chạy**. Sau khi hoàn tất hiện **✅**, nếu API lỗi sau một số bước thì có thể hiện **⚠️** và giữ kết quả đã tạo. Phiên mới chưa bắt đầu xử lý không xuất hiện.
 3. Trong danh sách, **nhấn trực tiếp vào tên phiên** để xem lại phụ đề, bản dịch, prompt và SEO; **không có nút “Mở”**.
 4. Để đổi tên, nhấn **✏️** cạnh tên, nhập tên mới rồi nhấn Enter. Phiên đang hoạt động có dấu ✓.
 5. **🗑️ Xóa tất cả phiên đã lưu** chỉ thực thi sau khi tích xác nhận.
