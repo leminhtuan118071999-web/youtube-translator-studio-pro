@@ -507,6 +507,37 @@ with st.sidebar:
     session = st.session_state.workspaces[sid]
 
     st.header("📁 Quản lý phiên làm việc")
+    # Style only the named session actions, not the app's other buttons.
+    # Streamlit adds the widget key as a CSS class (st-key-<key>).
+    st.markdown(
+        """
+        <style>
+        [data-testid="stSidebar"] [class*="st-key-edit_session_"] button {
+            color: #16a34a !important;
+            border: 1px solid #16a34a !important;
+            background-color: rgba(22, 163, 74, .12) !important;
+            font-weight: 700 !important;
+        }
+        [data-testid="stSidebar"] [class*="st-key-edit_session_"] button:hover {
+            background-color: rgba(22, 163, 74, .23) !important;
+        }
+        [data-testid="stSidebar"] [class*="st-key-delete_session_"] button,
+        [data-testid="stSidebar"] .st-key-delete_all_sessions button,
+        [data-testid="stSidebar"] [class*="st-key-confirm_delete_"] button {
+            color: #ef4444 !important;
+            border: 1px solid #ef4444 !important;
+            background-color: rgba(239, 68, 68, .12) !important;
+            font-weight: 700 !important;
+        }
+        [data-testid="stSidebar"] [class*="st-key-delete_session_"] button:hover,
+        [data-testid="stSidebar"] .st-key-delete_all_sessions button:hover,
+        [data-testid="stSidebar"] [class*="st-key-confirm_delete_"] button:hover {
+            background-color: rgba(239, 68, 68, .25) !important;
+        }
+        </style>
+        """,
+        unsafe_allow_html=True,
+    )
 
     if st.button("➕ Tạo phiên mới", use_container_width=True):
         old_name = session["name"]
@@ -546,6 +577,7 @@ with st.sidebar:
     if st.button(
         "🗑️ Xóa tất cả phiên đã lưu",
         type="secondary",
+        key="delete_all_sessions",
         disabled=not confirm_all,
         use_container_width=True,
     ):
@@ -566,7 +598,7 @@ with st.sidebar:
 
     st.divider()
     st.markdown("**📚 Danh sách phiên đã chạy**")
-    st.caption("Phiên bắt đầu chạy sẽ xuất hiện ngay, kể cả khi API lỗi. Nhấn tên để xem kết quả/trạng thái; ✏️ để đổi tên.")
+    st.caption("Nhấn tên để mở phiên; nút Đổi tên (xanh) hoặc Xóa (đỏ) nằm ngay bên cạnh. Phiên lỗi vẫn được giữ để xem lại.")
     name_message = st.session_state.pop("session_name_message", None)
     if name_message:
         st.warning(name_message)
@@ -585,7 +617,7 @@ with st.sidebar:
     if not saved_sessions:
         st.caption("Chưa có phiên nào được bắt đầu. Bấm BẮT ĐẦU TẠO TOÀN BỘ trước khi tạo phiên mới.")
     for saved_id, saved_record in saved_sessions:
-        name_col, edit_col, delete_col = st.columns([5, 1, 1], gap="small")
+        name_col, edit_col, delete_col = st.columns([4.4, 2.7, 1.7], gap="small")
         with name_col:
             job = st.session_state.background_jobs.get(saved_id)
             if job and not job["future"].done():
@@ -613,7 +645,7 @@ with st.sidebar:
                     _persist_and_rerun()
         with edit_col:
             if st.button(
-                "✏️",
+                "Đổi tên",
                 key=f"edit_session_{saved_id}",
                 use_container_width=True,
                 help="Đổi tên phiên",
@@ -624,7 +656,7 @@ with st.sidebar:
                 _persist_and_rerun()
         with delete_col:
             if st.button(
-                "🗑️",
+                "Xóa",
                 key=f"delete_session_{saved_id}",
                 use_container_width=True,
                 help=f"Xóa riêng phiên {saved_record['name']}",
