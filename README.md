@@ -84,6 +84,8 @@ Nếu còn lỗi sau khi cập nhật, chọn model văn bản khác trong menu 
 
 ## 🔑 Cấu hình API đa nền tảng
 
+**Giao diện thu gọn:** Thanh bên trái hiển thị hai mục đóng mặc định: **📥 Phụ đề YouTube dự phòng** và **🔑 Cấu hình API đa nền tảng**. Nhấn tiêu đề để mở khi cần nhập/sửa key, Base URL hoặc Model; nhấn lại để thu gọn. Các thông số đã nhập vẫn được dùng khi khung đóng, không cần giữ khung mở khi bấm **BẮT ĐẦU TẠO TOÀN BỘ**.
+
 App hỗ trợ lựa chọn **Groq, Google Gemini, OpenAI, OpenRouter, DeepSeek, Together AI, Anthropic Claude** hoặc **API tương thích OpenAI (tùy chỉnh)**.
 
 Tại thanh bên trái:
