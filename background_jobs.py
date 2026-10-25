@@ -20,6 +20,7 @@ class JobProgress:
         self._fraction = 0
         self._stage = "Đang chờ..."
         self._cancel = threading.Event()
+        self._fields = {}
 
     def update(self, fraction, stage):
         with self._lock:
@@ -29,6 +30,15 @@ class JobProgress:
     def snapshot(self):
         with self._lock:
             return self._fraction, self._stage
+
+    def publish(self, field, value):
+        """Share partial, non-sensitive output safely with the UI."""
+        with self._lock:
+            self._fields[field] = value
+
+    def partial_result(self):
+        with self._lock:
+            return dict(self._fields)
 
     def cancel(self):
         self._cancel.set()
@@ -130,6 +140,7 @@ def run_full_job(snapshot, progress):
             progress.update(5, "📥 Đang trích xuất phụ đề YouTube...")
             source, caption_lang = fetch_subtitles(vid)
             fields["source"] = source
+            progress.publish("source", source)
             fields["caption_language"] = str(caption_lang)
             if not title:
                 try:
@@ -144,11 +155,13 @@ def run_full_job(snapshot, progress):
                     pass
             if title:
                 fields["title"] = title
+                progress.publish("title", title)
         if not source.strip():
             raise ValueError("Không lấy được phụ đề. Hãy kiểm tra link video.")
         if len(source) > 350000:
             raise ValueError("Phụ đề quá dài (hơn 350.000 ký tự).")
         fields["source"] = source
+        progress.publish("source", source)
 
         chunks = list(chunk_text(source))
         translations = []
@@ -163,6 +176,7 @@ def run_full_job(snapshot, progress):
             )
             translations.append(translation)
             fields["translated"] = "\n\n".join(translations)
+            progress.publish("translated", fields["translated"])
 
         progress.update(66, "🎨 Đang tạo 20 prompt ảnh...")
         brief = overview(fields["translated"], call, progress)
@@ -178,6 +192,7 @@ def run_full_job(snapshot, progress):
         if any(not p for p in prompts):
             raise ValueError("Có prompt ảnh trống; có thể chạy lại phần prompt.")
         fields["prompts"] = json.dumps(prompts, ensure_ascii=False)
+        progress.publish("prompts", fields["prompts"])
 
         progress.update(84, "📝 Đang tạo tiêu đề, mô tả và SEO...")
         metadata = parse_object(call(
@@ -198,6 +213,8 @@ def run_full_job(snapshot, progress):
         fields["seo_tags"] = tags
         fields["metadata"] = "\n\n".join([new_title, new_desc, tags])
         fields["language"] = language
+        for item in ("new_title", "new_description", "seo_tags", "metadata", "language"):
+            progress.publish(item, fields[item])
         result["ok"] = True
         progress.update(100, "✅ Hoàn thành. Đã lưu vào danh sách phiên.")
     except Exception as exc:
