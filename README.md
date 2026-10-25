@@ -152,7 +152,7 @@ Trong sidebar, mở **🔑 Cấu hình API đa nền tảng**:
 
 ## 🔑 Cấu hình API đa nền tảng
 
-**Giao diện thu gọn:** Thanh bên trái hiển thị hai mục đóng mặc định: **📥 Phụ đề YouTube dự phòng** và **🔑 Cấu hình API đa nền tảng**. Nhấn tiêu đề để mở khi cần nhập/sửa key, Base URL hoặc Model; nhấn lại để thu gọn. Các thông số đã nhập vẫn được dùng khi khung đóng, không cần giữ khung mở khi bấm **BẮT ĐẦU TẠO TOÀN BỘ**.
+**Giao diện nhập API cơ bản:** Thanh bên vẫn giữ mục đóng mặc định **🔑 Cấu hình API đa nền tảng**. Mở mục này sẽ thấy theo thứ tự **Chọn nền tảng AI → API Key → Base URL → Model ID → Quét Model / Kiểm tra kết nối API**, giống cách nhập đơn giản ban đầu. Các thông báo hướng dẫn theo nhà cung cấp, nút áp dụng cấu hình miễn phí và hai lựa chọn giao thức/cách xác thực của **API bên thứ ba (tùy chỉnh)** được giữ nguyên trong nút **⚙️ Hướng dẫn và tùy chọn nâng cao**. Nút này đóng mặc định; bạn chỉ cần mở khi muốn thay đổi cấu hình nâng cao. Các thông số vẫn hoạt động khi nút đóng, không cần giữ khung mở khi chạy video. Mục **📥 Phụ đề YouTube dự phòng** vẫn được thu gọn như trước.
 
 App hỗ trợ lựa chọn **Groq, Google Gemini, OpenAI, Claude (Anthropic), OpenRouter, DeepSeek, Together AI** hoặc **API tương thích OpenAI (tùy chỉnh)**. Mục **Claude (Anthropic)** nằm trong khung thu gọn **🔑 Cấu hình API đa nền tảng** ở thanh bên; chọn Claude để nhập API key chính thức từ [Anthropic Console](https://platform.claude.com/settings/keys). Claude dùng endpoint `https://api.anthropic.com/v1/messages` với model mặc định `claude-sonnet-4-6`. Dữ liệu Claude lưu dưới tên cũ *Anthropic Claude* được tự chuyển sang tên mới mà không làm mất API key.
 
