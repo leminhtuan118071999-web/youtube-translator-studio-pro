@@ -10,6 +10,7 @@ from PIL import Image
 from youtube_transcript_api import YouTubeTranscriptApi
 from api_clients import PROVIDERS, generate_text, list_models, validate_base_url
 from background_jobs import JobProgress, run_full_job
+from transcript_sources import parse_uploaded_subtitles
 
 st.set_page_config(page_title="YouTube Translator Studio Pro", page_icon="🎬", layout="wide")
 st.title("🎬 YouTube Translator Studio Pro")
@@ -376,6 +377,27 @@ with st.sidebar:
     )
 
     st.divider()
+    st.subheader("📥 Phụ đề YouTube dự phòng")
+    st.caption(
+        "Mặc định thử lấy phụ đề trực tiếp. Nếu YouTube chặn IP Cloud, "
+        "app sẽ tự thử dịch vụ Supadata khi bạn nhập key bên dưới."
+    )
+    try:
+        backup_key_secret = str(st.secrets.get("SUPADATA_API_KEY", "") or "")
+    except Exception:
+        backup_key_secret = ""
+    transcript_api_key_entered = st.text_input(
+        "Supadata API key (khác API dịch)",
+        type="password",
+        key="supadata_api_key_input",
+        placeholder="Nhập key nếu YouTube chặn trích xuất",
+        help="Chỉ gửi key cho api.supadata.ai để lấy phụ đề. Có thể cấu hình SUPADATA_API_KEY trong Streamlit Secrets.",
+    )
+    transcript_api_key = transcript_api_key_entered.strip() or backup_key_secret.strip()
+    st.markdown("[🔗 Lấy API key phụ đề Supadata](https://supadata.ai/)")
+    st.caption("Dịch vụ phụ đề có giới hạn lượt và có thể tính phí. Không bắt buộc nếu bạn dùng file phụ đề.")
+
+    st.divider()
     st.subheader("🔑 Cấu hình API đa nền tảng")
     provider = st.selectbox(
         "CHỌN NỀN TẢNG AI",
@@ -650,13 +672,25 @@ session["url"] = st.text_input(
 match = re.search(r"(?:v=|youtu\.be/|/shorts/|/live/)([\w-]{11})", session["url"])
 vid = match.group(1) if match else None
 
+with st.expander("📄 Phụ đề dự phòng từ máy (.srt / .vtt / .txt)", expanded=False):
+    uploaded_subtitle = st.file_uploader(
+        "Tải phụ đề khi YouTube chặn máy chủ",
+        type=["txt", "srt", "vtt"],
+        key=f"subtitle_fallback_upload_{sid}",
+        help="Đây là phương án dự phòng. File được dùng trực tiếp khi nhấn BẮT ĐẦU TẠO TOÀN BỘ.",
+    )
+    if uploaded_subtitle is not None:
+        st.caption("✅ Đã chọn file. Khi bắt đầu, app sẽ ưu tiên file này và không gọi phụ đề YouTube.")
+    else:
+        st.caption("Có thể để trống nếu dùng YouTube trực tiếp hoặc dịch vụ phụ đề Supadata.")
+
 if st.button("🚀 BẮT ĐẦU TẠO TOÀN BỘ", type="primary",
              use_container_width=True, key=f"run_all_{sid}"):
     sync_form(sid)
     if not key.strip():
         st.error("Hãy nhập API key trước khi chạy.")
-    elif not vid and not session["source"].strip():
-        st.warning("Hãy dán link YouTube hợp lệ trước khi bắt đầu.")
+    elif not vid and uploaded_subtitle is None and not session["source"].strip():
+        st.warning("Hãy dán link YouTube hoặc tải file phụ đề (.srt/.vtt/.txt).")
     elif (
         sid in st.session_state.background_jobs
         and not st.session_state.background_jobs[sid]["future"].done()
@@ -674,9 +708,15 @@ if st.button("🚀 BẮT ĐẦU TẠO TOÀN BỘ", type="primary",
                 raise ValueError("Hãy nhập Model ID.")
             progress = JobProgress()
             run_id = uuid.uuid4().hex
+            subtitle_from_file = (
+                parse_uploaded_subtitles(uploaded_subtitle.name, uploaded_subtitle.getvalue())
+                if uploaded_subtitle is not None else ""
+            )
             snapshot = {
                 "url": session["url"],
                 "source": session.get("source", ""),
+                "uploaded_source": subtitle_from_file,
+                "supadata_key": transcript_api_key,
                 "title": session.get("title", ""),
                 "description": session.get("description", ""),
                 "language": language,
