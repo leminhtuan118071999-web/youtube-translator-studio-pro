@@ -78,15 +78,17 @@ for _sid, _record in st.session_state.workspaces.items():
             _record["saved_order"] = st.session_state.saved_session_order
     _record.setdefault("saved_order", 0)
 
-# A new selection must be set BEFORE the selectbox is instantiated.
+# On a rerun after creating or opening a session, set the active session directly.
+# The saved-session buttons are the only navigation controls; no top dropdown.
 if "_open_session_next" in st.session_state:
-    st.session_state["session_picker"] = st.session_state.pop("_open_session_next")
+    st.session_state.selected_session = st.session_state.pop("_open_session_next")
 
 with st.sidebar:
     # Set the language for the currently selected session at the VERY TOP.
-    sid = st.session_state.get("session_picker", st.session_state.selected_session)
+    sid = st.session_state.selected_session
     if sid not in st.session_state.workspaces:
         sid = next(iter(st.session_state.workspaces))
+        st.session_state.selected_session = sid
     session = st.session_state.workspaces[sid]
     lang_value = session.get("language", "Tiếng Ba Lan")
     language = st.selectbox(
@@ -100,18 +102,6 @@ with st.sidebar:
     st.divider()
 
     st.header("📁 Quản lý phiên làm việc")
-    names = list(st.session_state.workspaces)
-    selected = st.selectbox(
-        "Chọn phiên", names,
-        index=names.index(sid),
-        format_func=lambda x: st.session_state.workspaces[x]["name"],
-        key="session_picker",
-    )
-    if selected != sid:
-        sync_form(sid)
-        st.session_state.selected_session = selected
-        st.rerun()
-    st.session_state.selected_session = sid
     st.caption(f"Đang làm việc: {session['name']}")
 
     saved_name = st.text_input(
