@@ -342,6 +342,58 @@ class StreamlitSmokeTests(unittest.TestCase):
             "bản sao các phiên" in btn.label.lower() for btn in app.button
         ))
 
+    def test_txt_download_is_exclusive_to_translation(self):
+        """Keep Copy for every section while downloading TXT only for translation."""
+        import ast
+        from pathlib import Path
+
+        app = self.app.run()
+        self.assertFalse(app.exception, [str(x.message) for x in app.exception])
+
+        source = Path("streamlit_app.py").read_text(encoding="utf-8")
+        tree = ast.parse(source)
+        output_function = next(
+            node for node in tree.body
+            if isinstance(node, ast.FunctionDef) and node.name == "output"
+        )
+        self.assertEqual(len(output_function.args.kwonlyargs), 1)
+        self.assertEqual(output_function.args.kwonlyargs[0].arg, "allow_download")
+        self.assertIsInstance(output_function.args.kw_defaults[0], ast.Constant)
+        self.assertFalse(output_function.args.kw_defaults[0].value)
+
+        download_calls = [
+            node for node in ast.walk(output_function)
+            if isinstance(node, ast.Call) and isinstance(node.func, ast.Attribute)
+            and node.func.attr == "download_button"
+        ]
+        self.assertEqual(len(download_calls), 1)
+        self.assertTrue(any(
+            isinstance(branch, ast.If)
+            and isinstance(branch.test, ast.Name)
+            and branch.test.id == "allow_download"
+            and download_calls[0] in list(ast.walk(branch))
+            for branch in ast.walk(output_function)
+        ))
+
+        opted_in = [
+            call for call in ast.walk(tree)
+            if isinstance(call, ast.Call)
+            and isinstance(call.func, ast.Name) and call.func.id == "output"
+            and any(
+                kw.arg == "allow_download"
+                and isinstance(kw.value, ast.Constant) and kw.value.value is True
+                for kw in call.keywords
+            )
+        ]
+        self.assertEqual(len(opted_in), 1)
+        self.assertEqual(opted_in[0].args[0].value, "📋 Copy toàn bộ bản dịch")
+        # Existing copy actions for prompt/title/description/SEO remain available.
+        for label in (
+            "📋 Copy toàn bộ 20 prompt", "📋 Copy toàn bộ tiêu đề",
+            "📋 Copy toàn bộ mô tả", "📋 Copy toàn bộ từ khóa SEO",
+        ):
+            self.assertIn(label, source)
+
     def test_translation_and_description_are_collapsed_but_keep_full_text(self):
         app = self.app.run()
         self.assertFalse(app.exception, [str(exc.message) for exc in app.exception])
