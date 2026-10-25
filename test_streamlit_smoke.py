@@ -360,7 +360,18 @@ class StreamlitSmokeTests(unittest.TestCase):
         ]
         self.assertEqual(len(panels), 2)
         self.assertTrue(all("Nhấn để xem toàn bộ" in p.label for p in panels))
-        self.assertTrue(all(not p.expanded for p in panels))
+        # Streamlit AppTest exposes panel labels but not expanded state.
+        # Verify the default collapse mode directly in the rendered app source.
+        from pathlib import Path
+        code = Path("streamlit_app.py").read_text(encoding="utf-8")
+        self.assertIn(
+            'with st.expander(f"🌍 Bản dịch hoàn chỉnh ({language}) — '
+            'Nhấn để xem toàn bộ", expanded=False):', code
+        )
+        self.assertIn(
+            'with st.expander(f"📝 Mô tả đã dịch ({language}) — '
+            'Nhấn để xem toàn bộ", expanded=False):', code
+        )
         self.assertEqual(
             len(app.session_state["workspaces"][sid]["translated"]),
             len("Dòng dịch rất dài, đầy đủ không bị cắt. " * 12),
