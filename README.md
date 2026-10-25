@@ -61,6 +61,14 @@ Dữ liệu mỗi phiên được tách riêng: link YouTube, phụ đề gốc,
 - Tự động trích xuất phụ đề từ link YouTube bằng nút **BẮT ĐẦU TẠO TOÀN BỘ**; không hiển thị các ô phụ đề, tiêu đề hoặc mô tả gốc.
 - Xem trước và tải thumbnail nếu truy cập được.
 
+## 🔧 Lỗi API có phản hồi nhưng không trả văn bản
+
+Một số model có suy luận (đặc biệt `openai/gpt-oss-120b` trên Groq) có thể dùng hết quota token đầu ra cho reasoning trước khi xuất bản dịch. App đã tối ưu riêng GPT-OSS trên **Groq** với `reasoning_effort=low`, `max_completion_tokens=8192` và không yêu cầu trả lại reasoning. Các nhà cung cấp khác giữ cấu hình riêng để tránh lỗi 400 do tham số không được hỗ trợ.
+
+Nếu API trả về không có text, app sẽ giải thích `finish_reason` (ví dụ `length` khi hết token, hoặc `tool_calls` khi model chỉ gọi công cụ) thay vì báo chung chung. App không sử dụng trường reasoning làm nội dung dịch và không ghi nội dung suy luận ra giao diện.
+
+Nếu còn lỗi sau khi cập nhật, chọn model văn bản khác trong menu Model ID, ví dụ `llama-3.3-70b-versatile` khi nhà cung cấp Groq và API key của bạn được phép sử dụng; kiểm tra kết nối API, sau đó dùng **BẮT ĐẦU TẠO TOÀN BỘ** để chạy lại phiên.
+
 ## 🔑 Cấu hình API đa nền tảng
 
 App hỗ trợ lựa chọn **Groq, Google Gemini, OpenAI, OpenRouter, DeepSeek, Together AI, Anthropic Claude** hoặc **API tương thích OpenAI (tùy chỉnh)**.
