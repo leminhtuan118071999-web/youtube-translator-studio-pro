@@ -101,6 +101,17 @@ Nếu API trả về không có text, app sẽ giải thích `finish_reason` (v�
 
 Nếu còn lỗi sau khi cập nhật, chọn model văn bản khác trong menu Model ID, ví dụ `llama-3.3-70b-versatile` khi nhà cung cấp Groq và API key của bạn được phép sử dụng; kiểm tra kết nối API, sau đó dùng **BẮT ĐẦU TẠO TOÀN BỘ** để chạy lại phiên.
 
+## 🔗 Claude Code Gateway (AUTH_TOKEN) – dịch vụ API qua máy chủ trung gian
+
+App có hai cách kết nối Claude:
+
+- **Claude (Anthropic)**: dịch vụ chính thức, dùng Base URL `https://api.anthropic.com/v1` và Claude API key từ Anthropic Console.
+- **Claude Gateway (AUTH_TOKEN)**: dành cho cấu hình Claude Code dùng `ANTHROPIC_BASE_URL` và `ANTHROPIC_AUTH_TOKEN`. Chọn mục này trong **🔑 Cấu hình API đa nền tảng**, nhập Base URL của gateway (ví dụ `https://your-trusted-gateway.example.com`), nhập **token mới** vào ô **🔐 Gateway AUTH_TOKEN** và model được gateway cho phép, rồi nhấn **🧪 Kiểm tra kết nối API**. App gửi `Authorization: Bearer <token>` và gọi chuẩn Messages API `/v1/messages`; khi Base URL chỉ là domain gốc, app tự thêm `/v1` trước đường dẫn `/messages`.
+
+`CLAUDE_CODE_DISABLE_NONESSENTIAL_TRAFFIC` là cấu hình riêng của Claude Code, **không cần nhập vào LMT Studio Pro**. Token phát hành bởi gateway **không mặc nhiên dùng được** với API chính thức của Anthropic; gateway có thể sử dụng đường dẫn, quyền truy cập hoặc danh sách model riêng. Nếu gateway không hỗ trợ chuẩn Anthropic Messages API, chức năng này có thể không kết nối được.
+
+**Bảo mật:** Không chia sẻ ảnh chụp có token thật, không dán token vào GitHub hay nội dung công khai. Nếu token đã lộ, hãy thu hồi và tạo mới từ bên cấp token. Chỉ dùng gateway đáng tin cậy, vì token và nội dung sẽ được chuyển tới máy chủ của gateway. LMT Studio Pro không xác nhận hoặc bảo đảm chất lượng của các gateway bên thứ ba.
+
 ## 🔑 Cấu hình API đa nền tảng
 
 **Giao diện thu gọn:** Thanh bên trái hiển thị hai mục đóng mặc định: **📥 Phụ đề YouTube dự phòng** và **🔑 Cấu hình API đa nền tảng**. Nhấn tiêu đề để mở khi cần nhập/sửa key, Base URL hoặc Model; nhấn lại để thu gọn. Các thông số đã nhập vẫn được dùng khi khung đóng, không cần giữ khung mở khi bấm **BẮT ĐẦU TẠO TOÀN BỘ**.
