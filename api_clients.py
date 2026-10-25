@@ -299,7 +299,7 @@ def _retry_seconds(response, message):
     return 30.0
 
 
-def _error(response, token):
+def _error(response, token, provider=None):
     try:
         payload = response.json()
         error = payload.get("error", {}) if isinstance(payload, dict) else {}
@@ -318,6 +318,11 @@ def _error(response, token):
         503: "Dịch vụ AI phía sau gateway hiện không khả dụng; hãy thử lại sau.",
         504: "Gateway chờ upstream quá lâu và bị timeout; hãy thử lại sau.",
     }.get(response.status_code, "Kiểm tra cấu hình và thử lại.")
+    if provider == "Google Gemini" and response.status_code in (400, 403, 404):
+        hint += (
+            " Nếu dùng API key Google AI Studio, hãy chọn đúng Model ID "
+            "trong Google AI Studio và kiểm tra quyền API/quốc gia của dự án."
+        )
     message = f"HTTP {response.status_code}: {detail}. {hint}"
     if response.status_code in (502, 503, 504):
         # Respect a numerical Retry-After if provided; otherwise let the
@@ -336,12 +341,28 @@ def _error(response, token):
     if response.status_code == 429:
         # Daily limits cannot be fixed by a short wait.
         daily = bool(re.search(
-            r"(?:requests|tokens) per day|\bRPD\b|\bTPD\b|daily quota",
-            detail, re.IGNORECASE
+            r"(?:requests|tokens) per day|\\bRPD\\b|\\bTPD\\b|daily quota"
+            r"|per[_ -]?day|\bRPD\b|\bTPD\b",
+            detail, re.IGNORECASE,
         ))
+        # Gemini free-tier errors frequently say "limit: 0" for a model that
+        # cannot be called in this project. No amount of retrying repairs it.
+        exhausted_free = (
+            provider == "Google Gemini"
+            and bool(re.search(
+                r"(?:limit|quota)[^\d]{0,24}0(?:\b|,)|free[_ -]?tier.*(?:limit|quota):?\s*0\b",
+                detail, re.IGNORECASE,
+            ))
+        )
+        if exhausted_free:
+            message += (
+                " Gemini báo hạn mức bằng 0 hoặc chưa được cấp quota cho model. "
+                "Đổi sang model Flash-Lite mà tài khoản hỗ trợ, xem Usage/Limits "
+                "trong Google AI Studio; chờ vài giây sẽ không khắc phục được."
+            )
         return RateLimitError(
             message, retry_after=_retry_seconds(response, detail),
-            can_retry=not daily,
+            can_retry=not (daily or exhausted_free),
         )
     return RuntimeError(message)
 
@@ -357,7 +378,7 @@ def _extract_text_parts(parts):
         if not isinstance(part, dict):
             continue
         kind = part.get("type", "text")
-        if kind not in ("text", "output_text"):
+        if kind not in ("text", "output_text") or part.get("thought") is True:
             continue
         value = part.get("text", "")
         if isinstance(value, str) and value.strip():
@@ -404,12 +425,19 @@ def _read_provider_answer(payload, kind, provider, model):
                 answer = payload["output_text"].strip()
     if answer:
         return answer
+    if kind == "gemini":
+        feedback = payload.get("promptFeedback") or {}
+        if isinstance(feedback, dict) and feedback.get("blockReason"):
+            raise RuntimeError(
+                f"Gemini từ chối nội dung: {feedback.get('blockReason')}. "
+                "Kiểm tra chính sách an toàn và nội dung yêu cầu."
+            )
 
     usage = payload.get("usage", {})
     completion = usage.get("completion_tokens") if isinstance(usage, dict) else None
     used = f", completion_tokens={completion}" if isinstance(completion, int) else ""
     desc = f"{provider} / {model}, finish_reason={finish_reason}{used}"
-    if finish_reason in ("length", "max_tokens"):
+    if finish_reason.lower() in ("length", "max_tokens", "max_output_tokens"):
         raise RuntimeError(
             f"API đã hết giới hạn token đầu ra trước khi sinh bản dịch ({desc}). "
             "Hãy tăng max completion tokens hoặc chọn model ít reasoning hơn."
@@ -419,7 +447,7 @@ def _read_provider_answer(payload, kind, provider, model):
             f"Model chỉ gửi lệnh gọi công cụ, không có văn bản để dịch ({desc}). "
             "Hãy chọn model chat tạo nội dung văn bản."
         )
-    if finish_reason in ("content_filter", "safety", "SAFETY"):
+    if finish_reason.lower() in ("content_filter", "safety", "blocklist", "prohibited_content"):
         raise RuntimeError(
             f"Nhà cung cấp chặn nội dung đầu ra ({desc}). "
             "Hãy kiểm tra nội dung và chính sách của model."
@@ -510,7 +538,7 @@ def generate_text(
     except requests.RequestException as exc:
         raise RuntimeError("Không kết nối được nhà cung cấp AI. Hãy kiểm tra Base URL và mạng.") from exc
     if not response.ok:
-        failure = _error(response, token)
+        failure = _error(response, token, provider)
         if provider == "Groq" and isinstance(failure, RateLimitError):
             if failure.can_retry:
                 groq_request_gate.cooldown(
@@ -550,7 +578,7 @@ def list_models(
                 "Hãy nhập Model ID do gateway cấp rồi dùng "
                 "'Kiểm tra kết nối API' để thử gửi một tin nhắn thực tế."
             )
-        raise _error(response, token)
+        raise _error(response, token, provider)
     try:
         obj = response.json()
     except ValueError as exc:
