@@ -32,6 +32,23 @@ st.set_page_config(page_title="LMT Studio Pro", page_icon="🎬", layout="wide")
 st.title("🎬 LMT Studio Pro")
 st.caption("Phụ đề YouTube • Dịch đa ngôn ngữ • Prompt hình ảnh • SEO • Thumbnail • Quản lý phiên")
 
+# Disable mouse-hover explanations throughout the app. Labels, click-based
+# controls (including advanced options), and screen-reader accessible names
+# remain unchanged.
+st.markdown(
+    """
+    <style>
+    [data-baseweb="tooltip"],
+    [role="tooltip"],
+    [data-testid="stTooltipContent"],
+    [data-testid="stTooltipHoverTarget"] {
+        display: none !important;
+    }
+    </style>
+    """,
+    unsafe_allow_html=True,
+)
+
 LANGUAGES = [
     "Tiếng Ba Lan", "Tiếng Anh", "Tiếng Pháp", "Tiếng Đức", "Tiếng Tây Ban Nha",
     "Tiếng Ý", "Tiếng Bồ Đào Nha", "Tiếng Hà Lan", "Tiếng Thụy Điển",
@@ -706,7 +723,6 @@ with st.sidebar:
                 key=f"open_saved_session_{saved_id}",
                 use_container_width=True,
                 type="primary" if saved_id == sid else "secondary",
-                help="Nhấn tên phiên để mở lại nội dung",
             ):
                 if saved_id != sid:
                     sync_form(sid)
@@ -717,7 +733,6 @@ with st.sidebar:
                 "Đổi tên",
                 key=f"edit_session_{saved_id}",
                 use_container_width=True,
-                help="Đổi tên phiên",
             ):
                 st.session_state["editing_session_id"] = (
                     None if st.session_state.get("editing_session_id") == saved_id else saved_id
@@ -728,7 +743,6 @@ with st.sidebar:
                 "Xóa",
                 key=f"delete_session_{saved_id}",
                 use_container_width=True,
-                help=f"Xóa riêng phiên {saved_record['name']}",
             ):
                 current_confirm = st.session_state.get("confirm_delete_session_id")
                 st.session_state["confirm_delete_session_id"] = (
@@ -804,7 +818,6 @@ with st.sidebar:
             type="password",
             key="supadata_api_key_input",
             placeholder="Nhập key nếu YouTube chặn trích xuất",
-            help="Chỉ gửi key cho api.supadata.ai để lấy phụ đề. Có thể cấu hình SUPADATA_API_KEY trong Streamlit Secrets.",
         )
         transcript_api_key = transcript_api_key_entered.strip() or backup_key_secret.strip()
         st.markdown("[🔗 Lấy API key phụ đề Supadata](https://supadata.ai/)")
@@ -820,7 +833,6 @@ with st.sidebar:
             "CHỌN NỀN TẢNG AI",
             list(PROVIDERS),
             key="api_provider",
-            help="Hỗ trợ các nhà cung cấp API dùng Chat Completions và Anthropic Messages.",
         )
         preset = PROVIDERS[provider]
         provider_id = provider
@@ -842,13 +854,6 @@ with st.sidebar:
             placeholder=("Token mới từ gateway" if provider == "Claude Gateway (AUTH_TOKEN)"
                          else "sk-ant-..." if provider == "Claude (Anthropic)" else
                          "Nhập API key riêng của nền tảng đã chọn"),
-            help=(
-                "Chỉ sử dụng token mới do gateway phát hành; không dùng token đã lộ trong ảnh."
-                if provider == "Claude Gateway (AUTH_TOKEN)" else
-                "API key của Claude lấy từ Anthropic Console (khác tài khoản chat Claude)."
-                if provider == "Claude (Anthropic)"
-                else "API key của nhà cung cấp; nếu có Supabase, cấu hình được mã hóa khi lưu."
-            ),
         )
         key = entered_key.strip() or stored_key.strip()
 
@@ -857,7 +862,6 @@ with st.sidebar:
             value=preset["base_url"],
             key=f"api_base_{provider_id}",
             placeholder="https://your-provider.com/v1",
-            help="Nhập gốc của API, ví dụ https://api.groq.com/openai/v1. Không thêm /chat/completions.",
         ).strip()
 
         model_widget_key = f"api_model_id_{provider_id}"
@@ -870,7 +874,6 @@ with st.sidebar:
             key=model_widget_key,
             placeholder=("Ví dụ: claude-sonnet-4-6" if provider == "Claude (Anthropic)"
                          else "Ví dụ: openai/gpt-oss-120b"),
-            help="Điền đúng model ID mà key của bạn được phép sử dụng.",
         ).strip()
 
         # Keep original third-party protocols and provider-specific actions
@@ -908,13 +911,11 @@ with st.sidebar:
                     "📡 Chuẩn API",
                     ["OpenAI Chat Completions", "Anthropic Messages"],
                     key=f"api_format_{provider_id}",
-                    help="OpenAI dùng /chat/completions; Anthropic dùng /messages.",
                 )
                 auth_label = st.selectbox(
                     "🔏 Kiểu xác thực",
                     ["Bearer Token", "x-api-key"],
                     key=f"api_auth_mode_{provider_id}",
-                    help="Dùng Bearer Token hoặc x-api-key theo tài liệu bên cấp API.",
                 )
                 api_format = {
                     "OpenAI Chat Completions": "chat",
@@ -994,8 +995,6 @@ with st.sidebar:
                     "⚡ Áp dụng cấu hình phù hợp gói miễn phí",
                     key=f"free_profile_{provider}",
                     use_container_width=True,
-                    help="Chỉ đặt lại Base URL và model của nhà cung cấp này; "
-                         "không xóa hoặc thay API key đã nhập.",
                 ):
                     st.session_state["_pending_free_provider"] = provider
                     _persist_and_rerun()
@@ -1252,7 +1251,6 @@ with st.expander("📄 Phụ đề dự phòng từ máy (.srt / .vtt / .txt)", 
         "Tải phụ đề khi YouTube chặn máy chủ",
         type=["txt", "srt", "vtt"],
         key=f"subtitle_fallback_upload_{sid}",
-        help="Đây là phương án dự phòng. File được dùng trực tiếp khi nhấn BẮT ĐẦU TẠO TOÀN BỘ.",
     )
     if uploaded_subtitle is not None:
         st.caption("✅ Đã chọn file. Khi bắt đầu, app sẽ ưu tiên file này và không gọi phụ đề YouTube.")
@@ -1266,7 +1264,6 @@ language = st.selectbox(
     LANGUAGES,
     index=LANGUAGES.index(lang_value) if lang_value in LANGUAGES else 0,
     key=f"field_{sid}_language",
-    help="Chọn ngôn ngữ dịch cho phiên hiện tại.",
 )
 session["language"] = language
 
