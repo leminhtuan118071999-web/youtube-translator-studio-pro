@@ -352,6 +352,38 @@ def archive_previous_session(session_id):
     return True
 
 
+def delete_saved_session(session_id):
+    """Delete exactly one session and cancel only its associated worker."""
+    if session_id not in st.session_state.workspaces:
+        return
+    removed_name = st.session_state.workspaces[session_id].get("name", "Phiên")
+    job = st.session_state.background_jobs.pop(session_id, None)
+    if job:
+        job["progress"].cancel()
+        job["future"].cancel()
+    del st.session_state.workspaces[session_id]
+    if not st.session_state.workspaces:
+        # Keep the app usable even after deleting its very last session.
+        new_id = uuid.uuid4().hex
+        st.session_state.saved_session_order += 1
+        new_record = blank_session("Phiên mới")
+        new_record["saved_order"] = st.session_state.saved_session_order
+        st.session_state.workspaces[new_id] = new_record
+    if st.session_state.selected_session == session_id:
+        remaining_id = max(
+            st.session_state.workspaces,
+            key=lambda key: st.session_state.workspaces[key].get("saved_order", 0),
+        )
+        st.session_state.selected_session = remaining_id
+        st.session_state["_open_session_next"] = remaining_id
+    if st.session_state.get("editing_session_id") == session_id:
+        st.session_state["editing_session_id"] = None
+    st.session_state["confirm_delete_session_id"] = None
+    st.session_state["_session_flash"] = (
+        f"🗑️ Đã xóa riêng phiên '{removed_name}'. Các phiên khác được giữ nguyên."
+    )
+
+
 def rename_saved_session(saved_id):
     """Persist a changed name immediately when the inline text field is edited."""
     if saved_id not in st.session_state.workspaces:
@@ -468,7 +500,7 @@ with st.sidebar:
     if not saved_sessions:
         st.caption("Chưa có phiên nào được bắt đầu. Bấm BẮT ĐẦU TẠO TOÀN BỘ trước khi tạo phiên mới.")
     for saved_id, saved_record in saved_sessions:
-        name_col, edit_col = st.columns([5, 1], gap="small")
+        name_col, edit_col, delete_col = st.columns([5, 1, 1], gap="small")
         with name_col:
             job = st.session_state.background_jobs.get(saved_id)
             if job and not job["future"].done():
@@ -505,6 +537,37 @@ with st.sidebar:
                     None if st.session_state.get("editing_session_id") == saved_id else saved_id
                 )
                 _persist_and_rerun()
+        with delete_col:
+            if st.button(
+                "🗑️",
+                key=f"delete_session_{saved_id}",
+                use_container_width=True,
+                help=f"Xóa riêng phiên {saved_record['name']}",
+            ):
+                current_confirm = st.session_state.get("confirm_delete_session_id")
+                st.session_state["confirm_delete_session_id"] = (
+                    None if current_confirm == saved_id else saved_id
+                )
+                _persist_and_rerun()
+        if st.session_state.get("confirm_delete_session_id") == saved_id:
+            st.warning(f"Xác nhận xóa phiên '{saved_record['name']}'? Thao tác này không thể hoàn tác.")
+            confirm_col, cancel_col = st.columns(2, gap="small")
+            with confirm_col:
+                if st.button(
+                    "✅ Xác nhận xóa",
+                    key=f"confirm_delete_{saved_id}",
+                    use_container_width=True,
+                ):
+                    delete_saved_session(saved_id)
+                    _persist_and_rerun()
+            with cancel_col:
+                if st.button(
+                    "Hủy",
+                    key=f"cancel_delete_{saved_id}",
+                    use_container_width=True,
+                ):
+                    st.session_state["confirm_delete_session_id"] = None
+                    st.rerun()
         if st.session_state.get("editing_session_id") == saved_id:
             st.text_input(
                 "Tên mới (nhấn Enter để lưu)",
