@@ -281,6 +281,40 @@ class BackgroundJobsTests(unittest.TestCase):
         api.assert_called_once()
         sleep.assert_not_called()
 
+    @patch("background_jobs.fetch_subtitles", return_value=("A short subtitle.", "English"))
+    @patch("background_jobs.generate_text")
+    def test_third_party_api_options_reach_all_background_requests(self, api, subs):
+        config = {
+            **self.config,
+            "provider": "API bên thứ ba (tùy chỉnh)",
+            "base_url": "https://example.net/v1",
+            "model": "third-party-model",
+            "api_format": "anthropic",
+            "auth_mode": "api_key",
+        }
+        def respond(_provider, _url, _model, _key, prompt, **kwargs):
+            self.assertEqual(_provider, "API bên thứ ba (tùy chỉnh)")
+            self.assertEqual(_url, "https://example.net/v1")
+            self.assertEqual(_model, "third-party-model")
+            self.assertEqual(kwargs, {
+                "api_format": "anthropic", "auth_mode": "api_key"
+            })
+            if "CHỈ xuất bản dịch" in prompt:
+                return "Dịch xong"
+            if "ĐÚNG 20 prompt" in prompt:
+                return json.dumps({"prompts": [f"Cảnh {i}" for i in range(20)]})
+            if "Soạn YouTube tiêu đề" in prompt:
+                return json.dumps({
+                    "title": "Tiêu đề", "description": "Mô tả",
+                    "tags": ["seo"]
+                })
+            self.fail("Unexpected request")
+        api.side_effect = respond
+        result = run_full_job(config, JobProgress())
+        self.assertTrue(result["ok"], result["error"])
+        self.assertGreaterEqual(api.call_count, 3)
+        self.assertEqual(result["fields"]["translated"], "Dịch xong")
+
     def test_cancel_does_not_touch_provider(self):
         progress = JobProgress()
         progress.cancel()
