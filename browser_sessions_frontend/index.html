@@ -25,17 +25,29 @@
       } catch (error) {
         report({ ok: false, message: "Trình duyệt đang chặn bộ nhớ cục bộ." });
       }
-    } else if (args.mode === "write") {
+    } else if (args.mode === "write" || args.mode === "remove") {
       try {
-        const value = args.payload;
-        if (typeof value !== "string") throw new Error("Snapshot missing");
-        if (window.localStorage.getItem(args.storageKey) !== value) {
-          window.localStorage.setItem(args.storageKey, value);
+        if (args.mode === "remove") {
+          // A Supabase account becomes the source of truth. Remove any stale
+          // anonymous browser snapshot after a confirmed session deletion.
+          window.localStorage.removeItem(args.storageKey);
+        } else {
+          const value = args.payload;
+          if (typeof value !== "string") throw new Error("Snapshot missing");
+          if (window.localStorage.getItem(args.storageKey) !== value) {
+            window.localStorage.setItem(args.storageKey, value);
+          }
         }
-        // Do not emit a value on successful writes, avoiding endless reruns.
+        // Acknowledge only destructive updates, preventing component rerun
+        // loops for ordinary autosaves. Each request has a unique revision.
+        if (args.revision) {
+          report({ ok: true, revision: args.revision });
+        }
       } catch (error) {
-        // Notify Streamlit only about a failure.
-        report({ ok: false, message: "Không thể lưu vào trình duyệt (đầy bộ nhớ hoặc bị chặn)." });
+        report({
+          ok: false, revision: args.revision || null,
+          message: "Không thể cập nhật bộ nhớ trình duyệt (đầy bộ nhớ hoặc bị chặn)."
+        });
       }
     }
     send("streamlit:setFrameHeight", { height: 0 });
