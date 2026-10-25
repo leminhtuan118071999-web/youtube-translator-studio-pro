@@ -108,6 +108,25 @@ class PersistentStoreTests(unittest.TestCase):
         self.assertNotEqual(a, c)
 
     @patch("persistent_store._request")
+    def test_publishable_key_is_not_sent_as_bearer(self, call):
+        self.secrets["SUPABASE_ANON_KEY"] = "sb_publishable_abc123"
+        call.return_value = {
+            "user": {"id": self.uid, "email": "me@example.com"},
+            "access_token": "fake-access",
+            "refresh_token": "fake-refresh",
+            "expires_in": 3600,
+        }
+        sign_in(self.secrets, "me@example.com", "password")
+        headers = call.call_args.args[2]
+        self.assertEqual(headers["apikey"], "sb_publishable_abc123")
+        self.assertNotIn("Authorization", headers)
+
+    def test_secret_key_cannot_bypass_row_security(self):
+        self.secrets["SUPABASE_ANON_KEY"] = "sb_secret_must_not_use"
+        with self.assertRaises(ValueError):
+            get_config(self.secrets)
+
+    @patch("persistent_store._request")
     def test_login_uses_auth_endpoint(self, call):
         call.return_value = {
             "user": {"id": self.uid, "email": "me@example.com"},
