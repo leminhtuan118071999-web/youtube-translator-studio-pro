@@ -728,6 +728,9 @@ with st.sidebar:
     st.divider()
     with st.expander("🔑 Cấu hình API đa nền tảng", expanded=False):
         st.caption("Các nền tảng: Groq • Gemini • OpenAI • Claude (Anthropic) • Claude Gateway • OpenRouter • DeepSeek • Together AI")
+        pending_provider = st.session_state.pop("_pending_api_provider", None)
+        if pending_provider in PROVIDERS:
+            st.session_state["api_provider"] = pending_provider
         provider = st.selectbox(
             "CHỌN NỀN TẢNG AI",
             list(PROVIDERS),
@@ -788,6 +791,39 @@ with st.sidebar:
             placeholder="https://your-provider.com/v1",
             help="Nhập gốc của API, ví dụ https://api.groq.com/openai/v1. Không thêm /chat/completions.",
         ).strip()
+
+        # A Claude Code gateway token uses Authorization: Bearer. The
+        # official Claude provider uses an Anthropic API-key header.
+        # Warn before sending credentials to the wrong kind of endpoint.
+        if (
+            provider == "Claude (Anthropic)"
+            and base_url.rstrip("/") != "https://api.anthropic.com/v1"
+        ):
+            st.warning(
+                "⚠️ Bạn đang chọn Claude API chính thức nhưng Base URL lại "
+                "là máy chủ tùy chỉnh. Nếu đây là ANTHROPIC_BASE_URL trong "
+                "Claude Code, hãy chuyển sang Claude Gateway (AUTH_TOKEN); "
+                "cách gửi token của hai lựa chọn khác nhau."
+            )
+            if st.button(
+                "🔁 Chuyển sang Claude Gateway",
+                key="switch_to_claude_gateway",
+                use_container_width=True,
+            ):
+                gateway = "Claude Gateway (AUTH_TOKEN)"
+                if not st.session_state.get(f"api_base_{gateway}"):
+                    st.session_state[f"api_base_{gateway}"] = base_url
+                # Do not copy possibly exposed/revoked credentials across modes.
+                # A fresh gateway token must be entered explicitly.
+                st.session_state["_pending_api_provider"] = gateway
+                _persist_and_rerun()
+        if provider == "Claude Gateway (AUTH_TOKEN)":
+            st.caption(
+                "ℹ️ Nhiều gateway chỉ hỗ trợ /v1/messages, không hỗ trợ "
+                "/v1/models. Quét model thất bại không đồng nghĩa với "
+                "không thể dịch. Nhập Model ID đúng rồi nhấn "
+                "'Kiểm tra kết nối API'."
+            )
 
         model_widget_key = f"api_model_id_{provider_id}"
         pending = st.session_state.pop(f"pending_model_{provider_id}", None)
