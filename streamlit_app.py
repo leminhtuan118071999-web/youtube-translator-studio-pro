@@ -727,7 +727,7 @@ with st.sidebar:
 
     st.divider()
     with st.expander("🔑 Cấu hình API đa nền tảng", expanded=False):
-        st.caption("Các nền tảng: Groq • Gemini • OpenAI • Claude (Anthropic) • OpenRouter • DeepSeek • Together AI")
+        st.caption("Các nền tảng: Groq • Gemini • OpenAI • Claude (Anthropic) • Claude Gateway • OpenRouter • DeepSeek • Together AI")
         provider = st.selectbox(
             "CHỌN NỀN TẢNG AI",
             list(PROVIDERS),
@@ -737,6 +737,19 @@ with st.sidebar:
         preset = PROVIDERS[provider]
         provider_id = provider
         secret_name = preset["secret"]
+        if provider == "Claude Gateway (AUTH_TOKEN)":
+            st.info(
+                "🔑 Dành cho dịch vụ gateway dùng ANTHROPIC_BASE_URL và "
+                "ANTHROPIC_AUTH_TOKEN trong Claude Code. Đây không phải API "
+                "Anthropic chính thức. Chỉ sử dụng máy chủ bạn tin tưởng vì "
+                "nội dung và token sẽ được gửi tới địa chỉ đó."
+            )
+            st.caption(
+                "Base URL: dùng ANTHROPIC_BASE_URL trong cấu hình Claude Code; "
+                "app sẽ thêm /v1/messages khi bạn nhập domain gốc. "
+                "Token: dùng token MỚI thay cho ANTHROPIC_AUTH_TOKEN đã lộ. "
+                "Model ID phải là model gateway thực sự hỗ trợ."
+            )
         if provider == "Claude (Anthropic)":
             st.info(
                 "🟣 Claude API chính thức: nhập API key từ Anthropic Console. "
@@ -751,12 +764,16 @@ with st.sidebar:
         except Exception:
             stored_key = ""
         entered_key = st.text_input(
-            "🔐 Claude API Key" if provider == "Claude (Anthropic)" else "🔐 API Key",
+            ("🔐 Gateway AUTH_TOKEN" if provider == "Claude Gateway (AUTH_TOKEN)"
+             else "🔐 Claude API Key" if provider == "Claude (Anthropic)" else "🔐 API Key"),
             key=f"api_key_{provider_id}",
             type="password",
-            placeholder=("sk-ant-..." if provider == "Claude (Anthropic)" else
+            placeholder=("Token mới từ gateway" if provider == "Claude Gateway (AUTH_TOKEN)"
+                         else "sk-ant-..." if provider == "Claude (Anthropic)" else
                          "Nhập API key riêng của nền tảng đã chọn"),
             help=(
+                "Chỉ sử dụng token mới do gateway phát hành; không dùng token đã lộ trong ảnh."
+                if provider == "Claude Gateway (AUTH_TOKEN)" else
                 "API key của Claude lấy từ Anthropic Console (khác tài khoản chat Claude)."
                 if provider == "Claude (Anthropic)"
                 else "API key của nhà cung cấp; nếu có Supabase, cấu hình được mã hóa khi lưu."
