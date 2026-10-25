@@ -152,8 +152,8 @@ class BackgroundJobsTests(unittest.TestCase):
         progress = JobProgress()
         result = run_full_job(self.config.copy(), progress)
         self.assertFalse(result["ok"])
-        self.assertIn("3 lần", result["error"])
-        self.assertEqual(api.call_count, 4)
+        self.assertIn("6 lần", result["error"])
+        self.assertEqual(api.call_count, 7)
         self.assertIn("source", result["fields"])
         self.assertNotIn("translated", result["fields"])
 
@@ -187,6 +187,37 @@ class BackgroundJobsTests(unittest.TestCase):
         self.assertTrue(result["ok"], result["error"])
         self.assertGreater(len(prompt_lengths), 3)
         self.assertLessEqual(max(prompt_lengths), 2600)
+
+    @patch("background_jobs.fetch_subtitles")
+    @patch("background_jobs.generate_text")
+    def test_split_translation_reassembles_all_chunks_in_order(self, ai, subs):
+        text = "This is a separate sentence for a longer video. " * 180
+        subs.return_value = (text, "English")
+        seen_chunks = []
+        def respond(_provider, _base, _model, _token, prompt):
+            if "CHỈ xuất bản dịch" in prompt:
+                index = len(seen_chunks) + 1
+                seen_chunks.append(prompt)
+                return f"Bản dịch phần {index}"
+            if "ĐÚNG 20 prompt" in prompt:
+                return json.dumps({"prompts": [f"Scene {i}" for i in range(20)]})
+            if "Soạn YouTube tiêu đề" in prompt:
+                return json.dumps({"title": "Title", "description": "Description", "tags": ["tag"]})
+            if "Summarize" in prompt or "Condense" in prompt:
+                return "Short summary of the whole story."
+            self.fail("Unexpected prompt")
+        ai.side_effect = respond
+        result = run_full_job(self.config.copy(), JobProgress())
+        self.assertTrue(result["ok"], result["error"])
+        self.assertGreater(len(seen_chunks), 2)
+        self.assertEqual(
+            result["fields"]["translated"],
+            "\\n\\n".join(
+                f"Bản dịch phần {idx}" for idx in range(1, len(seen_chunks) + 1)
+            ).replace("\\n", "\n")
+        )
+        # Groq never sends more than 2,200 source characters in one chunk.
+        self.assertTrue(all(len(prompt) < 2500 for prompt in seen_chunks))
 
     def test_cancel_does_not_touch_provider(self):
         progress = JobProgress()
