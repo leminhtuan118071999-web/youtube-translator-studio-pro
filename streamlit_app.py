@@ -12,14 +12,55 @@ if "prompts" not in st.session_state: st.session_state.prompts=""
 if "metadata" not in st.session_state: st.session_state.metadata=""
 with st.sidebar:
     key=st.text_input("Gemini API key",type="password")
-    model=st.text_input("Gemini model",value="gemini-2.5-flash")
+    model=st.text_input("Gemini model",value="gemini-3.8-flash",help="Thử gemini-3.5-flash-lite nếu model này không khả dụng với API key của bạn.")
     language=st.selectbox("Ngôn ngữ đích",["Tiếng Ba Lan","Tiếng Việt","Tiếng Anh","Tiếng Nhật","Tiếng Hàn","Tiếng Pháp","Tiếng Đức","Tiếng Tây Ban Nha"])
     st.caption("Cần Gemini API key riêng. Không lưu key vào GitHub.")
 def ai(prompt):
-    if not key: raise ValueError("Hãy nhập Gemini API key.")
-    r=requests.post("https://generativelanguage.googleapis.com/v1beta/models/"+model+":generateContent",headers={"x-goog-api-key":key},json={"contents":[{"parts":[{"text":prompt}]}]},timeout=180)
-    r.raise_for_status()
-    return "\n".join(x.get("text","") for x in r.json()["candidates"][0]["content"]["parts"])
+    if not key.strip():
+        raise ValueError("Bạn chưa nhập Gemini API key. Hãy mở thanh bên trái để nhập.")
+    name = model.strip()
+    if not re.fullmatch(r"[a-zA-Z0-9._-]+", name):
+        raise ValueError("Tên model không hợp lệ. Ví dụ: gemini-3.8-flash.")
+    url = "https://generativelanguage.googleapis.com/v1beta/models/" + name + ":generateContent"
+    try:
+        r = requests.post(
+            url,
+            headers={"x-goog-api-key": key.strip()},
+            json={"contents": [{"parts": [{"text": prompt}]}]},
+            timeout=180,
+        )
+    except requests.RequestException as exc:
+        raise RuntimeError("Không thể kết nối Gemini API. Kiểm tra mạng hoặc thử lại.") from exc
+    if not r.ok:
+        try:
+            error = r.json().get("error", {})
+            detail = error.get("message", "") or r.text[:400]
+            status = error.get("status", "UNKNOWN")
+        except (ValueError, AttributeError):
+            detail = r.text[:400]
+            status = "UNKNOWN"
+        detail = str(detail).replace(key.strip(), "[API KEY ĐÃ ẨN]")[:900]
+        raise RuntimeError(
+            f"Gemini báo lỗi HTTP {r.status_code} ({status}): {detail}. "
+            "Hãy kiểm tra Gemini API key và model trong thanh bên trái."
+        )
+    try:
+        data = r.json()
+        parts = data["candidates"][0]["content"]["parts"]
+        answer = "\n".join(part.get("text", "") for part in parts).strip()
+        if not answer:
+            raise ValueError("Phản hồi không có văn bản.")
+        return answer
+    except (KeyError, IndexError, TypeError, ValueError) as exc:
+        raise RuntimeError("Gemini đã phản hồi nhưng không trả về văn bản. Hãy kiểm tra nội dung yêu cầu.") from exc
+
+if st.sidebar.button("🧪 Kiểm tra kết nối Gemini"):
+    try:
+        answer = ai("Hãy chỉ trả lời: OK")
+        st.sidebar.success("Kết nối Gemini thành công! Phản hồi: " + answer[:80])
+    except Exception as exc:
+        st.sidebar.error(str(exc))
+
 def output(title,text):
     st.markdown("**"+title+"**")
     if text:
