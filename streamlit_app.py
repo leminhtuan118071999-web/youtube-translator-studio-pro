@@ -747,86 +747,6 @@ with st.sidebar:
         if pending_free == provider and provider in ("Groq", "Google Gemini"):
             st.session_state[f"api_model_id_{provider}"] = preset["model"]
             st.session_state[f"api_base_{provider}"] = preset["base_url"]
-        if provider == "Groq":
-            st.caption(
-                "🟡 GroqCloud (khác Grok của xAI). Gói miễn phí có giới hạn "
-                "token/phút và số yêu cầu/ngày. Model gợi ý: "
-                "openai/gpt-oss-20b; không bảo đảm chạy video dài mà không chờ."
-            )
-            st.markdown(
-                "[Xem hạn mức Groq](https://console.groq.com/settings/limits)"
-            )
-        elif provider == "Google Gemini":
-            st.info(
-                "💠 Gemini dùng API Google chính thức (generateContent), "
-                "xác thực x-goog-api-key. Model Flash-Lite tiết kiệm, "
-                "thích hợp thử nghiệm gói miễn phí. "
-                "Gói miễn phí vẫn giới hạn lượt gọi."
-            )
-            st.markdown(
-                "[Lấy Gemini API key tại Google AI Studio]"
-                "(https://aistudio.google.com/apikey) "
-                "· [Kiểm tra hạn mức](https://aistudio.google.com/usage)"
-            )
-        api_format = None
-        api_auth_mode = None
-        if provider == "API bên thứ ba (tùy chỉnh)":
-            st.info(
-                "🌐 Tự nhập API Key, Base URL và Model ID của dịch vụ bên thứ ba. "
-                "Chọn đúng chuẩn API và kiểu xác thực mà nhà cung cấp hướng dẫn."
-            )
-            format_label = st.selectbox(
-                "📡 Chuẩn API",
-                ["OpenAI Chat Completions", "Anthropic Messages"],
-                key=f"api_format_{provider_id}",
-                help="OpenAI dùng /chat/completions; Anthropic dùng /messages.",
-            )
-            auth_label = st.selectbox(
-                "🔏 Kiểu xác thực",
-                ["Bearer Token", "x-api-key"],
-                key=f"api_auth_mode_{provider_id}",
-                help="Dùng Bearer Token hoặc x-api-key theo tài liệu bên cấp API.",
-            )
-            api_format = {
-                "OpenAI Chat Completions": "chat",
-                "Anthropic Messages": "anthropic",
-            }[format_label]
-            api_auth_mode = {
-                "Bearer Token": "bearer", "x-api-key": "api_key",
-            }[auth_label]
-            st.caption(
-                "Ví dụ OpenAI-compatible: https://provider.example/v1. "
-                "Với Anthropic Messages, có thể dùng domain gốc "
-                "(app tự thêm /v1) hoặc Base URL đã có đường dẫn API. "
-                "Không thêm /chat/completions hay /messages vào Base URL."
-            )
-            st.warning(
-                "Chỉ kết nối dịch vụ HTTPS đáng tin cậy: API key và nội dung "
-                "video được gửi tới máy chủ bên thứ ba. "
-                "Quét model có thể không được hỗ trợ; có thể nhập Model ID thủ công."
-            )
-        if provider == "Claude Gateway (AUTH_TOKEN)":
-            st.info(
-                "🔑 Dành cho dịch vụ gateway dùng ANTHROPIC_BASE_URL và "
-                "ANTHROPIC_AUTH_TOKEN trong Claude Code. Đây không phải API "
-                "Anthropic chính thức. Chỉ sử dụng máy chủ bạn tin tưởng vì "
-                "nội dung và token sẽ được gửi tới địa chỉ đó."
-            )
-            st.caption(
-                "Base URL: dùng ANTHROPIC_BASE_URL trong cấu hình Claude Code; "
-                "app sẽ thêm /v1/messages khi bạn nhập domain gốc. "
-                "Token: dùng token MỚI thay cho ANTHROPIC_AUTH_TOKEN đã lộ. "
-                "Model ID phải là model gateway thực sự hỗ trợ."
-            )
-        if provider == "Claude (Anthropic)":
-            st.info(
-                "🟣 Claude API chính thức: nhập API key từ Anthropic Console. "
-                "Ứng dụng tự dùng Messages API, không cần Base URL tùy chỉnh."
-            )
-            st.markdown(
-                "[🔗 Lấy Claude API key tại Anthropic Console]"
-                "(https://platform.claude.com/settings/keys)"
-            )
         try:
             stored_key = str(st.secrets.get(secret_name, "") or "") if secret_name else ""
         except Exception:
@@ -857,50 +777,6 @@ with st.sidebar:
             help="Nhập gốc của API, ví dụ https://api.groq.com/openai/v1. Không thêm /chat/completions.",
         ).strip()
 
-        # A Claude Code gateway token uses Authorization: Bearer. The
-        # official Claude provider uses an Anthropic API-key header.
-        # Warn before sending credentials to the wrong kind of endpoint.
-        if (
-            provider == "Claude (Anthropic)"
-            and base_url.rstrip("/") != "https://api.anthropic.com/v1"
-        ):
-            st.warning(
-                "⚠️ Bạn đang chọn Claude API chính thức nhưng Base URL lại "
-                "là máy chủ tùy chỉnh. Nếu đây là ANTHROPIC_BASE_URL trong "
-                "Claude Code, hãy chuyển sang Claude Gateway (AUTH_TOKEN); "
-                "cách gửi token của hai lựa chọn khác nhau."
-            )
-            if st.button(
-                "🔁 Chuyển sang Claude Gateway",
-                key="switch_to_claude_gateway",
-                use_container_width=True,
-            ):
-                gateway = "Claude Gateway (AUTH_TOKEN)"
-                if not st.session_state.get(f"api_base_{gateway}"):
-                    st.session_state[f"api_base_{gateway}"] = base_url
-                # Do not copy possibly exposed/revoked credentials across modes.
-                # A fresh gateway token must be entered explicitly.
-                st.session_state["_pending_api_provider"] = gateway
-                _persist_and_rerun()
-        if provider == "Claude Gateway (AUTH_TOKEN)":
-            st.caption(
-                "ℹ️ Nhiều gateway chỉ hỗ trợ /v1/messages, không hỗ trợ "
-                "/v1/models. Quét model thất bại không đồng nghĩa với "
-                "không thể dịch. Nhập Model ID đúng rồi nhấn "
-                "'Kiểm tra kết nối API'."
-            )
-
-        if provider in ("Groq", "Google Gemini"):
-            if st.button(
-                "⚡ Áp dụng cấu hình phù hợp gói miễn phí",
-                key=f"free_profile_{provider}",
-                use_container_width=True,
-                help="Chỉ đặt lại Base URL và model của nhà cung cấp này; "
-                     "không xóa hoặc thay API key đã nhập.",
-            ):
-                st.session_state["_pending_free_provider"] = provider
-                _persist_and_rerun()
-
         model_widget_key = f"api_model_id_{provider_id}"
         pending = st.session_state.pop(f"pending_model_{provider_id}", None)
         if pending:
@@ -913,6 +789,133 @@ with st.sidebar:
                          else "Ví dụ: openai/gpt-oss-120b"),
             help="Điền đúng model ID mà key của bạn được phép sử dụng.",
         ).strip()
+
+        # Keep original third-party protocols and provider-specific actions
+        # without crowding the three fundamental API inputs above.
+        with st.popover("⚙️ Hướng dẫn và tùy chọn nâng cao", use_container_width=True):
+            if provider == "Groq":
+                st.caption(
+                    "🟡 GroqCloud (khác Grok của xAI). Gói miễn phí có giới hạn "
+                    "token/phút và số yêu cầu/ngày. Model gợi ý: "
+                    "openai/gpt-oss-20b; không bảo đảm chạy video dài mà không chờ."
+                )
+                st.markdown(
+                    "[Xem hạn mức Groq](https://console.groq.com/settings/limits)"
+                )
+            elif provider == "Google Gemini":
+                st.info(
+                    "💠 Gemini dùng API Google chính thức (generateContent), "
+                    "xác thực x-goog-api-key. Model Flash-Lite tiết kiệm, "
+                    "thích hợp thử nghiệm gói miễn phí. "
+                    "Gói miễn phí vẫn giới hạn lượt gọi."
+                )
+                st.markdown(
+                    "[Lấy Gemini API key tại Google AI Studio]"
+                    "(https://aistudio.google.com/apikey) "
+                    "· [Kiểm tra hạn mức](https://aistudio.google.com/usage)"
+                )
+            api_format = None
+            api_auth_mode = None
+            if provider == "API bên thứ ba (tùy chỉnh)":
+                st.info(
+                    "🌐 Tự nhập API Key, Base URL và Model ID của dịch vụ bên thứ ba. "
+                    "Chọn đúng chuẩn API và kiểu xác thực mà nhà cung cấp hướng dẫn."
+                )
+                format_label = st.selectbox(
+                    "📡 Chuẩn API",
+                    ["OpenAI Chat Completions", "Anthropic Messages"],
+                    key=f"api_format_{provider_id}",
+                    help="OpenAI dùng /chat/completions; Anthropic dùng /messages.",
+                )
+                auth_label = st.selectbox(
+                    "🔏 Kiểu xác thực",
+                    ["Bearer Token", "x-api-key"],
+                    key=f"api_auth_mode_{provider_id}",
+                    help="Dùng Bearer Token hoặc x-api-key theo tài liệu bên cấp API.",
+                )
+                api_format = {
+                    "OpenAI Chat Completions": "chat",
+                    "Anthropic Messages": "anthropic",
+                }[format_label]
+                api_auth_mode = {
+                    "Bearer Token": "bearer", "x-api-key": "api_key",
+                }[auth_label]
+                st.caption(
+                    "Ví dụ OpenAI-compatible: https://provider.example/v1. "
+                    "Với Anthropic Messages, có thể dùng domain gốc "
+                    "(app tự thêm /v1) hoặc Base URL đã có đường dẫn API. "
+                    "Không thêm /chat/completions hay /messages vào Base URL."
+                )
+                st.warning(
+                    "Chỉ kết nối dịch vụ HTTPS đáng tin cậy: API key và nội dung "
+                    "video được gửi tới máy chủ bên thứ ba. "
+                    "Quét model có thể không được hỗ trợ; có thể nhập Model ID thủ công."
+                )
+            if provider == "Claude Gateway (AUTH_TOKEN)":
+                st.info(
+                    "🔑 Dành cho dịch vụ gateway dùng ANTHROPIC_BASE_URL và "
+                    "ANTHROPIC_AUTH_TOKEN trong Claude Code. Đây không phải API "
+                    "Anthropic chính thức. Chỉ sử dụng máy chủ bạn tin tưởng vì "
+                    "nội dung và token sẽ được gửi tới địa chỉ đó."
+                )
+                st.caption(
+                    "Base URL: dùng ANTHROPIC_BASE_URL trong cấu hình Claude Code; "
+                    "app sẽ thêm /v1/messages khi bạn nhập domain gốc. "
+                    "Token: dùng token MỚI thay cho ANTHROPIC_AUTH_TOKEN đã lộ. "
+                    "Model ID phải là model gateway thực sự hỗ trợ."
+                )
+            if provider == "Claude (Anthropic)":
+                st.info(
+                    "🟣 Claude API chính thức: nhập API key từ Anthropic Console. "
+                    "Ứng dụng tự dùng Messages API, không cần Base URL tùy chỉnh."
+                )
+                st.markdown(
+                    "[🔗 Lấy Claude API key tại Anthropic Console]"
+                    "(https://platform.claude.com/settings/keys)"
+                )
+            # A Claude Code gateway token uses Authorization: Bearer. The
+            # official Claude provider uses an Anthropic API-key header.
+            # Warn before sending credentials to the wrong kind of endpoint.
+            if (
+                provider == "Claude (Anthropic)"
+                and base_url.rstrip("/") != "https://api.anthropic.com/v1"
+            ):
+                st.warning(
+                    "⚠️ Bạn đang chọn Claude API chính thức nhưng Base URL lại "
+                    "là máy chủ tùy chỉnh. Nếu đây là ANTHROPIC_BASE_URL trong "
+                    "Claude Code, hãy chuyển sang Claude Gateway (AUTH_TOKEN); "
+                    "cách gửi token của hai lựa chọn khác nhau."
+                )
+                if st.button(
+                    "🔁 Chuyển sang Claude Gateway",
+                    key="switch_to_claude_gateway",
+                    use_container_width=True,
+                ):
+                    gateway = "Claude Gateway (AUTH_TOKEN)"
+                    if not st.session_state.get(f"api_base_{gateway}"):
+                        st.session_state[f"api_base_{gateway}"] = base_url
+                    # Do not copy possibly exposed/revoked credentials across modes.
+                    # A fresh gateway token must be entered explicitly.
+                    st.session_state["_pending_api_provider"] = gateway
+                    _persist_and_rerun()
+            if provider == "Claude Gateway (AUTH_TOKEN)":
+                st.caption(
+                    "ℹ️ Nhiều gateway chỉ hỗ trợ /v1/messages, không hỗ trợ "
+                    "/v1/models. Quét model thất bại không đồng nghĩa với "
+                    "không thể dịch. Nhập Model ID đúng rồi nhấn "
+                    "'Kiểm tra kết nối API'."
+                )
+
+            if provider in ("Groq", "Google Gemini"):
+                if st.button(
+                    "⚡ Áp dụng cấu hình phù hợp gói miễn phí",
+                    key=f"free_profile_{provider}",
+                    use_container_width=True,
+                    help="Chỉ đặt lại Base URL và model của nhà cung cấp này; "
+                         "không xóa hoặc thay API key đã nhập.",
+                ):
+                    st.session_state["_pending_free_provider"] = provider
+                    _persist_and_rerun()
 
         if st.button("🔎 Quét Model từ API", use_container_width=True, key=f"scan_{provider_id}"):
             try:
