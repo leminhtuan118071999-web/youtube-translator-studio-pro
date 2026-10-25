@@ -47,7 +47,7 @@ Tài liệu tích hợp Supadata: https://github.com/supadata-ai/skills/blob/mai
 
 - Nhấn **🚀 BẮT ĐẦU TẠO TOÀN BỘ** để tạo tác vụ chạy nền; ứng dụng **trả lại giao diện ngay** thay vì giữ người dùng ở trang chờ.
 - Trong lúc phiên A đang chạy (⏳ kèm phần trăm), nhấn **➕ Tạo phiên mới** rồi nhập URL cho phiên B và bắt đầu tiếp; công việc của A tiếp tục trên luồng riêng.
-- **📚 Danh sách phiên đã chạy** hiển thị phiên đang chạy (⏳), hoàn thành (✅) và **mọi phiên đã chạy nhưng lỗi (⚠️), kể cả khi chưa lấy được phụ đề hoặc chưa có bản dịch**. Nhấn tên để xem kết quả và thông báo lỗi; nhấn ✏️ để đổi tên.
+- **📚 Danh sách phiên đã chạy** hiển thị phiên đang chạy (⏳), hoàn thành (✅) và **mọi phiên đã chạy nhưng lỗi (⚠️), kể cả khi chưa lấy được phụ đề hoặc chưa có bản dịch**. Nhấn tên để xem kết quả và thông báo lỗi; nhấn ✏️ để đổi tên hoặc 🗑️ để xóa riêng phiên đó, có bước xác nhận.
 - Sau khi API xử lý xong, kết quả của đúng phiên đó sẽ tự được đưa vào dữ liệu phiên và danh sách tự cập nhật. Có thể mở lại để copy bản dịch, 20 prompt, tiêu đề, mô tả, SEO.
 - Tối đa 3 tác vụ đồng thời trong một phiên kết nối; máy chủ chạy tối đa 3 luồng worker. Nút **Xóa tất cả phiên đã lưu** yêu cầu xác nhận, hủy các tác vụ chưa chạy và yêu cầu tác vụ đang chạy ngừng ở bước tiếp theo.
 - Nếu phụ đề hoặc API lỗi ở bất cứ bước nào, phiên vẫn giữ trong danh sách kèm lý do lỗi. Các phần đã xử lý thành công xuất hiện khi bạn mở lại phiên; có thể thử chạy lại. Worker chia sẻ kết quả từng bước với giao diện thay vì chỉ đến cuối mới lưu.
@@ -63,7 +63,7 @@ Ngay bên dưới là **📁 Quản lý phiên làm việc**:
 2. Khi đã nhấn **BẮT ĐẦU TẠO TOÀN BỘ**, phiên xuất hiện ngay là **⏳ đang chạy**. Sau khi hoàn tất hiện **✅**. Nếu lỗi ở bước đầu hoặc giữa quy trình, phiên vẫn hiển thị **⚠️**, đồng thời có thông báo nguyên nhân khi mở phiên. Phiên mới chưa bấm Bắt đầu không xuất hiện.
 3. Trong danh sách, **nhấn trực tiếp vào tên phiên** để xem lại phụ đề, bản dịch, prompt và SEO; **không có nút “Mở”**.
 4. Để đổi tên, nhấn **✏️** cạnh tên, nhập tên mới rồi nhấn Enter. Phiên đang hoạt động có dấu ✓.
-5. **🗑️ Xóa tất cả phiên đã lưu** chỉ thực thi sau khi tích xác nhận.
+5. Với mỗi phiên, nhấn **🗑️** bên cạnh tên rồi **✅ Xác nhận xóa** để xóa riêng phiên đó. Nếu phiên đang chạy, chỉ tác vụ của phiên bị xóa được yêu cầu dừng. **🗑️ Xóa tất cả phiên đã lưu** vẫn có xác nhận riêng.
 
 **Giới hạn:** Chưa cấu hình Supabase thì phiên chỉ được giữ trong kết nối Streamlit. Sau khi đăng nhập Supabase, các kết quả đã đồng bộ được lưu lâu dài. Công việc đang chạy vẫn có thể gián đoạn khi máy chủ khởi động lại.
 
@@ -80,14 +80,16 @@ Dữ liệu mỗi phiên được tách riêng: link YouTube, phụ đề gốc,
 
 ## ⏳ Tự động xử lý Groq HTTP 429 (giới hạn token/phút)
 
+**Đối với Groq GPT-OSS, 8.000 token/phút là hạn mức tổng của model, không phải số token cho mỗi đoạn.** App chia văn bản dài thành nhiều đoạn nhỏ (tối đa 2.200 ký tự nguồn mỗi đoạn với GPT-OSS), dịch tuần tự và ghép các đoạn theo đúng thứ tự. Các yêu cầu Groq dùng chung API key + model trên máy chủ được điều tiết theo ngân sách mềm 7.200 token trong cửa sổ 65 giây để giảm lỗi 429. Đây là ước tính bảo thủ, không thể đảm bảo khi cùng tài khoản còn gọi API từ bên ngoài, chạy nhiều máy chủ hoặc khi hạn mức thực khác 8.000 TPM. Nếu bị giới hạn, app vẫn ưu tiên thời gian chờ do Groq thông báo.
+
 Nếu Groq báo lỗi `429 Rate limit reached` và có thông báo `Please try again in 11.52s`, điều đó **không có nghĩa API key sai**. Model `openai/gpt-oss-120b` trên gói miễn phí có giới hạn 8.000 TPM (thời điểm tài liệu được tra cứu). Giới hạn mỗi tổ chức và mỗi model có thể thay đổi.
 
 Ứng dụng hiện:
-- Đọc `Retry-After` của Groq hoặc thời gian trong thông báo, cộng thời gian đệm, rồi **tự đợi và thử lại** yêu cầu vừa bị 429 (tối đa 3 lần thử lại). Trạng thái chờ xuất hiện trong tiến trình phiên.
+- Đọc `Retry-After` của Groq hoặc thời gian trong thông báo, cộng thời gian đệm, rồi **tự đợi và thử lại** yêu cầu vừa bị 429 (tối đa 6 lần thử lại). Trạng thái chờ xuất hiện trong tiến trình phiên.
 - Chia nhỏ phụ đề thành các đoạn ngắn hơn khi dùng Groq GPT-OSS. Các đoạn đã dịch thành công được giữ lại, không bắt đầu toàn bộ từ đầu khi một đoạn gặp 429.
 - Giảm `max_completion_tokens` của dịch từ 8.192 xuống 2.200 token, giữ 3.600 token khi tạo 20 prompt, và dùng tóm tắt phân tầng cho nội dung dài nhằm giảm đỉnh nhu cầu TPM.
 - Nếu vượt quota **theo ngày** (TPD/RPD), app dừng thử lại vô ích và hướng dẫn chờ hạn mức mới hoặc chọn model khác.
-- Nếu 3 lần thử lại vẫn bị giới hạn, phiên hiện ⚠️ cùng thông báo rõ ràng và giữ các kết quả đã xử lý được.
+- Nếu 6 lần thử lại vẫn bị giới hạn, phiên hiện ⚠️ cùng thông báo rõ ràng và giữ các kết quả đã xử lý được.
 
 Lưu ý: App **không thể tăng hạn mức thật** của Groq hay bảo đảm mọi video dài sẽ hoàn thành trong hạn mức miễn phí. Nếu cần xử lý nhanh nhiều video, chọn nhà cung cấp/model có hạn mức cao hơn hoặc nâng gói của nhà cung cấp. Tham khảo [Groq rate limits](https://console.groq.com/docs/rate-limits).
 
