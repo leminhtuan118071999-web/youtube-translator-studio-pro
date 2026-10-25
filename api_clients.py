@@ -38,6 +38,13 @@ PROVIDERS = {
         "secret": "ANTHROPIC_API_KEY",
         "kind": "anthropic",
     },
+    "Claude Gateway (AUTH_TOKEN)": {
+        "base_url": "",
+        "model": "claude-sonnet-4-6",
+        "secret": "",
+        "kind": "anthropic",
+        "auth": "bearer",
+    },
     "OpenRouter": {
         "base_url": "https://openrouter.ai/api/v1",
         "model": "openai/gpt-oss-120b",
@@ -144,13 +151,31 @@ def api_endpoint(base_url, kind, resource):
     return base + ("/chat/completions" if resource == "chat" else "/models")
 
 
-def api_headers(kind, token):
+def provider_base_url(provider, base_url):
+    """Claude Code-style gateways configure an API origin without /v1.
+
+    Convert the origin to the equivalent native Anthropic Messages API path.
+    If a gateway specifies an explicit API path, use that path unchanged.
+    """
+    if provider == "Claude Gateway (AUTH_TOKEN)":
+        raw = (base_url or "").strip().rstrip("/")
+        # A plain HTTPS origin must use /v1/messages for Anthropic Messages.
+        if not urlsplit(raw).path.strip("/"):
+            return raw + "/v1"
+    return base_url
+
+
+def api_headers(kind, token, auth_mode="api_key"):
     if kind == "anthropic":
-        return {
-            "x-api-key": token,
+        headers = {
             "anthropic-version": "2023-06-01",
             "Content-Type": "application/json",
         }
+        if auth_mode == "bearer":
+            headers["Authorization"] = "Bearer " + token
+        else:
+            headers["x-api-key"] = token
+        return headers
     return {"Authorization": "Bearer " + token, "Content-Type": "application/json"}
 
 
@@ -319,7 +344,8 @@ def generate_text(provider, base_url, model, api_key, prompt):
     if not model or len(model) > 180 or any(ch.isspace() for ch in model):
         raise ValueError("Hãy nhập Model ID chính xác (không chứa khoảng trắng).")
     kind = PROVIDERS[provider]["kind"]
-    endpoint = api_endpoint(base_url, kind, "chat")
+    auth_mode = PROVIDERS[provider].get("auth", "api_key")
+    endpoint = api_endpoint(provider_base_url(provider, base_url), kind, "chat")
     if kind == "anthropic":
         body = {
             "model": model, "max_tokens": 8192,
@@ -350,7 +376,7 @@ def generate_text(provider, base_url, model, api_key, prompt):
     if provider == "Groq":
         groq_request_gate.acquire(token, model, prompt)
     try:
-        response = _request("POST", endpoint, api_headers(kind, token), json=body)
+        response = _request("POST", endpoint, api_headers(kind, token, auth_mode), json=body)
     except requests.RequestException as exc:
         raise RuntimeError("Không kết nối được nhà cung cấp AI. Hãy kiểm tra Base URL và mạng.") from exc
     if not response.ok:
@@ -375,9 +401,10 @@ def list_models(provider, base_url, api_key):
     if not token:
         raise ValueError("Hãy nhập API key trước khi quét Model.")
     kind = PROVIDERS[provider]["kind"]
-    url = api_endpoint(base_url, kind, "models")
+    auth_mode = PROVIDERS[provider].get("auth", "api_key")
+    url = api_endpoint(provider_base_url(provider, base_url), kind, "models")
     try:
-        response = _request("GET", url, api_headers(kind, token))
+        response = _request("GET", url, api_headers(kind, token, auth_mode))
     except requests.RequestException as exc:
         raise RuntimeError("Không lấy được danh sách Model. Kiểm tra mạng và Base URL.") from exc
     if not response.ok:
