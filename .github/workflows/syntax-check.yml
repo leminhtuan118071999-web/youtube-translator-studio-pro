@@ -1,0 +1,14 @@
+name: Check Streamlit Python syntax
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+
+jobs:
+  python-syntax:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Check main app syntax
+        run: python -m py_compile streamlit_app.py
