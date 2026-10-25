@@ -341,8 +341,7 @@ def _error(response, token, provider=None):
     if response.status_code == 429:
         # Daily limits cannot be fixed by a short wait.
         daily = bool(re.search(
-            r"(?:requests|tokens) per day|\\bRPD\\b|\\bTPD\\b|daily quota"
-            r"|per[_ -]?day|\bRPD\b|\bTPD\b",
+            r"(?:requests|tokens) per day|daily quota|per[_ -]?day|\bRPD\b|\bTPD\b",
             detail, re.IGNORECASE,
         ))
         # Gemini free-tier errors frequently say "limit: 0" for a model that
