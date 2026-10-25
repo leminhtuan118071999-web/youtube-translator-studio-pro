@@ -771,132 +771,22 @@ with st.sidebar:
         "Nếu máy chủ khởi động lại, tác vụ nền có thể bị gián đoạn."
     )
 
-    st.divider()
-    with st.expander("💾 Lưu dữ liệu và sao lưu", expanded=False):
-        if CLOUD_ENABLED:
-            st.success("☁️ Lưu tự động theo tài khoản đăng nhập.")
-            st.caption(
-                f"Tài khoản: {st.session_state.cloud_auth.get('email', '')}. "
-                "Phiên, bản dịch và các cấu hình API được lưu lại. API key "
-                "được mã hóa trước khi gửi tới Supabase."
-            )
-            if st.button("💾 Lưu ngay", use_container_width=True):
-                try:
-                    _save_cloud_state(force=True)
-                    st.success("Đã đồng bộ dữ liệu lên tài khoản.")
-                except Exception as exc:
-                    st.error(f"Chưa lưu được: {exc}")
-            if st.button("🧪 Kiểm tra lưu và đọc lại từ Supabase", use_container_width=True):
-                try:
-                    # Verify the round trip with the signed-in user's token,
-                    # including encrypted provider keys, without revealing them.
-                    _save_cloud_state(force=True)
-                    remote_payload, remote_settings = load_user(
-                        _cloud_secrets(), _refresh_login()
-                    )
-                    expected_payload = backup_state(
-                        st.session_state.workspaces,
-                        st.session_state.selected_session,
-                        st.session_state.saved_session_order,
-                    )
-                    expected_settings = settings_from_widgets(st.session_state)
-                    if remote_payload is None:
-                        raise RuntimeError("Chưa tìm thấy dữ liệu phiên trong Supabase.")
-                    if snapshot_hash(remote_payload, remote_settings) != snapshot_hash(
-                        expected_payload, expected_settings
-                    ):
-                        raise RuntimeError(
-                            "Dữ liệu đọc lại không khớp bản vừa lưu. "
-                            "Hãy tránh chỉnh sửa cùng tài khoản trên nhiều tab."
-                        )
-                    st.success(
-                        "✅ Đã kiểm tra lưu và đọc lại thành công: "
-                        "đúng tài khoản, đúng các phiên và cấu hình API mã hóa."
-                    )
-                except Exception as exc:
-                    st.error(f"⚠️ Kiểm tra Supabase chưa đạt: {exc}")
-
-            if st.button("🚪 Đăng xuất", use_container_width=True):
-                try:
-                    _save_cloud_state(force=True)
-                except Exception as exc:
-                    st.error(f"Chưa thể lưu trước khi đăng xuất: {exc}")
-                else:
-                    for job in st.session_state.background_jobs.values():
-                        job["progress"].cancel()
-                        job["future"].cancel()
-                    st.session_state.clear()
-                    st.rerun()
-        else:
-            st.info(
-                "💾 Danh sách phiên tự lưu vào trình duyệt này và khôi phục "
-                "sau khi tải lại/mở lại app. Không lưu API key. "
-                "Để đồng bộ qua nhiều máy, hãy cấu hình Supabase."
-            )
-            st.caption(
-                "Lưu trong bộ nhớ cục bộ của trình duyệt, không đồng bộ "
-                "giữa thiết bị hay trình duyệt. Đừng xóa dữ liệu website "
-                "hoặc dùng chế độ ẩn danh nếu muốn giữ các phiên."
-            )
-            if st.session_state.get("_browser_restore_error"):
-                st.warning(st.session_state["_browser_restore_error"])
-            if st.session_state.get("_browser_save_error"):
-                st.warning(st.session_state["_browser_save_error"])
-        try:
-            portable = backup_state(
-                st.session_state.workspaces, st.session_state.selected_session,
-                st.session_state.saved_session_order
-            )
-            st.download_button(
-                "⬇️ Tải bản sao các phiên (.json)",
-                data=json.dumps(portable, ensure_ascii=False, indent=2),
-                file_name="youtube-studio-phien-da-luu.json",
-                mime="application/json",
-                use_container_width=True,
-                help="Không bao gồm API key. Nếu đã cấu hình Supabase, API key "
-                     "được lưu riêng trong dữ liệu mã hóa của tài khoản.",
-            )
-        except ValueError as exc:
-            st.error(str(exc))
-        imported_file = st.file_uploader(
-            "📂 Khôi phục danh sách phiên từ file JSON",
-            type=["json"], key="session_json_restore",
-        )
-        accept_replace = st.checkbox(
-            "Xác nhận thay thế danh sách phiên hiện tại khi khôi phục",
-            key="restore_confirm",
-        )
-        if st.button(
-            "♻️ Khôi phục dữ liệu",
-            disabled=not (imported_file and accept_replace),
-            use_container_width=True,
-        ):
-            if st.session_state.background_jobs:
-                st.warning("Hãy đợi các phiên đang chạy xong trước khi khôi phục.")
+    # Session content still auto-saves on every rerun via Supabase or
+    # local browser storage. Only the optional backup/import UI is removed.
+    # Keep cloud logout accessible outside the retired backup section.
+    if CLOUD_ENABLED:
+        st.divider()
+        if st.button("🚪 Đăng xuất", key="cloud_logout", use_container_width=True):
+            try:
+                _save_cloud_state(force=True)
+            except Exception as exc:
+                st.error(f"Chưa thể lưu trước khi đăng xuất: {exc}")
             else:
-                try:
-                    contents = imported_file.getvalue()
-                    if len(contents) > 7 * 1024 * 1024:
-                        raise ValueError("File sao lưu vượt giới hạn 7 MB.")
-                    parsed = normalize_sessions(
-                        json.loads(contents.decode("utf-8-sig"))
-                    )
-                    if not parsed["workspaces"]:
-                        raise ValueError("File sao lưu không có phiên hợp lệ.")
-                    st.session_state.workspaces = {
-                        ident: {**blank_session(rec.get("name", "Phiên cũ")), **rec}
-                        for ident, rec in parsed["workspaces"].items()
-                    }
-                    st.session_state.selected_session = parsed["selected_session"]
-                    st.session_state.saved_session_order = parsed["saved_session_order"]
-                    st.session_state["_cloud_saved_hash"] = ""
-                    _save_cloud_state(force=True)
-                    st.session_state["_session_flash"] = (
-                        "✅ Đã khôi phục các phiên từ bản sao lưu."
-                    )
-                    _persist_and_rerun()
-                except (ValueError, UnicodeError, TypeError, RuntimeError) as exc:
-                    st.error(f"Không khôi phục được: {exc}")
+                for job in st.session_state.background_jobs.values():
+                    job["progress"].cancel()
+                    job["future"].cancel()
+                st.session_state.clear()
+                st.rerun()
 
     st.divider()
     with st.expander("📥 Phụ đề YouTube dự phòng", expanded=False):
@@ -1507,9 +1397,9 @@ with tab_translate:
                 _persist_and_rerun()
             except Exception as exc:
                 st.error(str(exc))
-    st.subheader(f"🌍 Bản dịch hoàn chỉnh ({language})")
-    st.caption("📋 Nhấn biểu tượng sao chép góc phải khung bên dưới để Copy toàn bộ.")
-    output("📋 Copy toàn bộ bản dịch", session["translated"])
+    with st.expander(f"🌍 Bản dịch hoàn chỉnh ({language}) — Nhấn để xem toàn bộ", expanded=False):
+        st.caption("📋 Mở để đọc toàn bộ nội dung; nhấn biểu tượng sao chép để Copy đầy đủ.")
+        output("📋 Copy toàn bộ bản dịch", session["translated"])
 
 with tab_visual:
     if st.button("🎨 Tạo lại 20 prompt", key=f"prompts_{sid}"):
@@ -1559,8 +1449,8 @@ with tab_seo:
 
     st.subheader(f"🎬 Tiêu đề đã dịch ({language})")
     output("📋 Copy riêng tiêu đề", session.get("new_title", ""))
-    st.subheader(f"📝 Mô tả đã dịch ({language})")
-    output("📋 Copy riêng mô tả", session.get("new_description", ""))
+    with st.expander(f"📝 Mô tả đã dịch ({language}) — Nhấn để xem toàn bộ", expanded=False):
+        output("📋 Copy riêng mô tả", session.get("new_description", ""))
     st.subheader(f"🔎 Từ khóa SEO ({language})")
     output("📋 Copy riêng từ khóa SEO", session.get("seo_tags", ""))
     # Legacy SEO content remains viewable if a saved older session did
@@ -1585,7 +1475,7 @@ if not CLOUD_ENABLED and st.session_state.get("_browser_save_error"):
     st.warning(
         "⚠️ Không thể tự lưu danh sách phiên: "
         + st.session_state["_browser_save_error"]
-        + " Hãy tải bản sao lưu JSON tại mục 💾 Lưu dữ liệu và sao lưu."
+        + " Hãy giữ dữ liệu website hoặc bật Supabase để lưu phiên lâu dài."
     )
 if CLOUD_ENABLED:
     if st.session_state.get("_cloud_save_error"):
