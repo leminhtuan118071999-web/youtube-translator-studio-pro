@@ -7,7 +7,7 @@
 1. Ở thanh bên trái, chọn **🌍 Ngôn ngữ đích**, nhà cung cấp AI, Base URL, Model ID và nhập API key.
 2. Dán link YouTube vào ô **🔗 Dán link video YouTube** rồi nhấn **🚀 BẮT ĐẦU TẠO TOÀN BỘ**. Phụ đề gốc sẽ được xử lý nội bộ, không hiển thị ô nhập văn bản gốc.
 3. App tự động: tìm phụ đề thủ công hoặc phụ đề tự động có sẵn trên YouTube → dịch toàn bộ nội dung sang ngôn ngữ đích → tạo **20 prompt hình ảnh bằng ngôn ngữ đích** → tạo **tiêu đề, mô tả, từ khóa SEO bằng ngôn ngữ đích**.
-4. Sau khi chạy, app chỉ hiển thị nội dung đã được xử lý theo **ngôn ngữ đích** trong các tab kết quả. Các tab cho phép **Copy riêng** qua biểu tượng Copy trên khung nội dung (`st.code`): bản dịch đầy đủ, từng prompt 01–20, toàn bộ prompt, tiêu đề, mô tả, từ khóa SEO và cả bộ SEO. Có nút tải TXT bổ sung.
+4. Sau khi chạy, app chỉ hiển thị nội dung đã được xử lý theo **ngôn ngữ đích** trong các tab kết quả. Có nút Copy bản dịch đầy đủ, **Copy toàn bộ 20 prompt** (không còn danh sách Copy từng cảnh), và **Copy riêng tiêu đề, mô tả, từ khóa SEO** (không còn khối Copy gộp toàn bộ tiêu đề • mô tả • SEO). Có nút tải TXT bổ sung.
 5. Thanh tiến trình theo dõi các tác vụ nền đang chạy; có thể chuyển sang phiên mới trong lúc phiên cũ vẫn xử lý. Nếu API lỗi, dữ liệu một phần vẫn được giữ để có thể chạy lại riêng từng mục.
 
 **Giới hạn:** YouTube có thể chặn truy cập phụ đề, hoặc video không có phụ đề, khiến thao tác tự động thất bại; app không tự nhận dạng giọng nói cho video không có phụ đề. Chất lượng dịch/prompt/SEO phụ thuộc model và API key, có thể phát sinh phí.
