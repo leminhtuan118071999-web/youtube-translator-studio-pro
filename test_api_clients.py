@@ -5,6 +5,7 @@ from unittest.mock import Mock, patch
 from api_clients import (
     PROVIDERS,
     RateLimitError,
+    TransientProviderError,
     api_endpoint,
     generate_text,
     list_models,
@@ -376,6 +377,65 @@ class ApiClientTests(unittest.TestCase):
                           "openai/gpt-oss-120b", "secret-key", "Translate")
         self.assertAlmostEqual(error.exception.retry_after, 11.5)
         self.assertTrue(error.exception.can_retry)
+
+    @patch("api_clients.socket.getaddrinfo", return_value=PUBLIC_ADDR)
+    @patch("api_clients._request")
+    def test_gateway_502_is_retryable_transient_not_auth_failure(self, req, _dns):
+        response = Mock()
+        response.ok = False
+        response.status_code = 502
+        response.headers = {"retry-after": "5"}
+        response.json.return_value = {
+            "error": {"message": "Upstream service temporarily unavailable"}
+        }
+        req.return_value = response
+        with self.assertRaises(TransientProviderError) as raised:
+            generate_text(
+                "Claude Gateway (AUTH_TOKEN)", "https://proxy.example.com",
+                "claude-sonnet-4-6", "SECRET-REDACT", "Viết thử OK"
+            )
+        err = raised.exception
+        self.assertEqual(err.status_code, 502)
+        self.assertEqual(err.retry_after, 5)
+        self.assertIn("HTTP 502", str(err))
+        self.assertIn("upstream", str(err).lower())
+        self.assertNotIn("SECRET-REDACT", str(err))
+
+    @patch("api_clients.socket.getaddrinfo", return_value=PUBLIC_ADDR)
+    @patch("api_clients._request")
+    def test_gateway_503_504_are_transient(self, req, _dns):
+        for status in (503, 504):
+            response = Mock()
+            response.ok = False
+            response.status_code = status
+            response.headers = {}
+            response.json.return_value = {"error": {"message": "Service unavailable"}}
+            req.return_value = response
+            with self.subTest(code=status):
+                with self.assertRaises(TransientProviderError) as raised:
+                    generate_text(
+                        "Claude Gateway (AUTH_TOKEN)", "https://proxy.example.com",
+                        "claude-sonnet-4-6", "SECRET-REDACT", "OK"
+                    )
+                self.assertEqual(raised.exception.status_code, status)
+                self.assertIsNone(raised.exception.retry_after)
+
+    @patch("api_clients.socket.getaddrinfo", return_value=PUBLIC_ADDR)
+    @patch("api_clients._request")
+    def test_gateway_401_is_not_retried(self, req, _dns):
+        response = Mock()
+        response.ok = False
+        response.status_code = 401
+        response.headers = {}
+        response.json.return_value = {"error": {"message": "Invalid key"}}
+        req.return_value = response
+        with self.assertRaises(RuntimeError) as raised:
+            generate_text(
+                "Claude Gateway (AUTH_TOKEN)", "https://proxy.example.com",
+                "claude-sonnet-4-6", "SECRET-REDACT", "OK"
+            )
+        self.assertNotIsInstance(raised.exception, TransientProviderError)
+        self.assertIn("HTTP 401", str(raised.exception))
 
     @patch("api_clients.socket.getaddrinfo", return_value=PUBLIC_ADDR)
     @patch("api_clients._request")
