@@ -105,7 +105,7 @@ Nếu còn lỗi sau khi cập nhật, chọn model văn bản khác trong menu 
 
 **Giao diện thu gọn:** Thanh bên trái hiển thị hai mục đóng mặc định: **📥 Phụ đề YouTube dự phòng** và **🔑 Cấu hình API đa nền tảng**. Nhấn tiêu đề để mở khi cần nhập/sửa key, Base URL hoặc Model; nhấn lại để thu gọn. Các thông số đã nhập vẫn được dùng khi khung đóng, không cần giữ khung mở khi bấm **BẮT ĐẦU TẠO TOÀN BỘ**.
 
-App hỗ trợ lựa chọn **Groq, Google Gemini, OpenAI, OpenRouter, DeepSeek, Together AI, Anthropic Claude** hoặc **API tương thích OpenAI (tùy chỉnh)**.
+App hỗ trợ lựa chọn **Groq, Google Gemini, OpenAI, Claude (Anthropic), OpenRouter, DeepSeek, Together AI** hoặc **API tương thích OpenAI (tùy chỉnh)**. Mục **Claude (Anthropic)** nằm trong khung thu gọn **🔑 Cấu hình API đa nền tảng** ở thanh bên; chọn Claude để nhập API key chính thức từ [Anthropic Console](https://platform.claude.com/settings/keys). Claude dùng endpoint `https://api.anthropic.com/v1/messages` với model mặc định `claude-sonnet-4-6`. Dữ liệu Claude lưu dưới tên cũ *Anthropic Claude* được tự chuyển sang tên mới mà không làm mất API key.
 
 Tại thanh bên trái:
 
@@ -124,7 +124,7 @@ Tại thanh bên trái:
 | OpenRouter | `https://openrouter.ai/api/v1` |
 | DeepSeek | `https://api.deepseek.com` |
 | Together AI | `https://api.together.xyz/v1` |
-| Anthropic Claude | `https://api.anthropic.com/v1` |
+| Claude (Anthropic) | `https://api.anthropic.com/v1` |
 
 **Lưu ý:** Các dịch vụ OpenAI-compatible dùng endpoint chat completions; Anthropic dùng Messages API. Không phải mọi model đều hỗ trợ chức năng/dung lượng giống nhau. Quét model có thể không khả dụng trên một số server, nhưng vẫn có thể nhập thủ công. Base URL tùy chỉnh chỉ chấp nhận HTTPS công khai, chặn địa chỉ nội bộ và không tự theo chuyển hướng HTTP. Chỉ cung cấp API key cho máy chủ bạn tin tưởng vì key sẽ được gửi tới Base URL đã nhập. API có thể tính phí. Nếu app ở chế độ công khai và dùng key trong Secrets, cần bật hạn chế truy cập để tránh người khác sử dụng API của bạn.
 
