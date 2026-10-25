@@ -68,6 +68,24 @@ class StreamlitSmokeTests(unittest.TestCase):
         self.assertIn(app.session_state["selected_session"],
                       app.session_state["workspaces"])
 
+    def test_claude_provider_is_selectable_and_exposes_api_key(self):
+        app = self.app.run()
+        selector = next(
+            item for item in app.selectbox if item.label == "CHỌN NỀN TẢNG AI"
+        )
+        self.assertIn("Claude (Anthropic)", selector.options)
+        selector.set_value("Claude (Anthropic)")
+        app.run()
+        self.assertFalse(app.exception, [str(x.message) for x in app.exception])
+        self.assertEqual(app.session_state["api_provider"], "Claude (Anthropic)")
+        self.assertTrue(any(
+            item.label == "🔐 Claude API Key" for item in app.get("text_input")
+        ))
+        self.assertEqual(
+            app.session_state["api_model_id_Claude (Anthropic)"],
+            "claude-sonnet-4-6",
+        )
+
     def test_language_selector_is_next_to_start_action(self):
         app = self.app.run()
         self.assertFalse(app.exception, [str(exc.message) for exc in app.exception])
