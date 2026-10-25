@@ -329,12 +329,46 @@ class StreamlitSmokeTests(unittest.TestCase):
             sum(item.label == "🌍 Ngôn ngữ đích" for item in app.selectbox), 1
         )
 
-    def test_backup_section_is_visible_without_supabase(self):
+    def test_backup_section_removed_but_api_and_session_controls_remain(self):
         app = self.app.run()
         self.assertFalse(app.exception, [str(exc.message) for exc in app.exception])
         expanders = [exp.label for exp in app.get("expander")]
-        self.assertIn("💾 Lưu dữ liệu và sao lưu", expanders)
+        self.assertNotIn("💾 Lưu dữ liệu và sao lưu", expanders)
         self.assertIn("🔑 Cấu hình API đa nền tảng", expanders)
+        self.assertTrue(any(
+            btn.label == "➕ Tạo phiên mới" for btn in app.button
+        ))
+        self.assertFalse(any(
+            "bản sao các phiên" in btn.label.lower() for btn in app.button
+        ))
+
+    def test_translation_and_description_are_collapsed_but_keep_full_text(self):
+        app = self.app.run()
+        self.assertFalse(app.exception, [str(exc.message) for exc in app.exception])
+        sid = app.session_state["selected_session"]
+        app.session_state["workspaces"][sid]["translated"] = (
+            "Dòng dịch rất dài, đầy đủ không bị cắt. " * 12
+        )
+        app.session_state["workspaces"][sid]["new_description"] = (
+            "Mô tả video dài, đầy đủ không bị cắt. " * 12
+        )
+        app.run()
+        self.assertFalse(app.exception, [str(exc.message) for exc in app.exception])
+        panels = [
+            panel for panel in app.get("expander")
+            if panel.label.startswith(("🌍 Bản dịch hoàn chỉnh", "📝 Mô tả đã dịch"))
+        ]
+        self.assertEqual(len(panels), 2)
+        self.assertTrue(all("Nhấn để xem toàn bộ" in p.label for p in panels))
+        self.assertTrue(all(not p.expanded for p in panels))
+        self.assertEqual(
+            len(app.session_state["workspaces"][sid]["translated"]),
+            len("Dòng dịch rất dài, đầy đủ không bị cắt. " * 12),
+        )
+        self.assertEqual(
+            len(app.session_state["workspaces"][sid]["new_description"]),
+            len("Mô tả video dài, đầy đủ không bị cắt. " * 12),
+        )
 
 
 if __name__ == "__main__":
