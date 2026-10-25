@@ -66,6 +66,32 @@ class BackgroundJobsTests(unittest.TestCase):
         self.assertNotIn("prompts", result["fields"])
         self.assertIn("20", result["error"])
 
+    @patch("background_jobs.fetch_subtitles", return_value=("Subtitle from video.", "English"))
+    @patch("background_jobs.generate_text")
+    def test_live_checkpoints_available_before_job_finishes(self, api, subs):
+        def mock_ai(_provider, _url, _model, _key, prompt):
+            if "CHỈ xuất bản dịch" in prompt:
+                return "Przetłumaczony tekst"
+            if "ĐÚNG 20 prompt" in prompt:
+                return '{"prompts":["one scene only"]}'
+            self.fail("Unexpected prompt")
+        api.side_effect = mock_ai
+        progress = JobProgress()
+        response = run_full_job(self.config.copy(), progress)
+        self.assertFalse(response["ok"])
+        live = progress.partial_result()
+        self.assertEqual(live["source"], "Subtitle from video.")
+        self.assertEqual(live["translated"], "Przetłumaczony tekst")
+        self.assertNotIn("api_key", live)
+        self.assertNotIn(self.config["api_key"], repr(live))
+
+    def test_progress_snapshot_isolated_copy(self):
+        progress = JobProgress()
+        progress.publish("translated", "First part")
+        snapshot = progress.partial_result()
+        snapshot["translated"] = "not same as internal"
+        self.assertEqual(progress.partial_result()["translated"], "First part")
+
     def test_cancel_does_not_touch_provider(self):
         progress = JobProgress()
         progress.cancel()
