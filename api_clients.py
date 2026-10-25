@@ -16,15 +16,15 @@ from groq_pacing import groq_request_gate
 PROVIDERS = {
     "Groq": {
         "base_url": "https://api.groq.com/openai/v1",
-        "model": "openai/gpt-oss-120b",
+        "model": "openai/gpt-oss-20b",
         "secret": "GROQ_API_KEY",
         "kind": "chat",
     },
     "Google Gemini": {
-        "base_url": "https://generativelanguage.googleapis.com/v1beta/openai",
-        "model": "gemini-3.8-flash",
+        "base_url": "https://generativelanguage.googleapis.com/v1beta",
+        "model": "gemini-3.5-flash-lite",
         "secret": "GEMINI_API_KEY",
-        "kind": "chat",
+        "kind": "gemini",
     },
     "OpenAI": {
         "base_url": "https://api.openai.com/v1",
@@ -78,6 +78,39 @@ PROVIDERS = {
         "kind": "chat",
     },
 }
+
+
+def migrate_free_provider_settings(state):
+    """Upgrade only known legacy Gemini defaults; preserve custom API setups.
+
+    Groq's previously selected model is intentionally left untouched to avoid
+    replacing a user-selected model. The Free profile control is explicit.
+    """
+    old_gemini = "https://generativelanguage.googleapis.com/v1beta/openai"
+    old_model = "gemini-3.8-flash"
+    key = "api_base_Google Gemini"
+    if state.get(key, "").rstrip("/") == old_gemini:
+        state[key] = PROVIDERS["Google Gemini"]["base_url"]
+        model_key = "api_model_id_Google Gemini"
+        if state.get(model_key) == old_model:
+            state[model_key] = PROVIDERS["Google Gemini"]["model"]
+
+
+def gemini_generate_endpoint(base_url, model):
+    """Build a native Gemini URL without exposing a user-supplied path.
+
+    The model ID must be a single safe path segment (or models/<id>).
+    """
+    raw = (model or "").strip()
+    if raw.startswith("models/"):
+        raw = raw[7:]
+    if not re.fullmatch(r"[A-Za-z0-9][A-Za-z0-9._-]{0,120}", raw):
+        raise ValueError("Gemini Model ID không hợp lệ; dùng tên từ 'Quét Model'.")
+    url = validate_base_url(base_url)
+    if url.lower().endswith("/openai"):
+        # Old OpenAI-compatible base URL is not a native Gemini endpoint.
+        url = url[:-7]
+    return url + "/models/" + raw + ":generateContent"
 
 
 def migrate_claude_settings(state):
@@ -195,6 +228,8 @@ def provider_base_url(provider, base_url, kind=None):
 
 
 def api_headers(kind, token, auth_mode="api_key"):
+    if kind == "gemini":
+        return {"x-goog-api-key": token, "Content-Type": "application/json"}
     if kind == "anthropic":
         headers = {
             "anthropic-version": "2023-06-01",
@@ -407,8 +442,28 @@ def generate_text(
     model = (model or "").strip()
     if not model or len(model) > 180 or any(ch.isspace() for ch in model):
         raise ValueError("Hãy nhập Model ID chính xác (không chứa khoảng trắng).")
-    endpoint = api_endpoint(provider_base_url(provider, base_url, kind), kind, "chat")
-    if kind == "anthropic":
+    if kind == "gemini":
+        endpoint = gemini_generate_endpoint(base_url, model)
+    else:
+        endpoint = api_endpoint(provider_base_url(provider, base_url, kind), kind, "chat")
+    if kind == "gemini":
+        # Native Google API avoids OpenAI compatibility limitations.
+        # Keep test requests tiny and translation/prompt budgets bounded.
+        if len(prompt) <= 80:
+            output_tokens = 128
+        elif "ĐÚNG 20 prompt" in prompt:
+            output_tokens = 5200
+        elif "Summarize" in prompt or "Condense" in prompt:
+            output_tokens = 1100
+        elif "Soạn YouTube tiêu đề" in prompt:
+            output_tokens = 1800
+        else:
+            output_tokens = 3200
+        body = {
+            "contents": [{"role": "user", "parts": [{"text": prompt}]}],
+            "generationConfig": {"maxOutputTokens": output_tokens},
+        }
+    elif kind == "anthropic":
         # Claude/Gateway traffic should request only the output budget each
         # operation needs. A simple connectivity check must not reserve 8192
         # tokens on an upstream proxy for a two-letter response.
@@ -476,7 +531,10 @@ def list_models(
     token = (api_key or "").strip()
     if not token:
         raise ValueError("Hãy nhập API key trước khi quét Model.")
-    url = api_endpoint(provider_base_url(provider, base_url, kind), kind, "models")
+    model_base = base_url
+    if kind == "gemini" and model_base.rstrip("/").endswith("/openai"):
+        model_base = model_base.rstrip("/")[:-7]
+    url = api_endpoint(provider_base_url(provider, model_base, kind), kind, "models")
     try:
         response = _request("GET", url, api_headers(kind, token, selected_auth))
     except requests.RequestException as exc:
@@ -521,7 +579,15 @@ def list_models(
         if isinstance(item, str) and item.strip():
             models.append(item.strip())
         elif isinstance(item, dict):
-            value = item.get("id") or item.get("name")
+            if kind == "gemini":
+                methods = item.get("supportedGenerationMethods")
+                if isinstance(methods, list) and "generateContent" not in methods:
+                    continue
+                value = item.get("name") or item.get("baseModelId") or item.get("id")
+                if isinstance(value, str) and value.startswith("models/"):
+                    value = value[7:]
+            else:
+                value = item.get("id") or item.get("name")
             if isinstance(value, str) and value.strip():
                 models.append(value.strip())
     return sorted(set(models), key=str.casefold)[:300]
