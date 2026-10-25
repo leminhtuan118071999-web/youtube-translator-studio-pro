@@ -1,0 +1,101 @@
+<!doctype html>
+<html lang="vi">
+<head>
+  <meta charset="utf-8"/>
+  <meta name="viewport" content="width=device-width, initial-scale=1"/>
+  <style>
+    :root { color-scheme: light dark; }
+    * { box-sizing: border-box; }
+    html, body { width: 100%; height: 46px; padding: 0; margin: 0; overflow: hidden; background: transparent; }
+    body { display: flex; align-items: center; justify-content: flex-end; gap: 8px;
+           color: var(--text-color, #e6e8ec); font: 500 13px system-ui, sans-serif; }
+    button { cursor: pointer; min-height: 34px; padding: 6px 13px; border-radius: 8px;
+             color: inherit; font: 600 13px system-ui, sans-serif;
+             border: 1px solid var(--border-color, #84909e);
+             background: var(--secondary-background-color, rgba(127,127,127,.12)); }
+    button:hover:enabled { filter: brightness(1.13); }
+    button:focus-visible { outline: 2px solid #4da6ff; outline-offset: 2px; }
+    button:disabled { opacity: .43; cursor: not-allowed; }
+    #status { font-size: 12px; max-width: 260px; overflow: hidden; text-overflow: ellipsis;
+              white-space: nowrap; }
+    .ok { color: #20a568; }
+    .bad { color: #df5e60; }
+  </style>
+</head>
+<body>
+  <span id="status" role="status" aria-live="polite"></span>
+  <button id="copy" type="button" disabled>📋 Copy toàn bộ</button>
+  <script>
+  "use strict";
+  (function () {
+    let source = "";
+    let currentLabel = "📋 Copy toàn bộ";
+    const button = document.getElementById("copy");
+    const status = document.getElementById("status");
+    const send = (type, extras) => {
+      window.parent.postMessage({ isStreamlitMessage: true, type, ...extras }, "*");
+    };
+    function fallbackCopy(text) {
+      const area = document.createElement("textarea");
+      area.value = text;
+      area.readOnly = true;
+      area.style.position = "fixed";
+      area.style.top = "-10000px";
+      area.style.left = "0";
+      document.body.appendChild(area);
+      area.focus();
+      area.select();
+      let copied = false;
+      try { copied = document.execCommand("copy"); }
+      catch (_error) { copied = false; }
+      area.remove();
+      return copied;
+    }
+    button.addEventListener("click", async function () {
+      if (!source) return;
+      let copied = false;
+      try {
+        if (navigator.clipboard && navigator.clipboard.writeText) {
+          await navigator.clipboard.writeText(source);
+          copied = true;
+        }
+      } catch (_error) {
+        // Some browsers restrict clipboard-write in iframe components.
+      }
+      if (!copied) copied = fallbackCopy(source);
+      if (copied) {
+        status.textContent = "✅ Đã sao chép";
+        status.className = "ok";
+        button.textContent = "✅ Đã copy";
+      } else {
+        status.textContent = "Không thể sao chép; hãy mở mục để dùng biểu tượng Copy.";
+        status.className = "bad";
+        button.textContent = currentLabel;
+      }
+    });
+    window.addEventListener("message", function (event) {
+      const message = event.data;
+      if (!message || message.type !== "streamlit:render" || !message.args) return;
+      const args = message.args;
+      source = typeof args.text === "string" ? args.text : "";
+      currentLabel = typeof args.label === "string" ? args.label : "📋 Copy toàn bộ";
+      button.textContent = currentLabel;
+      button.disabled = !source;
+      button.setAttribute("aria-label", currentLabel);
+      status.textContent = "";
+      status.className = "";
+      const theme = args.theme || {};
+      for (const [key, property] of [
+        ["textColor", "--text-color"],
+        ["secondaryBackgroundColor", "--secondary-background-color"]
+      ]) {
+        if (theme[key]) document.documentElement.style.setProperty(property, theme[key]);
+      }
+      send("streamlit:setFrameHeight", { height: 46 });
+    });
+    send("streamlit:componentReady", { apiVersion: 1 });
+    send("streamlit:setFrameHeight", { height: 46 });
+  })();
+  </script>
+</body>
+</html>
