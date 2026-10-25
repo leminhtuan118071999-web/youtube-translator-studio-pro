@@ -1210,17 +1210,19 @@ if test_api:
         st.sidebar.error(str(exc))
 
 
-def output(title, text):
+def output(title, text, *, allow_download=False):
     st.markdown("**" + title + "**")
     if not text:
         st.caption("Chưa có nội dung.")
         return
-    # The code widget has a copy icon for copying its full, untruncated text.
+    # Every section keeps its built-in Copy icon; .txt download is restricted
+    # to the complete translation section.
     st.code(text, language=None, wrap_lines=True)
-    st.download_button(
-        "⬇️ Tải nội dung (.txt)", text, file_name="youtube-output.txt",
-        mime="text/plain", key=f"save_{sid}_{re.sub('[^a-z0-9]', '', title.lower())[:24]}"
-    )
+    if allow_download:
+        st.download_button(
+            "⬇️ Tải nội dung (.txt)", text, file_name="ban-dich-hoan-chinh.txt",
+            mime="text/plain", key=f"save_{sid}_translated"
+        )
 
 
 flash = st.session_state.pop("_session_flash", None)
@@ -1405,7 +1407,7 @@ with tab_translate:
     )
     with st.expander(f"🌍 Bản dịch hoàn chỉnh ({language}) — Nhấn để xem toàn bộ", expanded=False):
         st.caption("Nội dung đầy đủ; vẫn có thể Copy trong khung hoặc tải TXT.")
-        output("📋 Copy toàn bộ bản dịch", session["translated"])
+        output("📋 Copy toàn bộ bản dịch", session["translated"], allow_download=True)
 
 with tab_visual:
     if st.button("🎨 Tạo lại 20 prompt", key=f"prompts_{sid}"):
