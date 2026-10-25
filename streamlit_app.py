@@ -1,3 +1,4 @@
+import json
 import re
 import uuid
 from io import BytesIO
@@ -23,7 +24,7 @@ LANGUAGES = [
     "Tiếng Catalan", "Tiếng Basque", "Tiếng Wales", "Tiếng Luxembourg",
     "Tiếng Macedonia", "Tiếng Việt", "Tiếng Nhật", "Tiếng Hàn",
 ]
-FIELDS = ("url", "source", "title", "description", "translated", "prompts", "metadata", "language")
+FIELDS = ("url", "source", "title", "description", "translated", "prompts", "metadata", "language", "new_title", "new_description", "seo_tags")
 FORM_FIELDS = ("url", "source", "title", "description", "language")
 
 
@@ -32,6 +33,7 @@ def blank_session(name):
         "name": name, "url": "", "source": "", "title": "", "description": "",
         "translated": "", "prompts": "", "metadata": "", "language": "Tiếng Ba Lan",
         "saved": False, "processed": False, "saved_order": 0,
+        "new_title": "", "new_description": "", "seo_tags": "",
     }
 
 
@@ -348,6 +350,142 @@ def ai(prompt):
         return result
     except (KeyError, IndexError, TypeError, ValueError) as exc:
         raise RuntimeError("AI đã phản hồi nhưng chưa trả về văn bản. Thử đổi model hoặc thử lại.") from exc
+
+
+
+def fetch_best_transcript(video_id):
+    """Retrieve a real available subtitle track, including auto-generated captions."""
+    tracks = list(YouTubeTranscriptApi().list(video_id))
+    if not tracks:
+        raise ValueError("Video không có phụ đề để trích xuất.")
+    preferred = {"vi": 0, "en": 1, "pl": 2}
+    tracks.sort(key=lambda t: (bool(t.is_generated), preferred.get(t.language_code, 10)))
+    for track in tracks:
+        try:
+            segments = track.fetch()
+            content = " ".join(
+                str(segment.text).strip()
+                for segment in segments if getattr(segment, "text", "").strip()
+            ).strip()
+            if content:
+                return content, track.language
+        except Exception:
+            continue
+    raise ValueError("Không đọc được phụ đề. Video có thể đang bị YouTube hạn chế.")
+
+
+def split_script(text, size=5500):
+    """Keep every character, splitting near a sentence/space when possible."""
+    pieces = []
+    start = 0
+    while start < len(text):
+        end = min(start + size, len(text))
+        if end < len(text):
+            split_at = max(text.rfind("\n", start + size // 2, end),
+                           text.rfind(". ", start + size // 2, end))
+            if split_at > start:
+                end = split_at + 1
+        pieces.append(text[start:end])
+        start = end
+    return pieces
+
+
+def translate_full_script(source_text, target_language, report=None):
+    if not source_text.strip():
+        raise ValueError("Không có phụ đề hoặc văn bản đầu vào.")
+    if len(source_text) > 350000:
+        raise ValueError("Văn bản quá dài (trên 350.000 ký tự). Hãy chia thành nhiều video.")
+    pieces = split_script(source_text)
+    translated_parts = []
+    for idx, part in enumerate(pieces, start=1):
+        if report:
+            report(idx, len(pieces))
+        request = (
+            f"Dịch chính xác toàn bộ đoạn {idx}/{len(pieces)} sang {target_language}. "
+            "Giữ tên nhân vật, mạch truyện, lời thoại, dấu câu và các đoạn xuống dòng. "
+            "Viết tự nhiên như người bản xứ, không bỏ câu, không thêm tình tiết. "
+            "CHỈ xuất bản dịch, không ghi tiêu đề hay chú thích.\n\n" + part
+        )
+        translated_parts.append(ai(request))
+    return "\n\n".join(translated_parts)
+
+
+def story_overview(text):
+    """Represent the WHOLE long story for generation instead of truncating its ending."""
+    if len(text) <= 24000:
+        return text
+    blocks = split_script(text, 15000)
+    summaries = []
+    for index, part in enumerate(blocks, start=1):
+        summaries.append(ai(
+            "Summarize the specific characters, locations, chronological events and "
+            "visual details of this part in 180-280 words. Do not invent facts. "
+            f"Part {index}/{len(blocks)}:\n" + part
+        ))
+    return "\n".join(f"Phần {i}: {part}" for i, part in enumerate(summaries, 1))
+
+
+def load_json_answer(raw, expected):
+    left, right = raw.find("{"), raw.rfind("}")
+    if left < 0 or right < left:
+        raise ValueError("AI không trả về JSON đúng định dạng; hãy chạy lại mục này.")
+    try:
+        obj = json.loads(raw[left:right + 1])
+    except (ValueError, TypeError) as exc:
+        raise ValueError("AI trả JSON chưa hợp lệ. Hãy thử tạo lại mục này.") from exc
+    if not isinstance(obj, dict) or expected not in obj:
+        raise ValueError("Kết quả AI thiếu dữ liệu cần thiết; hãy thử lại.")
+    return obj
+
+
+def create_20_prompts(script, target_language):
+    brief = story_overview(script)
+    result = ai(
+        f"Hãy tạo CHÍNH XÁC 20 mô tả cảnh (image prompts) bằng {target_language}. "
+        "Mỗi cảnh bám đúng diễn biến câu chuyện từ đầu đến cuối, mô tả nhân vật nhất quán, "
+        "bối cảnh, ánh sáng, góc máy, cảm xúc, phong cách điện ảnh. "
+        "Không thêm chữ lên hình. Không bịa sự kiện. "
+        'CHỈ xuất một JSON object theo mẫu {"prompts":["cảnh 1",...,"cảnh 20"]}, '
+        "không thêm markdown hay lời dẫn.\nCâu chuyện:\n" + brief
+    )
+    data = load_json_answer(result, "prompts")
+    items = data["prompts"]
+    if not isinstance(items, list):
+        raise ValueError("AI trả về danh sách cảnh không hợp lệ.")
+    items = [str(value).strip() for value in items]
+    if len(items) != 20 or any(not value for value in items):
+        raise ValueError(f"AI mới trả về {len(items)}/20 cảnh hợp lệ. Hãy thử tạo lại.")
+    return items
+
+
+def create_target_metadata(script, original_title, original_description, target_language):
+    brief = story_overview(script)
+    result = ai(
+        f"Soạn nội dung YouTube chính xác và tự nhiên hoàn toàn bằng {target_language}. "
+        "Tiêu đề: nếu có tiêu đề gốc hãy dịch sát và diễn đạt hấp dẫn, không thêm tình tiết. "
+        "Mô tả: giữ đúng nhân vật, sự kiện, không bịa; dùng icon/emoji phù hợp vừa phải. "
+        "SEO: tạo 15 từ khóa thật liên quan bằng ngôn ngữ đích. "
+        'Chỉ trả JSON: {"title":"...", "description":"...", "tags":["...", "..."]}, '
+        "không markdown.\n"
+        f"Tiêu đề gốc: {original_title}\nMô tả gốc: {original_description}\n"
+        f"Nội dung video:\n{brief}"
+    )
+    data = load_json_answer(result, "title")
+    title = str(data.get("title", "")).strip()
+    description = str(data.get("description", "")).strip()
+    tags = data.get("tags", [])
+    tags = ", ".join(str(item).strip() for item in tags) if isinstance(tags, list) else str(tags).strip()
+    if not title or not description or not tags:
+        raise ValueError("AI trả về thiếu tiêu đề, mô tả hoặc từ khóa SEO.")
+    return title, description, tags
+
+
+def render_prompt_blocks(prompts):
+    for i, prompt in enumerate(prompts, start=1):
+        with st.expander(f"🎞️ Cảnh {i:02d}", expanded=(i == 1)):
+            st.caption(f"📋 Sao chép cảnh {i:02d} bằng biểu tượng Copy trong khung.")
+            st.code(prompt, language=None, wrap_lines=True)
+
 
 
 if test_api:
