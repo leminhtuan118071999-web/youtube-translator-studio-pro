@@ -7,10 +7,11 @@
 Đầu thanh bên trái là **🌍 Ngôn ngữ đích**, đã mở rộng thêm tiếng Ý, Bồ Đào Nha, Hà Lan, Thụy Điển, Séc, Romania, Hungary, Ukraine và nhiều ngôn ngữ châu Âu khác. Mỗi phiên có ngôn ngữ đích riêng.
 
 Ngay bên dưới là **📁 Quản lý phiên làm việc**:
-1. Nhấn **➕ Tạo phiên mới** để tạo phiên trống. Phiên mới xuất hiện tự động trong danh sách.
-2. **🗑️ Xóa tất cả phiên đã lưu** (yêu cầu xác nhận) xóa mọi phiên đang lưu trong phiên truy cập hiện tại.
-3. **📚 Danh sách phiên đã lưu** nằm bên dưới: mỗi dòng gồm **ô tên có thể sửa trực tiếp** và nút **Mở**. Sửa tên rồi nhấn **Enter** để cập nhật; nhấn **Mở** để xem lại phụ đề, bản dịch, prompt và SEO của phiên. Phiên đang mở hiển thị **✓ Mở**.
-4. Không có menu **Chọn phiên**, nút mũi tên xổ xuống hay khối đổi tên riêng phía trên.
+1. Nhấn **➕ Tạo phiên mới** để tạo phiên trống. Phiên trống **không xuất hiện** trong danh sách.
+2. Sau khi **trích xuất phụ đề**, **nhập file TXT**, **dịch**, **tạo prompt** hoặc **tạo SEO** thành công, phiên tự động được đánh dấu đã chạy và xuất hiện tại **📚 Danh sách phiên đã chạy**. Các lần thử lỗi không được lưu.
+3. Trong danh sách, **nhấn trực tiếp vào tên phiên** để xem lại phụ đề, bản dịch, prompt và SEO; **không có nút “Mở”**.
+4. Để đổi tên, nhấn **✏️** cạnh tên, nhập tên mới rồi nhấn Enter. Phiên đang hoạt động có dấu ✓.
+5. **🗑️ Xóa tất cả phiên đã lưu** chỉ thực thi sau khi tích xác nhận.
 
 **Giới hạn lưu trữ:** Danh sách và dữ liệu của từng phiên được giữ bởi `st.session_state` trong kết nối Streamlit đang mở. Việc tạo/đổi tên **không đồng nghĩa với lưu vĩnh viễn**. Nếu đóng tab, tải lại thành một phiên kết nối mới hoặc máy chủ khởi động lại, dữ liệu có thể mất. Hiện app không có cơ sở dữ liệu người dùng hoặc đồng bộ cloud.
 
