@@ -138,6 +138,18 @@ Cấu hình riêng này được dùng xuyên suốt quá trình tạo bản d�
 
 **Bảo mật:** Chỉ nhập key từ dịch vụ bạn tin tưởng; app chặn Base URL không phải HTTPS công khai và không theo chuyển hướng. Không gửi key hoặc token vào ảnh chụp, GitHub hay đoạn chat. Token từng xuất hiện công khai cần được thu hồi trước khi dùng tiếp.
 
+## 🆓 Cấu hình Groq và Gemini trên gói miễn phí
+
+**Phân biệt Groq và Grok:** `Groq` là dịch vụ GroqCloud có model GPT-OSS, còn `Grok` là model của xAI. LMT Studio Pro có mục **Groq**; API key xAI không sử dụng thay cho API key Groq.
+
+Trong sidebar, mở **🔑 Cấu hình API đa nền tảng**:
+
+- **Groq (GroqCloud):** Lấy API key tại https://console.groq.com/keys, chọn Groq. Base URL `https://api.groq.com/openai/v1`; model khởi tạo mới `openai/gpt-oss-20b`. Model `openai/gpt-oss-120b` vẫn có thể sử dụng khi tài khoản được cấp quyền, nhưng free tier thường dễ đạt hạn mức 8.000 token/phút khi xử lý video dài. Groq áp dụng nhiều loại hạn mức (TPM, RPD, TPD); hãy đối chiếu https://console.groq.com/settings/limits.
+- **Gemini (Google AI Studio):** Tạo key tại https://aistudio.google.com/apikey, chọn Google Gemini. LMT Studio Pro dùng **API chính thức của Google** qua `https://generativelanguage.googleapis.com/v1beta`, gọi `models/{model}:generateContent` và header `x-goog-api-key`. Model mặc định `gemini-3.5-flash-lite` có Free Tier (mỗi tài khoản/dự án vẫn có giới hạn). Có thể dùng **🔎 Quét Model từ API** để lấy danh sách model được API key nhìn thấy. Kiểm tra https://aistudio.google.com/usage và https://ai.google.dev/gemini-api/docs/rate-limits.
+- Với tài khoản đã dùng app phiên bản cũ, bấm **⚡ Áp dụng cấu hình phù hợp gói miễn phí** để đặt lại đúng Base URL và model mới mà không xóa API key. Các cấu hình Gemini cũ sử dụng đúng Base URL mặc định `/v1beta/openai` được tự nâng sang API gốc; Base URL hoặc model tự nhập không bị thay thế ngoài trường hợp khớp chính xác giá trị mặc định cũ.
+
+**Cách thử:** Nhập key, chọn đúng model, bấm **🧪 Kiểm tra kết nối API** trước. HTTP 401/403: kiểm tra key và quyền API; HTTP 404: có thể sai Model ID; HTTP 429: đã vượt hạn mức. Nếu Gemini báo **limit: 0**, app sẽ giải thích quota miễn phí của model bằng 0 và ngừng tự thử lại vô ích; cần kiểm tra quyền dùng model/hạn mức ở Google AI Studio hoặc chọn model có quyền truy cập. **Không thể đảm bảo xử lý toàn bộ video dài mà không chạm hạn mức miễn phí**. Các lỗi do quota/key/quyền của dự án không thể sửa hoàn toàn bằng phần mềm, và ChatGPT Plus không bao gồm API trả phí của bên thứ ba.
+
 ## 🔑 Cấu hình API đa nền tảng
 
 **Giao diện thu gọn:** Thanh bên trái hiển thị hai mục đóng mặc định: **📥 Phụ đề YouTube dự phòng** và **🔑 Cấu hình API đa nền tảng**. Nhấn tiêu đề để mở khi cần nhập/sửa key, Base URL hoặc Model; nhấn lại để thu gọn. Các thông số đã nhập vẫn được dùng khi khung đóng, không cần giữ khung mở khi bấm **BẮT ĐẦU TẠO TOÀN BỘ**.
@@ -156,7 +168,7 @@ Tại thanh bên trái:
 | Nhà cung cấp | Base URL mặc định |
 |---|---|
 | Groq | `https://api.groq.com/openai/v1` |
-| Gemini (OpenAI-compatible) | `https://generativelanguage.googleapis.com/v1beta/openai` |
+| Gemini (Google API chính thức) | `https://generativelanguage.googleapis.com/v1beta` |
 | OpenAI | `https://api.openai.com/v1` |
 | OpenRouter | `https://openrouter.ai/api/v1` |
 | DeepSeek | `https://api.deepseek.com` |
