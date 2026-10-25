@@ -104,6 +104,31 @@ class StreamlitSmokeTests(unittest.TestCase):
             "claude-sonnet-4-6",
         )
 
+    def test_custom_url_under_official_claude_offers_gateway_switch(self):
+        app = self.app.run()
+        provider = next(item for item in app.selectbox if item.label == "CHỌN NỀN TẢNG AI")
+        provider.set_value("Claude (Anthropic)")
+        app.run()
+        base = next(
+            item for item in app.get("text_input")
+            if item.key == "api_base_Claude (Anthropic)"
+        )
+        base.set_value("https://gateway.example.com")
+        app.run()
+        self.assertFalse(app.exception, [str(x.message) for x in app.exception])
+        switch = next(
+            button for button in app.button
+            if button.key == "switch_to_claude_gateway"
+        )
+        switch.click()
+        app.run()
+        self.assertFalse(app.exception, [str(x.message) for x in app.exception])
+        self.assertEqual(app.session_state["api_provider"], "Claude Gateway (AUTH_TOKEN)")
+        self.assertEqual(
+            app.session_state["api_base_Claude Gateway (AUTH_TOKEN)"],
+            "https://gateway.example.com",
+        )
+
     def test_language_selector_is_next_to_start_action(self):
         app = self.app.run()
         self.assertFalse(app.exception, [str(exc.message) for exc in app.exception])
