@@ -6,13 +6,17 @@
 
 Đầu thanh bên trái là **🌍 Ngôn ngữ đích**, đã mở rộng thêm tiếng Ý, Bồ Đào Nha, Hà Lan, Thụy Điển, Séc, Romania, Hungary, Ukraine và nhiều ngôn ngữ châu Âu khác. Mỗi phiên có ngôn ngữ đích riêng.
 
-Ngay bên dưới là **📁 Quản lý phiên làm việc**. Giao diện được thu gọn chỉ còn **➕ Tạo phiên mới** và **🗑️ Xóa tất cả phiên đã lưu** (cần tích vào ô xác nhận trước khi xóa). **Danh sách phiên đã lưu**, tên phiên và các nút mở hoặc đổi tên phiên đều không còn hiển thị.
+Ngay bên dưới là **📁 Quản lý phiên làm việc**:
+1. Nhấn **➕ Tạo phiên mới** để tạo phiên trống. Phiên mới xuất hiện tự động trong danh sách.
+2. **🗑️ Xóa tất cả phiên đã lưu** (yêu cầu xác nhận) xóa mọi phiên đang lưu trong phiên truy cập hiện tại.
+3. **📚 Danh sách phiên đã lưu** nằm bên dưới: mỗi dòng gồm **ô tên có thể sửa trực tiếp** và nút **Mở**. Sửa tên rồi nhấn **Enter** để cập nhật; nhấn **Mở** để xem lại phụ đề, bản dịch, prompt và SEO của phiên. Phiên đang mở hiển thị **✓ Mở**.
+4. Không có menu **Chọn phiên**, nút mũi tên xổ xuống hay khối đổi tên riêng phía trên.
 
-**Giới hạn:** App vẫn giữ các phiên trong `st.session_state` khi kết nối còn mở, nhưng **không có giao diện mở lại phiên cũ** sau khi tạo phiên mới. Phiên cũng không được lưu vĩnh viễn khi đóng tab, đăng xuất hoặc Streamlit Cloud khởi động lại. Nếu muốn xem lại các phiên cũ, cần bổ sung lại cơ chế điều hướng hoặc lưu trữ.
+**Giới hạn lưu trữ:** Danh sách và dữ liệu của từng phiên được giữ bởi `st.session_state` trong kết nối Streamlit đang mở. Việc tạo/đổi tên **không đồng nghĩa với lưu vĩnh viễn**. Nếu đóng tab, tải lại thành một phiên kết nối mới hoặc máy chủ khởi động lại, dữ liệu có thể mất. Hiện app không có cơ sở dữ liệu người dùng hoặc đồng bộ cloud.
 
 Dữ liệu mỗi phiên được tách riêng: link YouTube, phụ đề gốc, bản dịch, tiêu đề, mô tả, prompt ảnh, nội dung SEO, ngôn ngữ dịch.
 
-**Lưu ý quan trọng:** Phiên đang được lưu bằng `st.session_state`, vì vậy chỉ được giữ trong kết nối Streamlit hiện tại. **Tên và nội dung phiên không được lưu vĩnh viễn khi đóng tab, đăng xuất hoặc máy chủ Streamlit khởi động lại.** Đây không phải lưu trữ cloud vĩnh viễn. Không có nút sao lưu JSON hay khôi phục trong giao diện tối giản này.
+
 
 ## Các phần khác được giữ nguyên
 
