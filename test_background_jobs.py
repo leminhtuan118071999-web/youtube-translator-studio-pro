@@ -3,7 +3,7 @@ import unittest
 from unittest.mock import patch
 
 from background_jobs import JobProgress, run_full_job, chunk_text, youtube_id, overview
-from api_clients import RateLimitError
+from api_clients import RateLimitError, TransientProviderError
 
 
 class BackgroundJobsTests(unittest.TestCase):
@@ -218,6 +218,68 @@ class BackgroundJobsTests(unittest.TestCase):
         )
         # Groq never sends more than 2,200 source characters in one chunk.
         self.assertTrue(all(len(prompt) < 2500 for prompt in seen_chunks))
+
+    @patch("background_jobs.time.sleep", return_value=None)
+    @patch("background_jobs.fetch_subtitles",
+           return_value=("A short real subtitle for translating.", "English"))
+    @patch("background_jobs.generate_text")
+    def test_gateway_502_retries_and_recovers_without_repeating_chunks(
+        self, api, subs, sleep
+    ):
+        config = {**self.config, "provider": "Claude Gateway (AUTH_TOKEN)"}
+        calls = {"translation": 0}
+        def server(_provider, _url, _model, _key, prompt):
+            if "CHỈ xuất bản dịch" in prompt:
+                calls["translation"] += 1
+                if calls["translation"] == 1:
+                    raise TransientProviderError(
+                        "HTTP 502: Upstream service temporarily unavailable",
+                        status_code=502, retry_after=2
+                    )
+                return "Translation done"
+            if "ĐÚNG 20 prompt" in prompt:
+                return json.dumps({"prompts": [f"Scene {i}" for i in range(20)]})
+            if "Soạn YouTube tiêu đề" in prompt:
+                return json.dumps({
+                    "title": "Title", "description": "Description", "tags": ["tag"]
+                })
+            self.fail("Unexpected request")
+        api.side_effect = server
+        result = run_full_job(config, JobProgress())
+        self.assertTrue(result["ok"], result["error"])
+        self.assertEqual(calls["translation"], 2)
+        self.assertEqual(result["fields"]["translated"], "Translation done")
+        self.assertGreater(sleep.call_count, 0)
+
+    @patch("background_jobs.time.sleep", return_value=None)
+    @patch("background_jobs.fetch_subtitles", return_value=("A short subtitle.", "English"))
+    @patch("background_jobs.generate_text")
+    def test_gateway_502_exhausts_three_retries_and_keeps_partial_source(
+        self, api, subs, sleep
+    ):
+        config = {**self.config, "provider": "Claude Gateway (AUTH_TOKEN)"}
+        api.side_effect = TransientProviderError(
+            "HTTP 502: upstream unavailable", status_code=502, retry_after=2
+        )
+        result = run_full_job(config, JobProgress())
+        self.assertFalse(result["ok"])
+        self.assertEqual(api.call_count, 4)
+        self.assertIn("502", result["error"])
+        self.assertIn("3 lần", result["error"])
+        self.assertEqual(result["fields"]["source"], "A short subtitle.")
+        self.assertNotIn("translated", result["fields"])
+
+    @patch("background_jobs.time.sleep", return_value=None)
+    @patch("background_jobs.fetch_subtitles", return_value=("A short subtitle.", "English"))
+    @patch("background_jobs.generate_text")
+    def test_gateway_401_does_not_retry(self, api, subs, sleep):
+        config = {**self.config, "provider": "Claude Gateway (AUTH_TOKEN)"}
+        api.side_effect = RuntimeError("HTTP 401: Invalid token")
+        result = run_full_job(config, JobProgress())
+        self.assertFalse(result["ok"])
+        self.assertIn("HTTP 401", result["error"])
+        api.assert_called_once()
+        sleep.assert_not_called()
 
     def test_cancel_does_not_touch_provider(self):
         progress = JobProgress()
