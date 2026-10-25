@@ -27,6 +27,47 @@ class StreamlitSmokeTests(unittest.TestCase):
         self.assertNotEqual(app.session_state["selected_session"], original)
         self.assertEqual(len(app.session_state["workspaces"]), 2)
 
+    def test_deleting_one_saved_session_preserves_other_sessions(self):
+        app = self.app.run()
+        first_id = app.session_state["selected_session"]
+        app.session_state["workspaces"][first_id]["processed"] = True
+        next(button for button in app.button
+             if button.label == "➕ Tạo phiên mới").click()
+        app.run()
+        second_id = app.session_state["selected_session"]
+        app.session_state["workspaces"][second_id]["processed"] = True
+        app.run()
+        next(button for button in app.button
+             if button.key == f"delete_session_{first_id}").click()
+        app.run()
+        self.assertIn(first_id, app.session_state["workspaces"])
+        self.assertTrue(any(
+            button.key == f"confirm_delete_{first_id}" for button in app.button
+        ))
+        next(button for button in app.button
+             if button.key == f"confirm_delete_{first_id}").click()
+        app.run()
+        self.assertFalse(app.exception, [str(x.message) for x in app.exception])
+        self.assertNotIn(first_id, app.session_state["workspaces"])
+        self.assertIn(second_id, app.session_state["workspaces"])
+
+    def test_deleting_last_session_keeps_app_operational(self):
+        app = self.app.run()
+        selected = app.session_state["selected_session"]
+        app.session_state["workspaces"][selected]["processed"] = True
+        app.run()
+        next(button for button in app.button
+             if button.key == f"delete_session_{selected}").click()
+        app.run()
+        next(button for button in app.button
+             if button.key == f"confirm_delete_{selected}").click()
+        app.run()
+        self.assertFalse(app.exception, [str(x.message) for x in app.exception])
+        self.assertNotIn(selected, app.session_state["workspaces"])
+        self.assertEqual(len(app.session_state["workspaces"]), 1)
+        self.assertIn(app.session_state["selected_session"],
+                      app.session_state["workspaces"])
+
     def test_language_selector_is_next_to_start_action(self):
         app = self.app.run()
         self.assertFalse(app.exception, [str(exc.message) for exc in app.exception])
