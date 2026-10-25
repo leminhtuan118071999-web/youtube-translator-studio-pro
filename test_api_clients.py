@@ -9,6 +9,7 @@ from api_clients import (
     generate_text,
     list_models,
     validate_base_url,
+    migrate_claude_settings,
 )
 
 
@@ -25,9 +26,43 @@ class ApiClientTests(unittest.TestCase):
 
     def test_known_providers_present(self):
         for name in ("Groq", "Google Gemini", "OpenAI", "OpenRouter",
-                     "DeepSeek", "Together AI", "Anthropic Claude",
+                     "DeepSeek", "Together AI", "Claude (Anthropic)",
                      "API tương thích OpenAI (tùy chỉnh)"):
             self.assertIn(name, PROVIDERS)
+
+    def test_claude_is_a_native_provider_with_current_default(self):
+        claude = PROVIDERS["Claude (Anthropic)"]
+        self.assertEqual(claude["kind"], "anthropic")
+        self.assertEqual(claude["base_url"], "https://api.anthropic.com/v1")
+        self.assertEqual(claude["model"], "claude-sonnet-4-6")
+        self.assertEqual(claude["secret"], "ANTHROPIC_API_KEY")
+
+    def test_previous_claude_keys_and_model_migrate(self):
+        state = {
+            "api_provider": "Anthropic Claude",
+            "api_key_Anthropic Claude": "sk-ant-sensitive-kept",
+            "api_base_Anthropic Claude": "https://api.anthropic.com/v1",
+            "api_model_id_Anthropic Claude": "claude-sonnet-4-5",
+            "api_key_Groq": "other-provider-unchanged",
+        }
+        migrate_claude_settings(state)
+        self.assertEqual(state["api_provider"], "Claude (Anthropic)")
+        self.assertEqual(state["api_key_Claude (Anthropic)"], "sk-ant-sensitive-kept")
+        self.assertEqual(state["api_model_id_Claude (Anthropic)"], "claude-sonnet-4-6")
+        self.assertNotIn("api_key_Anthropic Claude", state)
+        self.assertEqual(state["api_key_Groq"], "other-provider-unchanged")
+        migrate_claude_settings(state)
+        self.assertEqual(state["api_key_Claude (Anthropic)"], "sk-ant-sensitive-kept")
+
+    def test_migrate_respects_existing_new_claude_values(self):
+        state = {
+            "api_key_Anthropic Claude": "legacy",
+            "api_key_Claude (Anthropic)": "keep-current",
+            "api_model_id_Anthropic Claude": "claude-opus-4-5",
+        }
+        migrate_claude_settings(state)
+        self.assertEqual(state["api_key_Claude (Anthropic)"], "keep-current")
+        self.assertEqual(state["api_model_id_Claude (Anthropic)"], "claude-opus-4-5")
 
     @patch("api_clients.socket.getaddrinfo", return_value=PUBLIC_ADDR)
     def test_url_base_appends_chat_endpoint(self, _dns):
@@ -209,9 +244,9 @@ class ApiClientTests(unittest.TestCase):
             "content": [{"type": "text", "text": "Witaj świecie"}]
         }
         req.return_value = response
-        result = generate_text("Anthropic Claude",
-                               PROVIDERS["Anthropic Claude"]["base_url"],
-                               "claude-sonnet-4-5", "secret", "Translate")
+        result = generate_text("Claude (Anthropic)",
+                               PROVIDERS["Claude (Anthropic)"]["base_url"],
+                               "claude-sonnet-4-6", "secret", "Translate")
         self.assertEqual(result, "Witaj świecie")
         args, kwargs = req.call_args
         self.assertTrue(args[1].endswith("/messages"))
