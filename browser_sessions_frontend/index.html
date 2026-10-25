@@ -1,0 +1,49 @@
+<!DOCTYPE html>
+<html lang="vi">
+<head>
+  <meta charset="UTF-8"/>
+  <style>html,body{margin:0;padding:0;height:0;overflow:hidden;background:transparent;}</style>
+</head>
+<body>
+<script>
+"use strict";
+(function () {
+  const send = (type, fields = {}) => {
+    window.parent.postMessage({ isStreamlitMessage: true, type, ...fields }, "*");
+  };
+  function report(value) {
+    send("streamlit:setComponentValue", { value: value, dataType: "json" });
+  }
+  function onRender(evt) {
+    const message = evt.data;
+    if (!message || message.type !== "streamlit:render" || !message.args) return;
+    const args = message.args;
+    if (args.mode === "read") {
+      try {
+        const value = window.localStorage.getItem(args.storageKey);
+        report({ ok: true, value: value });
+      } catch (error) {
+        report({ ok: false, message: "Trình duyệt đang chặn bộ nhớ cục bộ." });
+      }
+    } else if (args.mode === "write") {
+      try {
+        const value = args.payload;
+        if (typeof value !== "string") throw new Error("Snapshot missing");
+        if (window.localStorage.getItem(args.storageKey) !== value) {
+          window.localStorage.setItem(args.storageKey, value);
+        }
+        // Do not emit a value on successful writes, avoiding endless reruns.
+      } catch (error) {
+        // Notify Streamlit only about a failure.
+        report({ ok: false, message: "Không thể lưu vào trình duyệt (đầy bộ nhớ hoặc bị chặn)." });
+      }
+    }
+    send("streamlit:setFrameHeight", { height: 0 });
+  }
+  window.addEventListener("message", onRender);
+  send("streamlit:componentReady", { apiVersion: 1 });
+  send("streamlit:setFrameHeight", { height: 0 });
+})();
+</script>
+</body>
+</html>
