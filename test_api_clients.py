@@ -16,6 +16,13 @@ PUBLIC_ADDR = [(socket.AF_INET, socket.SOCK_STREAM, 6, "", ("8.8.8.8", 443))]
 
 
 class ApiClientTests(unittest.TestCase):
+    def setUp(self):
+        # Exercise pacing independently in test_groq_pacing.py. These API
+        # parsing tests must not wait for a rolling TPM window.
+        gate = patch("api_clients.groq_request_gate")
+        self.mock_gate = gate.start()
+        self.addCleanup(gate.stop)
+
     def test_known_providers_present(self):
         for name in ("Groq", "Google Gemini", "OpenAI", "OpenRouter",
                      "DeepSeek", "Together AI", "Anthropic Claude",
