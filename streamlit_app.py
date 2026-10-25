@@ -229,22 +229,11 @@ if "_open_session_next" in st.session_state:
 collect_completed_jobs()
 
 with st.sidebar:
-    # Set the language for the currently selected session at the VERY TOP.
     sid = st.session_state.selected_session
     if sid not in st.session_state.workspaces:
         sid = next(iter(st.session_state.workspaces))
         st.session_state.selected_session = sid
     session = st.session_state.workspaces[sid]
-    lang_value = session.get("language", "Tiếng Ba Lan")
-    language = st.selectbox(
-        "🌍 Ngôn ngữ đích",
-        LANGUAGES,
-        index=LANGUAGES.index(lang_value) if lang_value in LANGUAGES else 0,
-        key=f"field_{sid}_language",
-        help="Chọn ngôn ngữ cho phiên đang mở; có thêm nhiều ngôn ngữ châu Âu.",
-    )
-    session["language"] = language
-    st.divider()
 
     st.header("📁 Quản lý phiên làm việc")
 
@@ -677,6 +666,17 @@ with st.expander("📄 Phụ đề dự phòng từ máy (.srt / .vtt / .txt)", 
         st.caption("✅ Đã chọn file. Khi bắt đầu, app sẽ ưu tiên file này và không gọi phụ đề YouTube.")
     else:
         st.caption("Có thể để trống nếu dùng YouTube trực tiếp hoặc dịch vụ phụ đề Supadata.")
+
+# Target language is chosen next to the generation controls, not the sidebar.
+lang_value = session.get("language", "Tiếng Ba Lan")
+language = st.selectbox(
+    "🌍 Ngôn ngữ đích",
+    LANGUAGES,
+    index=LANGUAGES.index(lang_value) if lang_value in LANGUAGES else 0,
+    key=f"field_{sid}_language",
+    help="Chọn ngôn ngữ dịch cho phiên hiện tại.",
+)
+session["language"] = language
 
 if st.button("🚀 BẮT ĐẦU TẠO TOÀN BỘ", type="primary",
              use_container_width=True, key=f"run_all_{sid}"):
