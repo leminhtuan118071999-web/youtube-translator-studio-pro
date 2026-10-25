@@ -16,10 +16,10 @@
 
 - Nhấn **🚀 BẮT ĐẦU TẠO TOÀN BỘ** để tạo tác vụ chạy nền; ứng dụng **trả lại giao diện ngay** thay vì giữ người dùng ở trang chờ.
 - Trong lúc phiên A đang chạy (⏳ kèm phần trăm), nhấn **➕ Tạo phiên mới** rồi nhập URL cho phiên B và bắt đầu tiếp; công việc của A tiếp tục trên luồng riêng.
-- **📚 Danh sách phiên đã chạy** hiển thị cả phiên đang chạy (⏳), hoàn thành (✅) và những phiên lỗi còn giữ kết quả một phần (⚠️). Nhấn tên để mở phiên; nhấn ✏️ để đổi tên.
+- **📚 Danh sách phiên đã chạy** hiển thị phiên đang chạy (⏳), hoàn thành (✅) và **mọi phiên đã chạy nhưng lỗi (⚠️), kể cả khi chưa lấy được phụ đề hoặc chưa có bản dịch**. Nhấn tên để xem kết quả và thông báo lỗi; nhấn ✏️ để đổi tên.
 - Sau khi API xử lý xong, kết quả của đúng phiên đó sẽ tự được đưa vào dữ liệu phiên và danh sách tự cập nhật. Có thể mở lại để copy bản dịch, 20 prompt, tiêu đề, mô tả, SEO.
 - Tối đa 3 tác vụ đồng thời trong một phiên kết nối; máy chủ chạy tối đa 3 luồng worker. Nút **Xóa tất cả phiên đã lưu** yêu cầu xác nhận, hủy các tác vụ chưa chạy và yêu cầu tác vụ đang chạy ngừng ở bước tiếp theo.
-- Nếu một bước API lỗi, phiên hiển thị trạng thái lỗi và những phần đã tạo thành công được giữ lại để xem hoặc chạy lại riêng.
+- Nếu phụ đề hoặc API lỗi ở bất cứ bước nào, phiên vẫn giữ trong danh sách kèm lý do lỗi. Các phần đã xử lý thành công xuất hiện khi bạn mở lại phiên; có thể thử chạy lại. Worker chia sẻ kết quả từng bước với giao diện thay vì chỉ đến cuối mới lưu.
 
 **Giới hạn kỹ thuật:** Đây là xử lý nền trong bộ nhớ của tiến trình Streamlit, **không phải hệ thống hàng đợi bền vững**. Phải giữ app/tab còn kết nối để danh sách phiên tự cập nhật; nếu tab đóng/tải lại thành kết nối mới, hoặc Streamlit Cloud ngủ/khởi động lại, công việc đang chạy và dữ liệu có thể mất. Không thể bảo đảm tác vụ tiếp tục khi máy chủ khởi động lại. Muốn chạy qua khởi động lại và lưu vĩnh viễn cần dịch vụ job queue/bộ nhớ lưu trữ riêng có xác thực.
 
@@ -29,7 +29,7 @@
 
 Ngay bên dưới là **📁 Quản lý phiên làm việc**:
 1. Nhấn **➕ Tạo phiên mới**: nếu phiên cũ đang xử lý, app **không dừng tác vụ cũ**; bạn có thể bắt đầu công việc khác. Khi phiên cũ hoàn thành, app tự lưu kết quả vào **📚 Danh sách phiên đã chạy** trong kết nối hiện tại. Phiên chưa chạy sẽ không vào danh sách.
-2. Khi đã nhấn **Bắt đầu tạo**, phiên sẽ xuất hiện là **⏳ đang chạy**. Sau khi hoàn tất hiện **✅**, nếu API lỗi sau một số bước thì có thể hiện **⚠️** và giữ kết quả đã tạo. Phiên mới chưa bắt đầu xử lý không xuất hiện.
+2. Khi đã nhấn **BẮT ĐẦU TẠO TOÀN BỘ**, phiên xuất hiện ngay là **⏳ đang chạy**. Sau khi hoàn tất hiện **✅**. Nếu lỗi ở bước đầu hoặc giữa quy trình, phiên vẫn hiển thị **⚠️**, đồng thời có thông báo nguyên nhân khi mở phiên. Phiên mới chưa bấm Bắt đầu không xuất hiện.
 3. Trong danh sách, **nhấn trực tiếp vào tên phiên** để xem lại phụ đề, bản dịch, prompt và SEO; **không có nút “Mở”**.
 4. Để đổi tên, nhấn **✏️** cạnh tên, nhập tên mới rồi nhấn Enter. Phiên đang hoạt động có dấu ✓.
 5. **🗑️ Xóa tất cả phiên đã lưu** chỉ thực thi sau khi tích xác nhận.
