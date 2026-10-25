@@ -1,6 +1,7 @@
 import json
 import re
 import uuid
+from concurrent.futures import ThreadPoolExecutor
 from io import BytesIO
 
 import requests
@@ -8,6 +9,7 @@ import streamlit as st
 from PIL import Image
 from youtube_transcript_api import YouTubeTranscriptApi
 from api_clients import PROVIDERS, generate_text, list_models, validate_base_url
+from background_jobs import JobProgress, run_full_job
 
 st.set_page_config(page_title="YouTube Translator Studio Pro", page_icon="🎬", layout="wide")
 st.title("🎬 YouTube Translator Studio Pro")
@@ -70,6 +72,16 @@ if "workspaces" not in st.session_state:
     st.session_state.workspaces = {first: record}
     st.session_state.selected_session = first
 
+if "background_jobs" not in st.session_state:
+    st.session_state.background_jobs = {}
+
+
+@st.cache_resource
+def get_job_executor():
+    # Shared worker pool only; job results stay attached to each Streamlit session.
+    return ThreadPoolExecutor(max_workers=3, thread_name_prefix="youtube-translation")
+
+
 # Existing workspaces may come from older versions; only completed work is saved.
 if "saved_session_order" not in st.session_state:
     st.session_state.saved_session_order = 0
@@ -97,6 +109,49 @@ def mark_session_processed(record):
         st.session_state.saved_session_order += 1
         record["saved_order"] = st.session_state.saved_session_order
     st.session_state["_session_flash"] = "✅ Đã đưa phiên xử lý thành công vào danh sách."
+
+
+def collect_completed_jobs():
+    """Apply worker results in the Streamlit script thread, never in a worker."""
+    changed = False
+    for session_id, job in list(st.session_state.background_jobs.items()):
+        future = job["future"]
+        if not future.done():
+            continue
+        changed = True
+        del st.session_state.background_jobs[session_id]
+        if session_id not in st.session_state.workspaces:
+            # The user explicitly cleared all sessions while this job was running.
+            continue
+        record = st.session_state.workspaces[session_id]
+        try:
+            outcome = future.result()
+        except Exception:
+            outcome = {"ok": False, "fields": {}, "error": "Tác vụ nền gặp lỗi không mong đợi."}
+        if record.get("job_run_id") != job["run_id"]:
+            continue
+        fields = outcome.get("fields", {})
+        for field, value in fields.items():
+            if field in FIELDS:
+                record[field] = value
+        if outcome.get("ok"):
+            record["job_state"] = "completed"
+            record["job_error"] = ""
+            mark_session_processed(record)
+            st.session_state["_session_flash"] = (
+                f"✅ Phiên '{record['name']}' đã xử lý xong và được lưu vào danh sách."
+            )
+        else:
+            record["job_state"] = "failed"
+            record["job_error"] = outcome.get("error", "Không rõ nguyên nhân.")
+            if any(str(record.get(k, "")).strip() for k in (
+                "source", "translated", "prompts", "metadata"
+            )):
+                mark_session_processed(record)
+            st.session_state["_session_flash"] = (
+                f"⚠️ Phiên '{record['name']}' gặp lỗi. Mở lại phiên để xem kết quả còn lại."
+            )
+    return changed
 
 
 def archive_previous_session(session_id):
@@ -173,6 +228,10 @@ with st.sidebar:
 
     if st.button("➕ Tạo phiên mới", use_container_width=True):
         old_name = session["name"]
+        still_running = (
+            sid in st.session_state.background_jobs
+            and not st.session_state.background_jobs[sid]["future"].done()
+        )
         was_archived = archive_previous_session(sid)
         newid = uuid.uuid4().hex
         st.session_state.saved_session_order += 1
@@ -180,7 +239,12 @@ with st.sidebar:
         new_session["saved_order"] = st.session_state.saved_session_order
         st.session_state.workspaces[newid] = new_session
         st.session_state["_open_session_next"] = newid
-        if was_archived:
+        if still_running:
+            st.session_state["_session_flash"] = (
+                f"⏳ Phiên '{old_name}' vẫn đang chạy nền. "
+                "Bạn có thể làm video mới; kết quả sẽ tự được lưu khi hoàn thành."
+            )
+        elif was_archived:
             st.session_state["_session_flash"] = (
                 f"✅ Đã lưu phiên '{old_name}' trong Danh sách phiên đã chạy. "
                 "Bạn có thể nhấn trực tiếp vào tên phiên để xem lại."
@@ -207,6 +271,11 @@ with st.sidebar:
         new_session = blank_session("Phiên 1")
         new_session["saved_order"] = 1
         st.session_state.saved_session_order = 1
+        # Cancel queued jobs; running requests may finish but their results are discarded.
+        for job in st.session_state.background_jobs.values():
+            job["progress"].cancel()
+            job["future"].cancel()
+        st.session_state.background_jobs = {}
         st.session_state.workspaces = {new_id: new_session}
         st.session_state["editing_session_id"] = None
         st.session_state["_open_session_next"] = new_id
@@ -225,6 +294,10 @@ with st.sidebar:
             (saved_id, saved_record)
             for saved_id, saved_record in st.session_state.workspaces.items()
             if saved_record.get("processed", False)
+            or (
+                saved_id in st.session_state.background_jobs
+                and not st.session_state.background_jobs[saved_id]["future"].done()
+            )
         ),
         key=lambda pair: pair[1].get("saved_order", 0),
         reverse=True,
@@ -234,7 +307,17 @@ with st.sidebar:
     for saved_id, saved_record in saved_sessions:
         name_col, edit_col = st.columns([5, 1], gap="small")
         with name_col:
-            label = f"📄 {saved_record['name']}" + (" ✓" if saved_id == sid else "")
+            job = st.session_state.background_jobs.get(saved_id)
+            if job and not job["future"].done():
+                pct, stage = job["progress"].snapshot()
+                status_icon = f" ⏳ {pct}%"
+            elif saved_record.get("job_state") == "completed":
+                status_icon = " ✅"
+            elif saved_record.get("job_state") == "failed":
+                status_icon = " ⚠️"
+            else:
+                status_icon = ""
+            label = f"📄 {saved_record['name']}{status_icon}" + (" ✓" if saved_id == sid else "")
             if st.button(
                 label,
                 key=f"open_saved_session_{saved_id}",
@@ -266,8 +349,9 @@ with st.sidebar:
                 args=(saved_id,),
             )
     st.caption(
-        f"{len(saved_sessions)} phiên đã chạy. "
-        "Các phiên chỉ được giữ trong kết nối Streamlit hiện tại."
+        f"{len(saved_sessions)} phiên đã chạy hoặc đang xử lý. "
+        "Có thể tạo phiên mới trong khi phiên cũ tiếp tục chạy. "
+        "Nếu máy chủ khởi động lại, tác vụ nền có thể bị gián đoạn."
     )
 
     st.divider()
