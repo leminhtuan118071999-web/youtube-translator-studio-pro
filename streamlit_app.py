@@ -108,26 +108,6 @@ with st.sidebar:
     st.divider()
 
     st.header("📁 Quản lý phiên làm việc")
-    st.caption(f"Đang làm việc: {session['name']}")
-
-    saved_name = st.text_input(
-        "✏️ Tên phiên (có thể đổi khi đang làm việc)",
-        value=session["name"],
-        key=f"saved_name_{sid}",
-        placeholder="Ví dụ: Video 01 - Tiếng Ba Lan",
-        help="Phiên đã tự lưu vào danh sách. Nhập tên mới rồi nhấn Đổi tên phiên.",
-    )
-    if st.button("✏️ Đổi tên phiên", use_container_width=True):
-        proposed = saved_name.strip()[:80]
-        if not proposed:
-            st.warning("Hãy nhập tên phiên.")
-        elif any(p["name"].casefold() == proposed.casefold() and k != sid
-                 for k, p in st.session_state.workspaces.items()):
-            st.warning("Tên phiên này đã tồn tại. Hãy đặt tên khác.")
-        else:
-            sync_form(sid)
-            session["name"] = proposed
-            st.rerun()
 
     if st.button("➕ Tạo phiên mới", use_container_width=True):
         sync_form(sid)
@@ -176,16 +156,48 @@ with st.sidebar:
     else:
         for saved_id, saved_record in saved_sessions:
             active_mark = " ✓" if saved_id == sid else ""
-            if st.button(
-                f"📄 {saved_record['name']}{active_mark}",
-                key=f"open_saved_session_{saved_id}",
-                use_container_width=True,
-                type="primary" if saved_id == sid else "secondary",
-            ):
-                if saved_id != sid:
-                    sync_form(sid)
-                    st.session_state["_open_session_next"] = saved_id
-                    st.rerun()
+            name_col, edit_col = st.columns([5, 1], gap="small")
+            with name_col:
+                if st.button(
+                    f"📄 {saved_record['name']}{active_mark}",
+                    key=f"open_saved_session_{saved_id}",
+                    use_container_width=True,
+                    type="primary" if saved_id == sid else "secondary",
+                ):
+                    if saved_id != sid:
+                        sync_form(sid)
+                        st.session_state["_open_session_next"] = saved_id
+                        st.rerun()
+            with edit_col:
+                with st.popover(
+                    "✏️",
+                    help="Đổi tên phiên ngay trong danh sách",
+                    use_container_width=True,
+                ):
+                    new_name = st.text_input(
+                        "Tên mới",
+                        value=saved_record["name"],
+                        key=f"rename_in_list_{saved_id}",
+                    )
+                    if st.button(
+                        "💾 Lưu tên",
+                        key=f"confirm_rename_{saved_id}",
+                        use_container_width=True,
+                    ):
+                        proposed = new_name.strip()[:80]
+                        if not proposed:
+                            st.warning("Hãy nhập tên phiên.")
+                        elif any(
+                            item["name"].casefold() == proposed.casefold()
+                            and other_id != saved_id
+                            for other_id, item in st.session_state.workspaces.items()
+                        ):
+                            st.warning("Tên phiên đã tồn tại. Hãy chọn tên khác.")
+                        else:
+                            if saved_id == sid:
+                                sync_form(sid)
+                            saved_record["name"] = proposed
+                            st.rerun()
         st.caption(f"{len(saved_sessions)} phiên • Mới tạo ở trên")
 
     st.caption("Dữ liệu các phiên được giữ trong phiên truy cập hiện tại; chưa tự lưu vĩnh viễn khi đóng app.")
