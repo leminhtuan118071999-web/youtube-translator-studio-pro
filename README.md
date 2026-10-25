@@ -9,7 +9,7 @@
 Ngay bên dưới là **📁 Quản lý phiên làm việc** (không có ô “Chọn phiên”):
 
 1. **Tự động lưu vào danh sách**: ngay khi app có phiên đầu tiên hoặc khi bấm **➕ Tạo phiên mới**, hệ thống đặt tên mặc định `Phiên 1`, `Phiên 2`… và thêm ngay vào **Danh sách phiên đã lưu**. Không cần bấm nút Lưu tên.
-2. **✏️ Tên phiên / Đổi tên phiên**: có thể đặt lại tên của phiên đang mở sau khi đã tạo hoặc sau khi chạy các chức năng. Nhập tên mới rồi bấm **✏️ Đổi tên phiên**; nội dung và kết quả đang có không bị mất.
+2. **✏️ Đổi tên trực tiếp trong danh sách**: không còn ô tên phiên hoặc nút đổi tên riêng phía trên. Tại từng dòng trong **Danh sách phiên đã lưu**, nhấn nút ✏️ bên cạnh tên, nhập tên mới và chọn **💾 Lưu tên**. Có thể đổi cả tên phiên đang mở hoặc phiên khác mà không làm mất nội dung.
 3. **➕ Tạo phiên mới**: tạo phiên trống mới, tách phụ đề, bản dịch, prompt và SEO.
 4. **🗑️ Xóa tất cả phiên đã lưu**: cần đánh dấu xác nhận trước khi xóa các phiên thuộc phiên truy cập hiện tại.
 5. **📚 Danh sách phiên đã lưu**: mới tạo ở trên; nhấn vào tên để mở lại toàn bộ nội dung của phiên. Phiên đang mở có dấu ✓.
