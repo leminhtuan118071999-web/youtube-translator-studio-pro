@@ -96,3 +96,26 @@ end $$;
 
 comment on table public.lmt_durable_jobs is
  'Durable background tasks with encrypted credentials, owner RLS and retry leases.';
+
+-- Heartbeat is read-only to signed-in users so the app can refuse to imply
+-- overnight processing when no independent worker has been deployed.
+create table if not exists public.lmt_worker_health (
+    name text primary key,
+    last_seen timestamptz not null default now(),
+    version text not null default '1'
+);
+alter table public.lmt_worker_health enable row level security;
+revoke all on public.lmt_worker_health from public, anon, authenticated;
+grant select on public.lmt_worker_health to authenticated;
+do $$
+begin
+    if not exists (
+        select 1 from pg_policies
+        where schemaname='public' and tablename='lmt_worker_health'
+          and policyname='LMT worker heartbeat: authenticated read'
+    ) then
+        create policy "LMT worker heartbeat: authenticated read"
+            on public.lmt_worker_health for select to authenticated
+            using (true);
+    end if;
+end $$;
