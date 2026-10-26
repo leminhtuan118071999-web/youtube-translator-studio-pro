@@ -15,6 +15,23 @@ class StreamlitSmokeTests(unittest.TestCase):
         self.app.session_state["_browser_sessions_restored"] = True
         self.app.session_state["_session_name_test_fallback"] = True
 
+    def test_unnecessary_completed_banner_and_session_count_caption_removed(self):
+        from pathlib import Path
+        source = Path("streamlit_app.py").read_text(encoding="utf-8")
+        self.assertNotIn(
+            "✅ Phiên đã hoàn thành. Có thể Copy các mục trong những tab kết quả.",
+            source,
+        )
+        self.assertNotIn("phiên đã chạy hoặc đang xử lý.", source)
+        self.assertNotIn(
+            "Có thể tạo phiên mới trong khi phiên cũ tiếp tục chạy.", source,
+        )
+        # Actual error and background-running status remain intact.
+        self.assertIn("⚠️ Phiên này chưa hoàn tất:", source)
+        self.assertIn("⏳ Phiên này đang xử lý:", source)
+        app = self.app.run()
+        self.assertFalse(app.exception, [str(exc.message) for exc in app.exception])
+
     def test_app_loads_and_can_create_new_session(self):
         app = self.app.run()
         self.assertFalse(app.exception, [str(exc.message) for exc in app.exception])
