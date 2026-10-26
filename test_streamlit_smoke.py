@@ -15,6 +15,30 @@ class StreamlitSmokeTests(unittest.TestCase):
         self.app.session_state["_browser_sessions_restored"] = True
         self.app.session_state["_session_name_test_fallback"] = True
 
+    def test_thumbnail_ai_panel_keeps_original_and_two_actions(self):
+        from pathlib import Path
+        code = Path("streamlit_app.py").read_text(encoding="utf-8")
+        panel = Path("thumbnail_ui.py").read_text(encoding="utf-8")
+        self.assertIn("render_thumbnail_ai(sid, vid, thumbnail if vid else None, language)", code)
+        self.assertIn("Tạo lại thumbnail gốc", panel)
+        self.assertIn("Dịch chữ trên thumbnail sang ngôn ngữ đích", panel)
+        self.assertIn("normalize_thumbnail(source)", panel)
+        self.assertIn("recognize_and_translate(", panel)
+        self.assertIn("edit_thumbnail(", panel)
+        self.assertIn('mime="image/png"', panel)
+        self.assertIn('image_provider = st.selectbox(', panel)
+        self.assertIn("Kết quả chỉ lưu trong phiên trình duyệt đang mở", panel)
+        app = self.app.run()
+        self.assertFalse(app.exception, [str(x.message) for x in app.exception])
+        self.assertTrue(any(
+            button.key and button.key.endswith("_ai_recreate")
+            for button in app.button
+        ))
+        self.assertTrue(any(
+            button.key and button.key.endswith("_ai_translate")
+            for button in app.button
+        ))
+
     def test_unnecessary_completed_banner_and_session_count_caption_removed(self):
         from pathlib import Path
         source = Path("streamlit_app.py").read_text(encoding="utf-8")
