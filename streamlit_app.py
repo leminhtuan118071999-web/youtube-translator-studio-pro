@@ -17,6 +17,7 @@ from api_clients import (PROVIDERS, TransientProviderError, generate_text, list_
                          validate_base_url, migrate_claude_settings,
                          migrate_free_provider_settings)
 from background_jobs import JobProgress, run_full_job
+from server_video_jobs import run_video_forms_job, run_full_job_with_server_saves
 from background_registry import JobRegistry
 from transcript_sources import parse_uploaded_subtitles
 from persistent_store import (
@@ -484,6 +485,9 @@ if "workspaces" not in st.session_state:
 
 if "background_jobs" not in st.session_state:
     st.session_state.background_jobs = {}
+if "video_background_jobs" not in st.session_state:
+    st.session_state.video_background_jobs = {}
+
 
 
 @st.cache_resource
@@ -504,6 +508,74 @@ def _job_scope():
     if isinstance(auth, dict) and auth.get("user_id"):
         return "account:" + str(auth["user_id"])
     return "browser"
+
+
+def _video_job_scope():
+    return "video:" + _job_scope()
+
+
+def reattach_video_background_jobs():
+    jobs = st.session_state.video_background_jobs
+    for session_id, record in st.session_state.workspaces.items():
+        if session_id in jobs or record.get("video_job_state") != "running":
+            continue
+        run_id = record.get("video_job_run_id")
+        if run_id:
+            job = get_job_registry().lookup(
+                run_id, session_id, _video_job_scope()
+            )
+            if job:
+                jobs[session_id] = job
+            else:
+                # Server may have restarted; do not promise background
+                # completion when its process-local Future is gone.
+                record["video_job_state"] = "interrupted"
+                record["video_job_error"] = (
+                    "Máy chủ đã khởi động lại hoặc tác vụ không còn hoạt động. "
+                    "Hãy nhấn Chạy lại riêng để tiếp tục từ form đã lưu."
+                )
+
+
+def collect_video_background_jobs():
+    changed = False
+    for session_id, job in list(st.session_state.video_background_jobs.items()):
+        record = st.session_state.workspaces.get(session_id)
+        if not record or record.get("video_job_run_id") != job["run_id"]:
+            get_job_registry().cancel(
+                job["run_id"], session_id, _video_job_scope()
+            )
+            job["progress"].cancel()
+            st.session_state.video_background_jobs.pop(session_id, None)
+            continue
+        for field, value in job["progress"].partial_result().items():
+            if field == "video_forms" and record.get(field) != value:
+                record[field] = value
+                changed = True
+        percentage, stage = job["progress"].snapshot()
+        if record.get("video_job_percent") != percentage or record.get("video_job_stage") != stage:
+            record["video_job_percent"] = percentage
+            record["video_job_stage"] = stage
+            changed = True
+        if not job["future"].done():
+            continue
+        try:
+            outcome = job["future"].result()
+        except Exception:
+            outcome = {"ok": False, "fields": {},
+                       "error": "Tác vụ nền kết thúc ngoài dự kiến."}
+        for field, value in outcome.get("fields", {}).items():
+            if field == "video_forms":
+                record[field] = value
+        record["video_job_state"] = "completed" if outcome.get("ok") else "failed"
+        record["video_job_error"] = "" if outcome.get("ok") else outcome.get("error", "")
+        record["video_job_percent"] = 100 if outcome.get("ok") else percentage
+        record["video_job_run_id"] = ""
+        record["processed"] = True
+        record["saved"] = True
+        st.session_state.video_background_jobs.pop(session_id, None)
+        get_job_registry().discard(job["run_id"], session_id, _video_job_scope())
+        changed = True
+    return changed
 
 
 def reattach_background_jobs():
@@ -666,6 +738,11 @@ def delete_saved_session(session_id):
         return
     old = st.session_state.workspaces[session_id]
     get_job_registry().cancel(old.get("job_run_id"), session_id, _job_scope())
+    get_job_registry().cancel(old.get("video_job_run_id"), session_id, _video_job_scope())
+    video_job = st.session_state.video_background_jobs.pop(session_id, None)
+    if video_job:
+        video_job["progress"].cancel()
+        video_job["future"].cancel()
     IMAGE_STORE.clear(_job_scope(), session_id)
     job = st.session_state.background_jobs.pop(session_id, None)
     if job:
@@ -703,6 +780,8 @@ if "_open_session_next" in st.session_state:
 # for a reloaded browser tab, then collect any finished work.
 reattach_background_jobs()
 collect_completed_jobs()
+reattach_video_background_jobs()
+collect_video_background_jobs()
 
 # Use two independent views inside ONE Streamlit entrypoint. Unlike page_link,
 # this needs no page registry, so Cloud cannot raise StreamlitPageNotFoundError.
@@ -1528,16 +1607,32 @@ if st.button("🚀 BẮT ĐẦU TẠO TOÀN BỘ", type="primary",
             if provider == "API bên thứ ba (tùy chỉnh)":
                 snapshot["api_format"] = api_format
                 snapshot["auth_mode"] = api_auth_mode
-            # The worker receives an immutable snapshot of settings and never
-            # accesses Streamlit session state. API credentials aren't saved.
-            job_future = get_job_executor().submit(run_full_job, snapshot, progress)
+            # Worker keeps its own authenticated checkpoint configuration.
+            # Never persist provider keys inside a session record.
+            snapshot["sid"] = sid
+            snapshot["run_id"] = run_id
+            snapshot["cloud"] = None
+            if CLOUD_ENABLED:
+                auth = _refresh_login()
+                snapshot["cloud"] = {
+                    "auth": dict(auth),
+                    "secrets": {
+                        name: str(st.secrets[name])
+                        for name in ("SUPABASE_URL", "SUPABASE_ANON_KEY",
+                                     "SESSION_ENCRYPTION_KEY")
+                    },
+                }
             session["job_state"] = "running"
             session["job_percent"] = 0
             session["job_stage"] = "Đã xếp tác vụ vào hàng đợi"
             session["job_error"] = ""
             session["job_run_id"] = run_id
-            # Mark as listed immediately, without pretending work has completed.
             session["saved"] = True
+            # Commit run identity to cloud BEFORE the worker starts.
+            _save_cloud_state(force=True)
+            job_future = get_job_executor().submit(
+                run_full_job_with_server_saves, snapshot, progress
+            )
             st.session_state.background_jobs[sid] = {
                 "future": job_future,
                 "progress": progress,
@@ -1558,7 +1653,9 @@ if st.button("🚀 BẮT ĐẦU TẠO TOÀN BỘ", type="primary",
 @st.fragment(run_every="3s")
 def show_background_job_progress():
     """Poll in the Streamlit thread; worker threads never call st.*."""
-    if collect_completed_jobs():
+    main_changed = collect_completed_jobs()
+    video_changed = collect_video_background_jobs()
+    if main_changed or video_changed:
         _persist_and_rerun()
     for session_id, job in list(st.session_state.background_jobs.items()):
         if session_id not in st.session_state.workspaces:
@@ -1691,12 +1788,70 @@ with tab_seo:
         )
         output("📋 Copy nội dung SEO phiên cũ", session["metadata"])
 
+def launch_video_forms_background(duration, audio_hash, audio_name,
+                                  translated, target_language, style,
+                                  bible, existing_plan):
+    """Start server-side video generation for the selected session only."""
+    if sid in st.session_state.video_background_jobs:
+        job = st.session_state.video_background_jobs[sid]
+        if not job["future"].done():
+            raise ValueError("Phiên này đã có tác vụ form video đang chạy.")
+    if not key.strip() or not model.strip():
+        raise ValueError("Cần API key và model AI hợp lệ.")
+    progress = JobProgress()
+    run_id = uuid.uuid4().hex
+    snapshot = {
+        "sid": sid, "run_id": run_id,
+        "translated": translated, "language": target_language,
+        "duration_seconds": duration, "audio_hash": audio_hash,
+        "audio_name": audio_name, "style": style,
+        "character_bible": bible, "existing_plan": existing_plan,
+        "provider": provider, "base_url": base_url,
+        "model": model, "api_key": key,
+        "api_format": api_format, "auth_mode": api_auth_mode,
+        "cloud": None,
+    }
+    if CLOUD_ENABLED:
+        auth = _refresh_login()
+        snapshot["cloud"] = {
+            "auth": dict(auth),
+            "secrets": {
+                name: str(st.secrets[name])
+                for name in ("SUPABASE_URL", "SUPABASE_ANON_KEY",
+                             "SESSION_ENCRYPTION_KEY")
+            },
+        }
+    session["video_job_run_id"] = run_id
+    session["video_job_state"] = "running"
+    session["video_job_error"] = ""
+    session["video_job_percent"] = 0
+    session["video_job_stage"] = "Đang xếp tác vụ trên máy chủ"
+    session["saved"] = True
+    session["processed"] = True
+    # Write the job identity BEFORE submitting so checkpoints cannot race
+    # ahead of a persisted run_id.
+    _save_cloud_state(force=True)
+    future = get_job_executor().submit(run_video_forms_job, snapshot, progress)
+    st.session_state.video_background_jobs[sid] = {
+        "future": future, "progress": progress, "run_id": run_id,
+    }
+    get_job_registry().register(
+        run_id, sid, _video_job_scope(), future, progress,
+    )
+    st.session_state["_session_flash"] = (
+        "⏳ Đã tạo tác vụ form video trên máy chủ. "
+        "Tiến độ và nội dung được lưu theo từng nhóm form."
+    )
+    _persist_and_rerun()
+
+
 with tab_video:
     render_video_forms(
         session, sid, language,
         ai=ai, api_key=key,
         mark_processed=mark_session_processed,
         persist_and_rerun=_persist_and_rerun,
+        launch_video_job=launch_video_forms_background,
     )
 
 with tab_characters:

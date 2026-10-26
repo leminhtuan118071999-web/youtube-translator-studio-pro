@@ -74,7 +74,7 @@ def _generate_all_remaining(plan, ai, *, progress=None, checkpoint=None):
 
 
 def render_video_forms(session, sid, language, *, ai, api_key,
-                       mark_processed, persist_and_rerun):
+                       mark_processed, persist_and_rerun, launch_video_job=None):
     """Independent voice-first prompt generation after translation."""
     st.subheader(f"🎬 Form video 8 giây — {language}")
     st.caption(
@@ -151,6 +151,7 @@ def render_video_forms(session, sid, language, *, ai, api_key,
     cannot_generate = (
         audio_error or upload is None or not translated
         or bool(session.get("job_state") == "running")
+        or bool(session.get("video_job_state") == "running")
     )
     generate_clicked = st.button(
         "🎬 Tạo form 8 giây theo giọng đọc",
@@ -160,89 +161,51 @@ def render_video_forms(session, sid, language, *, ai, api_key,
     retry_clicked = st.button(
         "🔄 Chạy lại riêng — Form video 8 giây",
         key=f"retry_video_forms_{sid}",
-        disabled=cannot_generate or plan is None,
+        # A saved plan already contains the total voice duration and words.
+        # Let recovery after a server restart work without re-uploading MP3.
+        disabled=(
+            not translated or plan is None or stale
+            or session.get("job_state") == "running"
+            or session.get("video_job_state") == "running"
+        ),
     )
     if generate_clicked or retry_clicked:
         if not api_key.strip():
             st.warning("Hãy nhập API key của nhà cung cấp AI trước khi tạo form.")
+        elif launch_video_job is None:
+            st.error("Tác vụ tạo form trên máy chủ chưa được khởi tạo.")
         else:
-            progress_slot = st.empty()
-            progress_text = st.empty()
-
-            def show_progress(current_plan, stage):
-                completed, total, percentage, label = _progress_description(
-                    current_plan, stage
-                )
-                progress_slot.progress(percentage, text=label)
-                progress_text.caption(
-                    f"Đã hoàn thành {completed}/{total} form, "
-                    f"còn {total - completed} form."
-                )
-
-            def save_checkpoint(current_plan):
-                encoded = json.dumps(current_plan, ensure_ascii=False)
-                if len(encoded) > 390000:
-                    raise ValueError("Form quá lớn để tự lưu; hãy chia nội dung.")
-                session["video_forms"] = encoded
-
-            working_plan = None
             try:
-                if retry_clicked and plan is not None and not stale:
-                    # Continue unfinished scenes without retranscribing audio
-                    # or discarding the completed forms.
-                    working_plan = plan
-                    show_progress(working_plan, "🔄 Tiếp tục từ form còn thiếu")
-                else:
-                    progress_slot.progress(
-                        0, text="🎧 Bước 1/3 — Đọc thời lượng âm thanh và ước tính nhịp đọc..."
-                    )
-                    working_plan = duration_weighted_plan(
-                        translated, language, seconds,
-                    )
-                    working_plan["audio_sha256"] = audio_hash
-                    working_plan["audio_filename"] = upload.name
-                    progress_slot.progress(
-                        0, text="👤 Bước 2/3 — Chuẩn bị hồ sơ nhân vật..."
-                    )
-                    bible = session.get("character_bible", "")
-                    if not bible.strip():
-                        result = parse_json_object(
-                            ai(character_bible_prompt(translated, language, style)),
-                            "character_bible",
-                        )
-                        bible = result["character_bible"]
-                    if not isinstance(bible, str) or not bible.strip():
-                        raise ValueError("AI chưa tạo được hồ sơ nhân vật.")
-                    working_plan["character_bible"] = bible.strip()
-                    working_plan["style"] = style
-                    # Save the timing plan before the first AI video request.
-                    save_checkpoint(working_plan)
-
-                show_progress(working_plan, "🎬 Bước 3/3 — Bắt đầu tạo form")
-                _generate_all_remaining(
-                    working_plan, ai, progress=show_progress,
-                    checkpoint=save_checkpoint,
+                # Sending duration and translated text is sufficient. Do not
+                # upload audio or call a speech transcription API.
+                saved_plan = plan if retry_clicked and plan is not None and not stale else None
+                launch_video_job(
+                    (saved_plan.get("audio_duration_seconds") if saved_plan else seconds),
+                    (saved_plan.get("audio_sha256") if saved_plan else audio_hash),
+                    (saved_plan.get("audio_filename", "") if saved_plan else upload.name),
+                    translated, language, style,
+                    (session.get("character_bible", "") or ""),
+                    json.dumps(saved_plan, ensure_ascii=False) if saved_plan else None,
                 )
-                mark_processed(session)
-                show_progress(working_plan, "✅ Hoàn thành tất cả form")
-                persist_and_rerun()
             except (TypeError, ValueError, RuntimeError, KeyError) as exc:
-                if working_plan is not None:
-                    # The last successful batch is saved; retry will resume
-                    # from that point with the same uploaded recording.
-                    plan = working_plan
-                    stale = False
-                    try:
-                        save_checkpoint(working_plan)
-                    except ValueError:
-                        pass
-                    show_progress(working_plan, "⚠️ Tạm dừng — có thể chạy lại")
-                st.error(
-                    f"Chưa thể hoàn tất tất cả form: {exc}. "
-                    "Các form đã tạo được giữ lại. "
-                    "Nhấn '🔄 Chạy lại riêng — Form video 8 giây' để tiếp tục."
-                )
+                st.error(f"Không thể khởi động tạo form nền: {exc}")
 
+    if session.get("video_job_state") == "running":
+        pct = int(session.get("video_job_percent", 0) or 0)
+        st.progress(min(100, max(0, pct)), text=(
+            f"⏳ Máy chủ đang viết form: {session.get('video_job_stage', 'Đang xử lý')}"
+        ))
+        st.caption(
+            "Bạn có thể để máy tính ngủ hoặc đóng trình duyệt. "
+            "Tác vụ vẫn chạy khi máy chủ còn hoạt động; nếu máy chủ "
+            "khởi động lại thì cần tiếp tục từ kết quả đã lưu."
+        )
+    elif session.get("video_job_state") == "failed":
+        st.warning(
+            "Tác vụ tạo form bị gián đoạn: "
+            + str(session.get("video_job_error", "Không rõ nguyên nhân."))
+            + " Chạy lại riêng để tiếp tục những form còn thiếu."
+        )
     if plan is not None and not stale:
         count, total, ratio, label = _progress_description(
             plan, "📊 Tiến trình tạo form"

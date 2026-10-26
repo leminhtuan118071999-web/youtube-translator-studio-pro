@@ -18,7 +18,8 @@ CONTENT_FIELDS = (
     "name", "url", "source", "title", "description", "translated",
     "prompts", "metadata", "language", "new_title", "new_description",
     "seo_tags", "saved_order", "saved", "processed", "job_state",
-    "job_error", "job_percent", "job_stage", "job_run_id", "video_forms", "optimized_script", "character_images_error", "character_bible", "seo_stale", "character_bible_stale",
+    "job_error", "job_percent", "job_stage", "job_run_id", "video_forms", "optimized_script", "character_images_error", "character_bible", "seo_stale", "character_bible_stale", "video_job_run_id", "video_job_state",
+    "video_job_error", "video_job_percent", "video_job_stage",
 )
 API_WIDGET_PREFIXES = ("api_key_", "api_base_", "api_model_id_", "api_format_", "api_auth_mode_")
 API_WIDGET_EXACT = ("api_provider", "supadata_api_key_input", "image_api_key_input")
@@ -153,7 +154,7 @@ def normalize_sessions(raw):
         copy = {}
         for field in CONTENT_FIELDS:
             val = record.get(field)
-            if field in ("saved_order", "job_percent"):
+            if field in ("saved_order", "job_percent", "video_job_percent"):
                 copy[field] = int(val) if isinstance(val, int) and 0 <= val < 10**7 else 0
             elif field in ("saved", "processed"):
                 copy[field] = bool(val)
