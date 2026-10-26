@@ -12,7 +12,7 @@ import re
 SECONDS_PER_SCENE = 8
 MAX_SCENES = 240
 DEFAULT_WPM = 135
-TRANSITION_SECONDS = 0.4
+TRANSITION_SECONDS = 1.0
 
 
 def source_fingerprint(translation, language):
@@ -158,7 +158,7 @@ def batch_prompt(plan, scenes, *, style):
         "props, time of day, clothing, and surroundings across neighboring "
         "scenes. No spoken dialogue beyond the provided voiceover. Every "
         "inter-scene boundary MUST include a visually seamless transition; "
-        "reserve the final 0.4 second of a scene for a crossfade or match-cut "
+        "reserve the final 1.0 second (7-8s) of a scene for a crossfade or match-cut "
         "into the next 8-second clip. The transition must be inside the "
         "8-second clip, not added as extra runtime. For the very last scene, "
         "return an empty transition_to_next. Return ONLY JSON: "
@@ -201,9 +201,9 @@ def apply_ai_batch(plan, raw, expected_numbers):
                 description if not bible or bible in description
                 else bible + "\n\n" + description
             )
+            # Always enforce a 1-second boundary within each 8s clip.
+            # A provider cannot silently replace it with a different timing.
             scene["transition_to_next"] = (
-                transition if scene["number"] < len(plan["scenes"]) else ""
-            ) or (
                 f"crossfade {TRANSITION_SECONDS:.1f}s"
                 if scene["number"] < len(plan["scenes"]) else ""
             )
@@ -241,9 +241,9 @@ def continuous_video_forms_text(plan):
         visual = " ".join(scene["visual_prompt"].split())
         voice = " ".join(str(scene.get("voiceover", "")).split())
         transition = " ".join(str(scene.get("transition_to_next", "")).split())
-        block = f"{number:02d} | 8s\n{visual}\nVoice: {voice}"
+        block = f"{number:02d} | 8s | {visual} | Voice: {voice}"
         if transition:
-            block += f"\nNext: {transition}"
+            block += f" | Next: {transition}"
         blocks.append(block)
     return "\n\n".join(blocks)
 
