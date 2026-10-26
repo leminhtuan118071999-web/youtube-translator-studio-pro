@@ -15,6 +15,7 @@ from youtube_transcript_api import YouTubeTranscriptApi
 from api_clients import RateLimitError, TransientProviderError, generate_text
 from groq_pacing import groq_request_gate
 from transcript_sources import fetch_with_fallback
+from video_scene_planner import (narration_plan, character_bible_prompt, batch_prompt, parse_json_object, apply_ai_batch)
 
 
 class JobProgress:
@@ -377,6 +378,46 @@ def run_full_job(snapshot, progress):
             translations.append(translation)
             fields["translated"] = "\n\n".join(translations)
             progress.publish("translated", fields["translated"])
+
+        # Video forms are an optional extension of the full-button workflow,
+        # using the exact completed target-language translation as narration.
+        # They must not change any translated word or block SEO on failure.
+        if snapshot.get("auto_video_forms", False):
+            try:
+                progress.update(68, "🎬 Đang tạo form video 8 giây tự động...")
+                style = snapshot.get("video_style", "Điện ảnh chân thực")
+                plan = narration_plan(fields["translated"], language)
+                bible = parse_json_object(
+                    call(character_bible_prompt(fields["translated"], language, style)),
+                    "character_bible",
+                )["character_bible"]
+                if not isinstance(bible, str) or not bible.strip():
+                    raise ValueError("Không tạo được hồ sơ nhân vật.")
+                plan["character_bible"] = bible.strip()
+                plan["style"] = style
+                scenes = plan["scenes"]
+                for start in range(0, len(scenes), 6):
+                    progress.check_cancelled()
+                    group = scenes[start:start + 6]
+                    expected = [scene["number"] for scene in group]
+                    apply_ai_batch(plan, call(batch_prompt(plan, group, style=style)), expected)
+                    progress.update(
+                        69 + int(11 * (start + len(group)) / len(scenes)),
+                        f"🎬 Đã tạo {start + len(group)}/{len(scenes)} form video...",
+                    )
+                    encoded = json.dumps(plan, ensure_ascii=False)
+                    if len(encoded) > 390000:
+                        raise ValueError("Form video quá lớn để lưu; hãy chia nội dung.")
+                    fields["video_forms"] = encoded
+                    progress.publish("video_forms", encoded)
+            except Exception as exc:
+                # A video-form error must never discard the complete translation.
+                progress.check_cancelled()
+                message = str(exc).replace(api_key, "[API KEY ĐÃ ẨN]")
+                subtitle_key = snapshot.get("supadata_key") or ""
+                if subtitle_key:
+                    message = message.replace(subtitle_key, "[KEY PHỤ ĐỀ ĐÃ ẨN]")
+                fields["video_forms_error"] = message[:250]
 
         # SEO still needs a concise overview for long transcripts, but do
         # not perform any image-prompt generation or publish prompt fields.
