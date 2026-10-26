@@ -89,7 +89,7 @@ class SessionNameControlsTests(unittest.TestCase):
     def test_streamlit_ui_has_only_red_delete_next_to_name_without_ticks(self):
         source = (Path(__file__).resolve().parent /
                   "streamlit_app.py").read_text(encoding="utf-8")
-        self.assertIn('name_col, delete_col = st.columns([4.5, 2.5]', source)
+        self.assertIn('name_col, delete_col = st.columns([4.5, 2.5], gap="small")', source)
         self.assertIn('min-width: 72px !important;', source)
         self.assertIn('white-space: nowrap !important;', source)
         self.assertIn('text-overflow: clip !important;', source)
