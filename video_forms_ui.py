@@ -194,44 +194,6 @@ def render_video_forms(session, sid, language, *, ai, api_key,
         file_name=f"video-forms-{sid[:8]}.json",
         mime="application/json", key=f"download_video_forms_json_{sid}",
     )
-    start = st.number_input(
-        "Xem từ form số", min_value=1, max_value=max(1, len(scenes)),
-        value=1, step=6, key=f"video_form_page_{sid}",
-    )
-    changed = False
-    for scene in scenes[int(start) - 1:int(start) + 5]:
-        n = scene["number"]
-        with st.expander(
-            f"🎞️ Form {n:03d} — "
-            f"{scene['start_seconds']}-{scene['end_seconds']}s (8 giây)",
-            expanded=n == int(start),
-        ):
-            st.caption(f"🎙️ Lời đọc nguyên bản ({language}) — không tự sửa:")
-            st.code(scene["voiceover"], language=None, wrap_lines=True)
-            edited = st.text_area(
-                f"Prompt cảnh {n:03d}", value=scene.get("visual_prompt", ""),
-                height=230, key=f"video_prompt_{sid}_{n}",
-            )
-            if edited != scene.get("visual_prompt", ""):
-                scene["visual_prompt"] = edited
-                changed = True
-            transition = st.text_input(
-                f"Hiệu ứng chuyển sang form {n+1}" if n < len(scenes)
-                else "Kết thúc (không có chuyển cảnh)",
-                value=scene.get("transition_to_next", ""),
-                disabled=n == len(scenes),
-                key=f"video_transition_{sid}_{n}",
-            )
-            if n < len(scenes) and transition != scene.get("transition_to_next", ""):
-                scene["transition_to_next"] = transition
-                changed = True
-            copy_all_button(
-                f"📋 Copy prompt form {n:03d}",
-                scene.get("visual_prompt", ""), key=f"copy_video_form_{sid}_{n}",
-            )
-    if changed:
-        encoded = json.dumps(plan, ensure_ascii=False)
-        if len(encoded) <= 390000:
-            session["video_forms"] = encoded
-        else:
-            st.error("Form quá lớn để tự lưu; hãy rút ngắn nội dung chỉnh sửa.")
+
+    # Individual per-scene editors, paging and copy buttons were intentionally
+    # removed. Use the continuous overview and Copy all above.
