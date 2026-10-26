@@ -31,7 +31,7 @@ from session_name_controls import session_name_control, rename_record
 
 st.set_page_config(page_title="LMT Studio Pro", page_icon="🎬", layout="wide")
 st.title("🎬 LMT Studio Pro")
-st.caption("Phụ đề YouTube • Dịch đa ngôn ngữ • Prompt hình ảnh • SEO • Thumbnail gốc • Quản lý phiên")
+st.caption("Phụ đề YouTube • Dịch đa ngôn ngữ • SEO • Thumbnail gốc • Quản lý phiên")
 
 # Disable mouse-hover explanations throughout the app. Labels, click-based
 # controls (including advanced options), and screen-reader accessible names
@@ -404,7 +404,7 @@ for _id, _rec in st.session_state.workspaces.items():
 
 
 def mark_session_processed(record):
-    """Only successful subtitle extraction, file import, translation, prompts or SEO is saved."""
+    """Only successful subtitle extraction, file import, translation or SEO is saved."""
     record["processed"] = True
     record["saved"] = True
     if not isinstance(record.get("saved_order"), int) or record["saved_order"] <= 0:
@@ -1079,7 +1079,7 @@ with st.sidebar:
 
 
 def ai(prompt):
-    """Dispatch every translation / prompt / SEO request using the selected provider."""
+    """Dispatch translation and SEO requests using the selected provider."""
     if provider == "API bên thứ ba (tùy chỉnh)":
         return generate_text(
             provider, base_url, model, key, prompt,
@@ -1173,26 +1173,6 @@ def load_json_answer(raw, expected):
     return obj
 
 
-def create_20_prompts(script, target_language):
-    brief = story_overview(script)
-    result = ai(
-        f"Hãy tạo CHÍNH XÁC 20 mô tả cảnh (image prompts) bằng {target_language}. "
-        "Mỗi cảnh bám đúng diễn biến câu chuyện từ đầu đến cuối, mô tả nhân vật nhất quán, "
-        "bối cảnh, ánh sáng, góc máy, cảm xúc, phong cách điện ảnh. "
-        "Không thêm chữ lên hình. Không bịa sự kiện. "
-        'CHỈ xuất một JSON object theo mẫu {"prompts":["cảnh 1",...,"cảnh 20"]}, '
-        "không thêm markdown hay lời dẫn.\nCâu chuyện:\n" + brief
-    )
-    data = load_json_answer(result, "prompts")
-    items = data["prompts"]
-    if not isinstance(items, list):
-        raise ValueError("AI trả về danh sách cảnh không hợp lệ.")
-    items = [str(value).strip() for value in items]
-    if len(items) != 20 or any(not value for value in items):
-        raise ValueError(f"AI mới trả về {len(items)}/20 cảnh hợp lệ. Hãy thử tạo lại.")
-    return items
-
-
 def create_target_metadata(script, original_title, original_description, target_language):
     brief = story_overview(script)
     result = ai(
@@ -1213,21 +1193,6 @@ def create_target_metadata(script, original_title, original_description, target_
     if not title or not description or not tags:
         raise ValueError("AI trả về thiếu tiêu đề, mô tả hoặc từ khóa SEO.")
     return title, description, tags
-
-
-def parse_saved_prompts(raw_text):
-    if not raw_text:
-        return []
-    try:
-        data = json.loads(raw_text)
-        if isinstance(data, list):
-            return [str(item).strip() for item in data if str(item).strip()]
-    except (ValueError, TypeError):
-        pass
-    old_items = re.split(r"(?m)^\s*\d{1,2}[.)]\s+", raw_text)
-    parsed = [part.strip() for part in old_items if part.strip()]
-    return parsed if len(parsed) > 1 else [raw_text.strip()]
-
 
 
 if test_api:
@@ -1429,8 +1394,8 @@ if vid:
 # Original transcript, title and description are retained internally for processing,
 # but only target-language results are shown to the user.
 
-tab_translate, tab_visual, tab_seo = st.tabs(
-    ["🌍 Bản dịch", "🎨 20 prompt hình ảnh", "📝 Tiêu đề • Mô tả • SEO"]
+tab_translate, tab_seo = st.tabs(
+    ["🌍 Bản dịch", "📝 Tiêu đề • Mô tả • SEO"]
 )
 with tab_translate:
     if st.button("🌍 Dịch lại toàn bộ", key=f"translate_{sid}"):
@@ -1452,35 +1417,6 @@ with tab_translate:
     with st.expander(f"🌍 Bản dịch hoàn chỉnh ({language}) — Nhấn để xem toàn bộ", expanded=False):
         st.caption("Nội dung đầy đủ; vẫn có thể Copy trong khung hoặc tải TXT.")
         output("📋 Copy toàn bộ bản dịch", session["translated"], allow_download=True)
-
-with tab_visual:
-    if st.button("🎨 Tạo lại 20 prompt", key=f"prompts_{sid}"):
-        base = session["translated"] or session["source"]
-        if not base.strip():
-            st.warning("Chưa có nội dung câu chuyện.")
-        else:
-            try:
-                with st.spinner(f"Đang tạo 20 prompt bằng {language}..."):
-                    generated = create_20_prompts(base, language)
-                session["prompts"] = json.dumps(generated, ensure_ascii=False)
-                mark_session_processed(session)
-                _persist_and_rerun()
-            except Exception as exc:
-                st.error(str(exc))
-    prompt_items = parse_saved_prompts(session.get("prompts", ""))
-    if prompt_items:
-        st.subheader(f"🎬 {len(prompt_items)} prompt hình ảnh ({language})")
-        all_prompts = "\n\n".join(
-            f"Cảnh {index:02d}\n{description}"
-            for index, description in enumerate(prompt_items, start=1)
-        )
-        copy_all_button(
-            "📋 Copy toàn bộ 20 prompt", all_prompts,
-            key=f"copy_all_prompts_{sid}",
-        )
-        output("📋 Copy toàn bộ các prompt", all_prompts)
-    else:
-        st.caption("Chưa có prompt. Hãy nhấn Bắt đầu tạo toàn bộ hoặc Tạo lại 20 prompt.")
 
 with tab_seo:
     if st.button("📝 Tạo lại tiêu đề • mô tả • SEO", key=f"seo_{sid}"):
