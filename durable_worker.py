@@ -61,7 +61,7 @@ def claim_one(worker_name):
     from candidate where job.id=candidate.id
     returning job.id,job.session_id,job.user_id,job.kind,job.snapshot,
        job.encrypted_keys,job.result,job.attempts,job.max_attempts,
-       job.lease_token,job.progress
+       job.lease_token,job.progress,job.lease_owner
     """
     with connect() as conn:
         with conn.cursor() as cur:
@@ -168,6 +168,9 @@ def _renew_until_stopped(job, progress, stopper):
             if not touch_lease(job):
                 progress.cancelled.set()
                 return
+            # Publish worker health while the main poll loop is busy
+            # generating long videos overnight.
+            heartbeat_worker(str(job["lease_owner"]))
         except Exception:
             LOG.exception("Heartbeat lease failed for %s", job["id"])
             progress.cancelled.set()
