@@ -3,15 +3,12 @@ import re
 import uuid
 import time
 from concurrent.futures import ThreadPoolExecutor
-from io import BytesIO
 from pathlib import Path
 
 import streamlit.components.v1 as components
 from streamlit.runtime import exists as streamlit_runtime_exists
 
-import requests
 import streamlit as st
-from PIL import Image
 from youtube_transcript_api import YouTubeTranscriptApi
 from api_clients import (PROVIDERS, TransientProviderError, generate_text, list_models,
                          validate_base_url, migrate_claude_settings,
@@ -28,11 +25,10 @@ from browser_session_store import (
 )
 from copy_buttons import copy_all_button
 from session_name_controls import session_name_control, rename_record
-from thumbnail_ui import render_thumbnail_ai
 
 st.set_page_config(page_title="LMT Studio Pro", page_icon="🎬", layout="wide")
 st.title("🎬 LMT Studio Pro")
-st.caption("Phụ đề YouTube • Dịch đa ngôn ngữ • Prompt hình ảnh • SEO • Thumbnail • Quản lý phiên")
+st.caption("Phụ đề YouTube • Dịch đa ngôn ngữ • Prompt hình ảnh • SEO • Quản lý phiên")
 
 # Disable mouse-hover explanations throughout the app. Labels, click-based
 # controls (including advanced options), and screen-reader accessible names
@@ -1379,37 +1375,6 @@ def show_background_job_progress():
 
 
 show_background_job_progress()
-
-@st.cache_data(ttl=3600, show_spinner=False, max_entries=100)
-def get_thumbnail(video_id):
-    """Avoid downloading the same public thumbnail on each progress refresh."""
-    for quality in ("maxresdefault", "sddefault", "hqdefault", "mqdefault"):
-        try:
-            response = requests.get(
-                f"https://i.ytimg.com/vi/{video_id}/{quality}.jpg", timeout=6
-            )
-            response.raise_for_status()
-            thumb = Image.open(BytesIO(response.content))
-            if thumb.width >= 300:
-                return response.content
-        except (requests.RequestException, OSError, ValueError):
-            continue
-    return None
-
-
-if vid:
-    st.subheader("🖼️ Thumbnail gốc chất lượng cao")
-    thumbnail = get_thumbnail(vid)
-    if thumbnail:
-        st.image(thumbnail, width=500)
-        st.download_button(
-            "⬇️ Tải thumbnail", thumbnail, file_name=f"thumbnail-{vid}.jpg",
-            mime="image/jpeg", key=f"thumb_{sid}_{vid}",
-        )
-
-# Image editing is optional and never changes the original thumbnail download.
-render_thumbnail_ai(sid, vid, thumbnail if vid else None, language)
-
 
 # Original transcript, title and description are retained internally for processing,
 # but only target-language results are shown to the user.
