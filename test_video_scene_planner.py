@@ -42,6 +42,22 @@ class VideoScenePlannerTests(unittest.TestCase):
             " ".join(x["voiceover"] for x in with_audio["scenes"]), original
         )
 
+    def test_wav_voiceover_duration_reader_is_accurate(self):
+        from io import BytesIO
+        import wave
+        from video_forms_ui import _audio_duration
+
+        payload = BytesIO()
+        with wave.open(payload, "wb") as wav:
+            wav.setnchannels(1)
+            wav.setsampwidth(2)
+            wav.setframerate(8000)
+            wav.writeframes(b"\\x00\\x00" * (8000 * 3))
+        class Uploaded:
+            def getvalue(self):
+                return payload.getvalue()
+        self.assertAlmostEqual(_audio_duration(Uploaded()), 3.0, places=1)
+
     def test_language_with_no_spaces_does_not_drop_characters(self):
         original = "こんにちは世界今日は良い天気です"
         plan = narration_plan(original, "Tiếng Nhật")
