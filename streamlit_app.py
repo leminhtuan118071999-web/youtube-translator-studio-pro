@@ -740,7 +740,7 @@ with st.sidebar:
             else:
                 session_tone = "pending"
             with st.container(key=f"session_status_{session_tone}_{saved_id}"):
-                if streamlit_runtime_exists():
+                if streamlit_runtime_exists() and not st.session_state.get("_session_name_test_fallback", False):
                     # Native Streamlit buttons have no double-click event.
                     # A small browser component distinguishes one click (open)
                     # from two clicks (edit name directly inside the same box).
