@@ -42,6 +42,10 @@ class StreamlitSmokeTests(unittest.TestCase):
         self.assertFalse(app.exception, [str(x.message) for x in app.exception])
         sid = app.session_state["selected_session"]
         app.session_state["workspaces"][sid]["translated"] = "Giữ nguyên bản dịch"
+        # A worker must match the active session's run_id or it is deliberately
+        # discarded by collect_completed_jobs() as a stale, canceled attempt.
+        app.session_state["workspaces"][sid]["job_run_id"] = "test-run"
+        app.session_state["workspaces"][sid]["job_state"] = "running"
         job_future = Future()  # A queued job still pending on the server.
         progress = JobProgress()
         app.session_state["background_jobs"][sid] = {
