@@ -17,7 +17,7 @@ from api_clients import (PROVIDERS, TransientProviderError, generate_text, list_
                          validate_base_url, migrate_claude_settings,
                          migrate_free_provider_settings)
 from background_jobs import JobProgress, run_full_job
-from server_video_jobs import run_video_forms_job
+from server_video_jobs import run_video_forms_job, run_full_job_with_server_saves
 from background_registry import JobRegistry
 from transcript_sources import parse_uploaded_subtitles
 from persistent_store import (
@@ -1607,16 +1607,32 @@ if st.button("🚀 BẮT ĐẦU TẠO TOÀN BỘ", type="primary",
             if provider == "API bên thứ ba (tùy chỉnh)":
                 snapshot["api_format"] = api_format
                 snapshot["auth_mode"] = api_auth_mode
-            # The worker receives an immutable snapshot of settings and never
-            # accesses Streamlit session state. API credentials aren't saved.
-            job_future = get_job_executor().submit(run_full_job, snapshot, progress)
+            # Worker keeps its own authenticated checkpoint configuration.
+            # Never persist provider keys inside a session record.
+            snapshot["sid"] = sid
+            snapshot["run_id"] = run_id
+            snapshot["cloud"] = None
+            if CLOUD_ENABLED:
+                auth = _refresh_login()
+                snapshot["cloud"] = {
+                    "auth": dict(auth),
+                    "secrets": {
+                        name: str(st.secrets[name])
+                        for name in ("SUPABASE_URL", "SUPABASE_ANON_KEY",
+                                     "SESSION_ENCRYPTION_KEY")
+                    },
+                }
             session["job_state"] = "running"
             session["job_percent"] = 0
             session["job_stage"] = "Đã xếp tác vụ vào hàng đợi"
             session["job_error"] = ""
             session["job_run_id"] = run_id
-            # Mark as listed immediately, without pretending work has completed.
             session["saved"] = True
+            # Commit run identity to cloud BEFORE the worker starts.
+            _save_cloud_state(force=True)
+            job_future = get_job_executor().submit(
+                run_full_job_with_server_saves, snapshot, progress
+            )
             st.session_state.background_jobs[sid] = {
                 "future": job_future,
                 "progress": progress,
