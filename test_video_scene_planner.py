@@ -4,7 +4,7 @@ import unittest
 
 from video_scene_planner import (
     narration_plan, source_fingerprint, character_bible_prompt,
-    batch_prompt, apply_ai_batch, plan_export_text, continuous_video_forms_text,
+    batch_prompt, apply_ai_batch, plan_export_text, continuous_video_forms_text, grouped_video_forms,
 )
 
 
@@ -163,6 +163,41 @@ class VideoScenePlannerTests(unittest.TestCase):
         result = continuous_video_forms_text(plan)
         self.assertEqual(result.count("Voice:"), 1)
         self.assertEqual(result.count("01 | 8s"), 1)
+
+    def test_video_panels_split_at_99_preserve_scene_numbers(self):
+        plan = {"scenes": [
+            {
+                "number": n, "start_seconds": (n-1)*8, "end_seconds": n*8,
+                "voiceover": f"Speech {n}",
+                "visual_prompt": f"Visual prompt scene {n}",
+                "transition_to_next": f"crossfade" if n < 205 else "",
+            } for n in range(1, 206)
+        ]}
+        panels = grouped_video_forms(plan)
+        self.assertEqual(len(panels), 3)
+        self.assertEqual([(p["first"], p["last"], p["completed"]) for p in panels],
+                         [(1, 99, 99), (100, 198, 99), (199, 205, 7)])
+        self.assertIn("01 | 8s", panels[0]["content"])
+        self.assertIn("99 | 8s", panels[0]["content"])
+        self.assertNotIn("100 | 8s", panels[0]["content"])
+        self.assertTrue(panels[1]["content"].startswith("100 | 8s"))
+        self.assertTrue(panels[2]["content"].startswith("199 | 8s"))
+        self.assertIn("205 | 8s", panels[2]["content"])
+
+    def test_incomplete_video_forms_do_not_shift_99_boundaries(self):
+        plan = {"scenes": [
+            {"number": n, "visual_prompt": "scene" if n in (1, 100, 200) else "",
+             "voiceover": f"voice {n}", "transition_to_next": ""}
+            for n in range(1, 201)
+        ]}
+        panels = grouped_video_forms(plan)
+        self.assertEqual([p["completed"] for p in panels], [1, 1, 1])
+        self.assertEqual([(p["first"], p["last"]) for p in panels],
+                         [(1, 99), (100, 198), (199, 200)])
+        self.assertTrue(panels[1]["content"].startswith("100 | 8s"))
+        self.assertNotIn("200 | 8s", panels[1]["content"])
+        with self.assertRaises(ValueError):
+            grouped_video_forms(plan, 0)
 
     def test_character_bible_prompt_uses_target_translation(self):
         text = "Dzisiaj Ala przyszła do domu."
