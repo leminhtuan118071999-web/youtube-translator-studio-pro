@@ -8,6 +8,14 @@ from api_clients import RateLimitError, TransientProviderError
 
 class BackgroundJobsTests(unittest.TestCase):
     def setUp(self):
+        # Previous tests focus on translation, SEO and retry behavior; mock the
+        # newly added upstream condensation step to isolate those semantics.
+        self.optimize_patch = patch(
+            "background_jobs.optimize_source_script",
+            side_effect=lambda source, call, progress: source,
+        )
+        self.optimize_patch.start()
+        self.addCleanup(self.optimize_patch.stop)
         self.config = {
             "url": "https://youtube.com/watch?v=12345678901",
             "source": "",

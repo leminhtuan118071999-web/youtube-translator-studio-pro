@@ -15,6 +15,7 @@ from youtube_transcript_api import YouTubeTranscriptApi
 from api_clients import RateLimitError, TransientProviderError, generate_text
 from groq_pacing import groq_request_gate
 from transcript_sources import fetch_with_fallback
+from video_scene_planner import (narration_plan, character_bible_prompt, batch_prompt, parse_json_object, apply_ai_batch)
 
 
 class JobProgress:
@@ -138,6 +139,84 @@ def overview(text, call, progress):
             "Không thể tóm tắt toàn bộ video vừa giới hạn token của model. "
             "Hãy thử model có hạn mức lớn hơn."
         )
+    return combined
+
+
+MAX_OPTIMIZED_SCRIPT_CHARS = 9999
+
+
+def optimize_source_script(source, call, progress):
+    """Rewrite before translating: chronology and all material facts retained.
+
+    This is a faithful condensation, not an extractive guarantee. When the
+    model repeatedly fails to fit the limit, fail visibly rather than silently
+    clipping the script and losing its ending.
+    """
+    if not isinstance(source, str) or not source.strip():
+        raise ValueError("Thiếu phụ đề gốc để tối ưu kịch bản.")
+    # Bound provider requests on low-TPM plans. Each part has its own place
+    # in the source chronology and the final reduction considers every part.
+    parts = list(chunk_text(source.strip(), 2800))
+    summaries = []
+    for index, part in enumerate(parts, 1):
+        progress.check_cancelled()
+        progress.update(
+            11 + int(17 * (index - 1) / len(parts)),
+            f"✍️ Đang tối ưu nội dung gốc phần {index}/{len(parts)}...",
+        )
+        rewritten = call(
+            f"Viết lại PHẦN {index}/{len(parts)} của phụ đề thành KỊCH BẢN "
+            "ngắn gọn, mạch lạc, giữ đúng NGÔN NGỮ GỐC của phụ đề. "
+            "Phải giữ tất cả nhân vật, hành động quan trọng, diễn biến, "
+            "quan hệ nhân quả, địa điểm, số liệu và ý chính có giá trị "
+            "truyền đạt. Bỏ lời lặp, từ đệm, quảng cáo và câu lan man; "
+            "không tự thêm thông tin, không đảo thứ tự, không đổi kết cục. "
+            "Chỉ xuất văn bản kịch bản, không đánh số đoạn hoặc thêm chú thích. "
+            "Mỗi phần tối đa 2300 ký tự.\n\n" + part
+        ).strip()
+        if not rewritten:
+            raise ValueError(f"AI trả về phần kịch bản {index} rỗng.")
+        summaries.append(rewritten)
+    combined = "\n\n".join(summaries)
+    # Reduce the chronological notes in manageable chunks, keeping every
+    # section represented instead of truncating the end of long videos.
+    for attempt in range(7):
+        progress.check_cancelled()
+        if attempt == 0 and len(combined) <= MAX_OPTIMIZED_SCRIPT_CHARS:
+            break
+        if len(combined) <= MAX_OPTIMIZED_SCRIPT_CHARS:
+            break
+        progress.update(
+            30 + min(attempt * 2, 12),
+            f"✍️ Đang cô đọng kịch bản dưới 10.000 ký tự (lần {attempt+1})...",
+        )
+        groups = list(chunk_text(combined, 3000))
+        condensed = []
+        for idx, group in enumerate(groups, 1):
+            progress.check_cancelled()
+            target = max(600, min(1900, int(len(group) * 0.65)))
+            response = call(
+                "Cô đọng bản kịch bản sau, vẫn trong NGÔN NGỮ GỐC. "
+                "Giữ nguyên danh tính nhân vật, dữ kiện, các ý chính "
+                "và thứ tự sự kiện, kể cả phần kết. Không bịa và không "
+                "làm sai ý. Chỉ viết kịch bản, không bình luận. "
+                f"Giới hạn tối đa {target} ký tự cho đoạn này.\n\n" + group
+            ).strip()
+            if not response:
+                raise ValueError("AI trả về đoạn cô đọng rỗng.")
+            condensed.append(response)
+        reduced = "\n\n".join(condensed)
+        if len(reduced) >= len(combined):
+            # Re-ask with an explicit stronger budget instead of clipping.
+            if attempt == 6:
+                break
+        combined = reduced
+    if not combined.strip() or len(combined) > MAX_OPTIMIZED_SCRIPT_CHARS:
+        raise ValueError(
+            "Chưa thể rút kịch bản xuống dưới 10.000 ký tự mà vẫn "
+            "giữ đủ thông tin. Hãy chia video thành các phần để xử lý."
+        )
+    progress.update(43, "✅ Đã tạo kịch bản cô đọng dưới 10.000 ký tự.")
     return combined
 
 
@@ -272,6 +351,12 @@ def run_full_job(snapshot, progress):
         fields["source"] = source
         progress.publish("source", source)
 
+        # Rewrite the entire original story BEFORE translating. Preserve
+        # the unmodified source separately for review and future regeneration.
+        optimized = optimize_source_script(source, call, progress)
+        fields["optimized_script"] = optimized
+        progress.publish("optimized_script", optimized)
+
         # Smaller chunks for Groq Free (8K TPM): each request needs far
         # fewer input and reserved completion tokens.
         chunk_size = (
@@ -279,12 +364,12 @@ def run_full_job(snapshot, progress):
             and snapshot.get("model") in ("openai/gpt-oss-20b", "openai/gpt-oss-120b")
             else 5500
         )
-        chunks = list(chunk_text(source, chunk_size))
+        chunks = list(chunk_text(optimized, chunk_size))
         translations = []
         for idx, part in enumerate(chunks, 1):
             progress.check_cancelled()
-            progress.update(12 + int(52 * (idx - 1) / len(chunks)),
-                            f"🌍 Đang dịch phần {idx}/{len(chunks)} sang {language}...")
+            progress.update(45 + int(22 * (idx - 1) / len(chunks)),
+                            f"🌍 Đang dịch kịch bản phần {idx}/{len(chunks)} sang {language}...")
             translation = call(
                 f"Dịch chính xác toàn bộ đoạn {idx}/{len(chunks)} sang {language}. "
                 "Viết tự nhiên, không thiếu câu, không thêm tình tiết, giữ tên nhân vật "
@@ -293,6 +378,46 @@ def run_full_job(snapshot, progress):
             translations.append(translation)
             fields["translated"] = "\n\n".join(translations)
             progress.publish("translated", fields["translated"])
+
+        # Video forms are an optional extension of the full-button workflow,
+        # using the exact completed target-language translation as narration.
+        # They must not change any translated word or block SEO on failure.
+        if snapshot.get("auto_video_forms", False):
+            try:
+                progress.update(68, "🎬 Đang tạo form video 8 giây tự động...")
+                style = snapshot.get("video_style", "Điện ảnh chân thực")
+                plan = narration_plan(fields["translated"], language)
+                bible = parse_json_object(
+                    call(character_bible_prompt(fields["translated"], language, style)),
+                    "character_bible",
+                )["character_bible"]
+                if not isinstance(bible, str) or not bible.strip():
+                    raise ValueError("Không tạo được hồ sơ nhân vật.")
+                plan["character_bible"] = bible.strip()
+                plan["style"] = style
+                scenes = plan["scenes"]
+                for start in range(0, len(scenes), 6):
+                    progress.check_cancelled()
+                    group = scenes[start:start + 6]
+                    expected = [scene["number"] for scene in group]
+                    apply_ai_batch(plan, call(batch_prompt(plan, group, style=style)), expected)
+                    progress.update(
+                        69 + int(11 * (start + len(group)) / len(scenes)),
+                        f"🎬 Đã tạo {start + len(group)}/{len(scenes)} form video...",
+                    )
+                    encoded = json.dumps(plan, ensure_ascii=False)
+                    if len(encoded) > 390000:
+                        raise ValueError("Form video quá lớn để lưu; hãy chia nội dung.")
+                    fields["video_forms"] = encoded
+                    progress.publish("video_forms", encoded)
+            except Exception as exc:
+                # A video-form error must never discard the complete translation.
+                progress.check_cancelled()
+                message = str(exc).replace(api_key, "[API KEY ĐÃ ẨN]")
+                subtitle_key = snapshot.get("supadata_key") or ""
+                if subtitle_key:
+                    message = message.replace(subtitle_key, "[KEY PHỤ ĐỀ ĐÃ ẨN]")
+                fields["video_forms_error"] = message[:250]
 
         # SEO still needs a concise overview for long transcripts, but do
         # not perform any image-prompt generation or publish prompt fields.
