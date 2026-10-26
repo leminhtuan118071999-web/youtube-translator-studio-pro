@@ -36,6 +36,25 @@ class VoiceAlignmentTests(unittest.TestCase):
         self.assertEqual(plan["alignment_mode"], "duration_weighted_estimate")
         self.assertEqual(" ".join(x["voiceover"] for x in plan["scenes"]), text)
 
+    def test_audio_length_and_translated_word_count_both_inform_estimate(self):
+        # The audio length fixes the number of 8s clips, while translation
+        # density determines expected speech pace and content per clip.
+        audio_seconds = 870.24
+        normal = speech_statistics(" ".join(["word"] * 1900), audio_seconds)
+        self.assertEqual(normal["form_count"], 109)
+        self.assertEqual(normal["video_duration_seconds"], 872)
+        self.assertEqual(normal["translated_word_count"], 1900)
+        self.assertAlmostEqual(normal["words_per_8s"], 17.4, places=1)
+        self.assertEqual(normal["pacing_notice"], "")
+
+        too_long = speech_statistics(" ".join(["word"] * 4000), audio_seconds)
+        self.assertEqual(too_long["form_count"], 109)
+        self.assertIn("dài", too_long["pacing_notice"])
+
+        too_short = speech_statistics(" ".join(["word"] * 100), audio_seconds)
+        self.assertEqual(too_short["form_count"], 109)
+        self.assertIn("ngắn", too_short["pacing_notice"])
+
     def test_silent_audio_windows_still_generate_forms(self):
         text = "hello world"
         plan = duration_weighted_plan(text, "Tiếng Anh", 17.0)
