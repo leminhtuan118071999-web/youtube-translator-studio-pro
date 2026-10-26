@@ -45,6 +45,25 @@ class PersistentStoreTests(unittest.TestCase):
         self.assertNotIn("api_key", out["workspaces"][ident])
         self.assertEqual(out["workspaces"][ident]["job_state"], "interrupted")
 
+    def test_running_job_id_survives_saved_profile_for_same_server_reconnect(self):
+        ident = uuid.uuid4().hex
+        run_id = uuid.uuid4().hex
+        snapshot = backup_state({
+            ident: {
+                "name": "Đang dịch", "source": "Already fetched subtitles",
+                "job_state": "running", "job_percent": 45,
+                "job_stage": "Đang dịch phần 2/4",
+                "job_run_id": run_id,
+                "api_key": "NEVER_SAVE_SECRET",
+            }
+        }, ident, 1)
+        record = snapshot["workspaces"][ident]
+        self.assertEqual(record["job_run_id"], run_id)
+        self.assertEqual(record["job_state"], "interrupted")
+        self.assertEqual(record["job_percent"], 45)
+        self.assertNotIn("api_key", record)
+        self.assertNotIn("NEVER_SAVE_SECRET", json.dumps(snapshot))
+
     def test_only_api_widget_keys_recovered(self):
         config = {
             "api_provider": "Groq", "api_key_Groq": "groq-super-secret",
