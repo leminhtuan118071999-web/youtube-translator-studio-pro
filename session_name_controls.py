@@ -13,12 +13,14 @@ _session_component = components.declare_component(
 )
 
 
-def session_name_control(name, suffix, tone, *, key):
-    if tone not in ("selected", "completed", "pending"):
+def session_name_control(name, suffix, tone, *, selected=False, key):
+    if tone not in ("completed", "pending"):
         raise ValueError("Màu trạng thái phiên không hợp lệ.")
+    if not isinstance(selected, bool):
+        raise ValueError("Trạng thái phiên đang xem không hợp lệ.")
     return _session_component(
         name=str(name), suffix=str(suffix), tone=tone,
-        key=key, default=None,
+        selected=selected, key=key, default=None,
     )
 
 
