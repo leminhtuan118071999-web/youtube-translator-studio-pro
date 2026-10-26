@@ -98,6 +98,71 @@ def align_target_words(translation, stamped_words, duration):
     return stamps, round(similarity, 3)
 
 
+def speech_statistics(translation, duration, stamped_words=None):
+    """Audio-driven count, measured average delivery rate and visible timing gap."""
+    from video_scene_planner import SECONDS_PER_SCENE, MAX_SCENES
+    if not isinstance(duration, (int, float)) or not math.isfinite(duration) or duration <= 0:
+        raise ValueError("Thời lượng audio không hợp lệ.")
+    total = math.ceil(duration / SECONDS_PER_SCENE)
+    if total > MAX_SCENES:
+        raise ValueError("Giọng đọc quá dài: hơn 240 form 8 giây.")
+    words = len(translation.split())
+    heard = stamped_words or []
+    spoken_seconds = sum(
+        max(0.0, min(duration, item["end"]) - min(duration, item["start"]))
+        for item in heard
+    )
+    return {
+        "form_count": total,
+        "voice_duration_seconds": round(duration, 2),
+        "video_duration_seconds": total * SECONDS_PER_SCENE,
+        "padding_seconds": round(total * SECONDS_PER_SCENE - duration, 2),
+        "average_wpm": round(words * 60 / duration, 1),
+        "speaking_wpm": round(len(heard) * 60 / spoken_seconds, 1) if spoken_seconds else None,
+        "silence_seconds": round(max(0.0, duration - spoken_seconds), 2)
+            if stamped_words is not None else None,
+    }
+
+
+def duration_weighted_plan(translation, language, duration):
+    """Fallback: distribute words by estimated speech load, not equal word count.
+
+    Without audio word timestamps this remains approximate, never claim
+    accurate phrase synchronization.
+    """
+    from video_scene_planner import narration_plan
+    plan = narration_plan(translation, language, audio_duration_seconds=duration)
+    words = translation.split()
+    count = len(plan["scenes"])
+    if not words or len(words) < count:
+        raise ValueError("Bản dịch quá ngắn so với giọng đọc; cần kiểm tra lại file.")
+    # Longer words and punctuation get slightly more estimated speaking time.
+    weights = [
+        max(1.0, len(_tokens(w)[0]) / 5 if _tokens(w) else 1.0)
+        + (0.75 if w.rstrip().endswith((".", "!", "?", ";", "。", "！", "？")) else 0)
+        for w in words
+    ]
+    total = sum(weights)
+    offsets = []
+    running = 0.0
+    for weight in weights:
+        offsets.append(running / total * duration)
+        running += weight
+    start = 0
+    for scene in plan["scenes"]:
+        cutoff = scene["end_seconds"]
+        stop = start
+        while stop < len(words) and offsets[stop] < cutoff:
+            stop += 1
+        scene["voiceover"] = " ".join(words[start:stop])
+        start = stop
+    if start < len(words):
+        plan["scenes"][-1]["voiceover"] += " " + " ".join(words[start:])
+    plan["alignment_mode"] = "duration_weighted_estimate"
+    plan["speech_stats"] = speech_statistics(translation, duration)
+    return plan
+
+
 def audio_aligned_plan(translation, language, duration, word_positions):
     """Create 8-second time windows based on timestamps, never rewrite the script."""
     from video_scene_planner import (
@@ -128,4 +193,5 @@ def audio_aligned_plan(translation, language, duration, word_positions):
     if " ".join(s["voiceover"] for s in base["scenes"]).strip() != " ".join(tokens):
         raise AssertionError("Aligned video forms lost a piece of narration.")
     base["alignment_mode"] = "whisper_word_timestamps"
+    base["speech_stats"] = speech_statistics(translation, duration)
     return base
