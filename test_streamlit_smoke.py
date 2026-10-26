@@ -15,105 +15,35 @@ class StreamlitSmokeTests(unittest.TestCase):
         self.app.session_state["_browser_sessions_restored"] = True
         self.app.session_state["_session_name_test_fallback"] = True
 
-    def test_thumbnail_key_autodetects_model_once_and_manual_rescan(self):
-        from unittest.mock import patch
+    def test_thumbnail_features_removed_and_video_url_still_works(self):
+        """No thumbnail controls or network image fetch during normal app use."""
+        from pathlib import Path
+
+        source = Path("streamlit_app.py").read_text(encoding="utf-8")
+        self.assertNotIn("render_thumbnail_ai", source)
+        self.assertNotIn("get_thumbnail(", source)
+        self.assertNotIn("i.ytimg.com", source)
+        self.assertNotIn("Thumbnail gốc chất lượng cao", source)
+        self.assertNotIn("Thumbnail • Quản lý phiên", source)
 
         app = self.app.run()
         self.assertFalse(app.exception, [str(x.message) for x in app.exception])
-        field = next(
+        url_field = next(
             item for item in app.get("text_input")
-            if item.key and item.key.endswith("_image_key_Gemini")
+            if item.key and item.key.endswith("_url")
+            and item.key.startswith("field_")
         )
-        sid = app.session_state["selected_session"]
-        with patch(
-            "thumbnail_ui.discover_image_models",
-            return_value=["gemini-3.1-flash-image", "gemini-2.5-flash-image"],
-        ) as scanner:
-            field.set_value("test-private-key-123")
-            app.run()
-            self.assertFalse(app.exception, [str(x.message) for x in app.exception])
-            scanner.assert_called_once_with("Gemini", "test-private-key-123")
-            self.assertEqual(
-                app.session_state[f"thumb_{sid}_image_model_Gemini"],
-                "gemini-3.1-flash-image",
-            )
-            entry = app.session_state[f"thumb_{sid}_image_discovery_Gemini"]
-            self.assertNotIn("test-private-key-123", str(entry))
-            app.run()
-            self.assertEqual(scanner.call_count, 1)
-            next(
-                btn for btn in app.button
-                if btn.key == f"thumb_{sid}_image_rescan_Gemini"
-            ).click()
-            app.run()
-            self.assertEqual(scanner.call_count, 2)
-            next(
-                item for item in app.get("text_input")
-                if item.key == f"thumb_{sid}_image_key_Gemini"
-            ).set_value("another-private-key-456")
-            app.run()
-            self.assertEqual(scanner.call_count, 3)
-            self.assertNotIn(
-                "another-private-key-456",
-                str(app.session_state[f"thumb_{sid}_image_discovery_Gemini"]),
-            )
-
-    def test_thumbnail_ai_reuses_main_gemini_api_key(self):
-        app = self.app.run()
-        provider = next(
-            item for item in app.selectbox if item.label == "CHỌN NỀN TẢNG AI"
-        )
-        provider.set_value("Google Gemini")
+        url_field.set_value("https://www.youtube.com/watch?v=dQw4w9WgXcQ")
         app.run()
         self.assertFalse(app.exception, [str(x.message) for x in app.exception])
-        shared = next(
-            c for c in app.checkbox
-            if c.key and c.key.endswith("_ai_use_shared")
-        )
-        self.assertTrue(shared.value)
-        self.assertIn("Google Gemini", shared.label)
-        self.assertTrue(any(
-            item.label == "Model tạo/sửa ảnh" for item in app.selectbox
-        ))
-        # The UI must not force a duplicate key when sharing is enabled.
         self.assertFalse(any(
-            item.key and "_image_key_" in item.key
-            for item in app.get("text_input")
+            "Thumbnail" in item.label for item in app.get("expander")
         ))
-
-    def test_thumbnail_ai_shows_separate_image_provider_for_groq(self):
-        app = self.app.run()
-        self.assertFalse(app.exception, [str(x.message) for x in app.exception])
         self.assertFalse(any(
-            c.key and c.key.endswith("_ai_use_shared") for c in app.checkbox
+            "thumbnail" in item.label.lower() for item in app.button
         ))
         self.assertTrue(any(
-            item.label == "Dịch vụ chỉnh sửa ảnh"
-            for item in app.selectbox
-        ))
-
-    def test_thumbnail_ai_panel_keeps_original_and_two_actions(self):
-        from pathlib import Path
-        code = Path("streamlit_app.py").read_text(encoding="utf-8")
-        panel = Path("thumbnail_ui.py").read_text(encoding="utf-8")
-        self.assertIn("render_thumbnail_ai(sid, vid, thumbnail if vid else None, language)", code)
-        self.assertIn("Tạo lại thumbnail gốc", panel)
-        self.assertIn("Dịch chữ trên thumbnail sang ngôn ngữ đích", panel)
-        self.assertIn("normalize_thumbnail(source)", panel)
-        self.assertIn("recognize_and_translate(", panel)
-        self.assertIn("edit_thumbnail(", panel)
-        self.assertIn('mime="image/png"', panel)
-        self.assertIn('image_provider = st.selectbox(', panel)
-        self.assertIn("Kết quả chỉ lưu trong phiên trình duyệt đang mở", panel)
-        app = self.app.run()
-        self.assertFalse(app.exception, [str(x.message) for x in app.exception])
-        self.assertTrue(any(
-            button.key and button.key.endswith("_ai_recreate")
-            for button in app.button
-        ))
-        self.assertTrue(any(
-            button.key and button.key.endswith("_ai_translate")
-            for button in app.button
+            item.label == "🚀 BẮT ĐẦU TẠO TOÀN BỘ" for item in app.button
         ))
 
     def test_unnecessary_completed_banner_and_session_count_caption_removed(self):
