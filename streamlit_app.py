@@ -28,6 +28,7 @@ from browser_session_store import (
 )
 from copy_buttons import copy_all_button
 from session_name_controls import session_name_control, rename_record
+from thumbnail_ui import render_thumbnail_ai
 
 st.set_page_config(page_title="LMT Studio Pro", page_icon="🎬", layout="wide")
 st.title("🎬 LMT Studio Pro")
@@ -1405,6 +1406,10 @@ if vid:
             "⬇️ Tải thumbnail", thumbnail, file_name=f"thumbnail-{vid}.jpg",
             mime="image/jpeg", key=f"thumb_{sid}_{vid}",
         )
+
+# Image editing is optional and never changes the original thumbnail download.
+render_thumbnail_ai(sid, vid, thumbnail if vid else None, language)
+
 
 # Original transcript, title and description are retained internally for processing,
 # but only target-language results are shown to the user.
