@@ -935,6 +935,32 @@ with st.sidebar:
                             sync_form(sid)
                             st.session_state["_open_session_next"] = saved_id
                             _persist_and_rerun()
+        if st.button(
+            "Xóa", key=f"delete_session_{saved_id}",
+            use_container_width=True, type="secondary",
+        ):
+            st.session_state["confirm_delete_session_id"] = saved_id
+            st.rerun()
+        if st.session_state.get("confirm_delete_session_id") == saved_id:
+            st.warning(
+                f"Bạn chắc chắn muốn xóa phiên '{saved_record['name']}'? "
+                "Nội dung, bản dịch và form video của phiên sẽ bị xóa."
+            )
+            confirm_col, cancel_col = st.columns(2, gap="small")
+            with confirm_col:
+                if st.button(
+                    "✅ Xác nhận xóa", key=f"confirm_delete_{saved_id}",
+                    use_container_width=True,
+                ):
+                    delete_saved_session(saved_id)
+                    _persist_and_rerun()
+            with cancel_col:
+                if st.button(
+                    "Hủy", key=f"cancel_delete_{saved_id}",
+                    use_container_width=True,
+                ):
+                    st.session_state["confirm_delete_session_id"] = None
+                    st.rerun()
     # Session content still auto-saves on every rerun via Supabase or
     # local browser storage. Only the optional backup/import UI is removed.
     # Keep cloud logout accessible outside the retired backup section.
