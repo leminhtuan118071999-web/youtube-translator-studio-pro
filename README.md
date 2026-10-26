@@ -183,7 +183,7 @@ trong quy trình **🚀 BẮT ĐẦU TẠO TOÀN BỘ**.
   đích của đúng phiên, chia theo thứ tự không bỏ sót từ. AI chỉ viết mô tả
   hình ảnh, không được đổi lời đọc hay dịch lại.
 - **8 giây/form:** Form chứa số thứ tự, timecode từ 0–8s, 8–16s... và lời
-  đọc tương ứng. Khi ghép các clip 8 giây, chuyển cảnh nằm trong 0,4 giây
+  đọc tương ứng. Khi ghép các clip 8 giây, chuyển cảnh chiếm khoảng 1 giây cuối
   cuối của clip, không cộng thêm thời lượng.
 - **Nhân vật thống nhất:** Một hồ sơ nhân vật/bối cảnh cố định được sinh
   từ nội dung bản dịch và nhắc lại trong từng prompt để giữ đặc điểm ngoại
