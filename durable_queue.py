@@ -6,6 +6,7 @@ before the queue record is written and never returned in status queries.
 """
 import json
 import re
+from datetime import datetime, timezone
 
 from persistent_store import get_config, _request, _user_headers
 
@@ -127,3 +128,56 @@ def apply_owned_job_results(workspaces, jobs):
             session["processed"] = True
             changed = True
     return changed
+
+
+def worker_healthy(secrets, auth, *, max_age_seconds=150):
+    """Verify a live independent worker, not merely a configured toggle."""
+    url, anon, _ = get_config(secrets)
+    rows = _request(
+        "GET", url + "/rest/v1/lmt_worker_health",
+        _user_headers(anon, auth),
+        params={
+            "select": "name,last_seen",
+            "order": "last_seen.desc", "limit": "1",
+        },
+    )
+    if not isinstance(rows, list) or not rows:
+        return False
+    stamp = str(rows[0].get("last_seen") or "")
+    try:
+        touched = datetime.fromisoformat(stamp.replace("Z","+00:00"))
+        return 0 <= (datetime.now(timezone.utc) - touched).total_seconds() <= max_age_seconds
+    except (ValueError,TypeError):
+        return False
+
+
+def fetch_portrait_images(secrets, auth, sid, raw_manifest):
+    """Fetch private PNGs via user's own JWT; the UI never needs service key."""
+    if not _valid_sid(sid) or not raw_manifest:
+        return {}
+    import requests
+    try:
+        manifest = json.loads(raw_manifest)
+    except (TypeError,ValueError):
+        return {}
+    if not isinstance(manifest,dict):
+        return {}
+    url, anon, _ = get_config(secrets)
+    prefix = str(auth["user_id"]) + "/" + sid + "/"
+    images = {}
+    for name,path in list(manifest.items())[:8]:
+        if not isinstance(name,str) or not isinstance(path,str):
+            continue
+        if not path.startswith(prefix) or "/" in path[len(prefix):] or len(path) > 240:
+            continue
+        try:
+            result = requests.get(
+                url + "/storage/v1/object/lmt-character-images/" + path,
+                headers=_user_headers(anon,auth), timeout=(7,20),
+            )
+            if (result.ok and len(result.content) <= 6 * 1024 * 1024
+                    and result.content.startswith(b"\\x89PNG\\r\\n\\x1a\\n")):
+                images[name] = result.content
+        except requests.RequestException:
+            continue
+    return images
