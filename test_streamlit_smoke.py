@@ -103,7 +103,7 @@ class StreamlitSmokeTests(unittest.TestCase):
         self.assertIn('alignment_api_key=image_api_key', source)
         self.assertIn('key=f"create_video_forms_{sid}"', forms)
         self.assertIn('key=f"continue_video_forms_{sid}"', forms)
-        self.assertIn('"📋 Copy toàn bộ form"', forms)
+        self.assertIn('f"📋 Copy toàn bộ ô {group[\'panel\']}"', forms)
         self.assertIn('with st.expander("📌 Hồ sơ nhân vật/bối cảnh cố định cho mọi form", expanded=False):', forms)
         self.assertIn('grouped_video_forms(plan)', forms)
         self.assertIn('with st.expander(', forms)
