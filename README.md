@@ -7,6 +7,17 @@ và có nút **Copy toàn bộ ô**; chỉ nội dung các form đã tạo trong
 đó được sao chép, không trộn với ô khác. Giữ một dòng trống giữa các
 form. File TXT toàn bộ và JSON vẫn tải được như cũ.
 
+## API âm thanh HTTP 502: tự khôi phục để vẫn tạo form
+
+Khi Whisper tạm thời lỗi HTTP 502/503/504, timeout hoặc mạng lỗi, app
+thử lại tối đa một lần. Nếu vẫn lỗi, **nút Tạo form vẫn xử lý tiếp**
+bằng cách chia bản dịch theo thời lượng MP3 và ước tính tốc độ,
+có **cảnh báo rõ rằng chưa khớp từng từ** trong tab Form video.
+Ứng dụng không cố âm thầm dùng phương án này khi API trả lỗi
+401/quyền truy cập hoặc khi bản ghi khác nhiều so với bản dịch;
+những trường hợp đó vẫn hiển thị lỗi để tránh tạo cảnh sai.
+Bản dịch/SEO và ảnh nhân vật không bị ảnh hưởng.
+
 ## 🎙️ Tạo form video 8 giây riêng sau khi tải giọng đọc
 
 Nút **🚀 BẮT ĐẦU TẠO TOÀN BỘ** vẫn chạy lấy phụ đề, tối ưu kịch bản
