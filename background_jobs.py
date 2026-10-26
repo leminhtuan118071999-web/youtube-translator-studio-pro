@@ -225,6 +225,18 @@ def run_full_job(snapshot, progress):
     """Return completed/partial fields. Never return or store the API key."""
     result = {"ok": False, "fields": {}, "error": ""}
     fields = result["fields"]
+    # Resume only checkpoints created by an earlier lease holder of this
+    # SAME queue job, not arbitrary session results from another run.
+    old_fields = snapshot.get("resume_fields") or {}
+    if isinstance(old_fields, dict):
+        fields.update({name:value for name,value in old_fields.items()
+                       if name in ("source","title","caption_language",
+                                   "optimized_script","translation_parts",
+                                   "translation_complete","translated",
+                                   "character_bible","character_profile",
+                                   "character_images_manifest","character_images_error",
+                                   "new_title","new_description","seo_tags",
+                                   "metadata","language")})
     api_key = snapshot["api_key"]
 
     def _wait_for_retry(seconds, description):
@@ -310,14 +322,18 @@ def run_full_job(snapshot, progress):
 
     try:
         progress.check_cancelled()
-        source = snapshot.get("source", "")
+        source = fields.get("source") or snapshot.get("source", "")
         vid = youtube_id(snapshot.get("url", ""))
         title = snapshot.get("title", "")
         description = snapshot.get("description", "")
         language = snapshot["language"]
         provided_source = (snapshot.get("uploaded_source") or "").strip()
         if vid:
-            if provided_source:
+            if isinstance(fields.get("source"),str) and fields["source"].strip():
+                source = fields["source"]
+                caption_lang = fields.get("caption_language", "Phụ đề đã lưu")
+                progress.update(8, "📄 Tiếp tục với phụ đề đã lưu từ phiên trước")
+            elif provided_source:
                 progress.update(6, "📄 Dùng file phụ đề đã tải lên...")
                 source, caption_lang = provided_source, "Phụ đề tải lên"
             else:
@@ -354,9 +370,13 @@ def run_full_job(snapshot, progress):
 
         # Rewrite the entire original story BEFORE translating. Preserve
         # the unmodified source separately for review and future regeneration.
-        optimized = optimize_source_script(source, call, progress)
-        fields["optimized_script"] = optimized
-        progress.publish("optimized_script", optimized)
+        optimized = fields.get("optimized_script")
+        if not isinstance(optimized, str) or not optimized.strip():
+            optimized = optimize_source_script(source, call, progress)
+            fields["optimized_script"] = optimized
+            progress.publish("optimized_script", optimized)
+        else:
+            progress.update(43, "✅ Đã khôi phục kịch bản tối ưu từ checkpoint")
 
         # Smaller chunks for Groq Free (8K TPM): each request needs far
         # fewer input and reserved completion tokens.
@@ -366,19 +386,34 @@ def run_full_job(snapshot, progress):
             else 5500
         )
         chunks = list(chunk_text(optimized, chunk_size))
-        translations = []
-        for idx, part in enumerate(chunks, 1):
-            progress.check_cancelled()
-            progress.update(45 + int(22 * (idx - 1) / len(chunks)),
-                            f"🌍 Đang dịch kịch bản phần {idx}/{len(chunks)} sang {language}...")
-            translation = call(
-                f"Dịch chính xác toàn bộ đoạn {idx}/{len(chunks)} sang {language}. "
-                "Viết tự nhiên, không thiếu câu, không thêm tình tiết, giữ tên nhân vật "
-                "và xuống dòng. CHỈ xuất bản dịch.\n\n" + part
-            )
-            translations.append(translation)
-            fields["translated"] = "\n\n".join(translations)
-            progress.publish("translated", fields["translated"])
+        translations = fields.get("translation_parts", [])
+        if not isinstance(translations, list) or len(translations) > len(chunks):
+            translations = []
+        translations = [part for part in translations
+                        if isinstance(part, str) and part.strip()]
+        if fields.get("translation_complete") and fields.get("translated"):
+            progress.update(67, "✅ Đã khôi phục bản dịch đầy đủ từ checkpoint")
+        else:
+            for idx, part in enumerate(chunks, 1):
+                if idx <= len(translations):
+                    continue
+                progress.check_cancelled()
+                progress.update(45 + int(22 * (idx - 1) / len(chunks)),
+                                f"🌍 Đang dịch kịch bản phần {idx}/{len(chunks)} sang {language}...")
+                translation = call(
+                    f"Dịch chính xác toàn bộ đoạn {idx}/{len(chunks)} sang {language}. "
+                    "Viết tự nhiên, không thiếu câu, không thêm tình tiết, giữ tên nhân vật "
+                    "và xuống dòng. CHỈ xuất bản dịch.\n\n" + part
+                )
+                translations.append(translation)
+                fields["translation_parts"] = list(translations)
+                # Persist the index BEFORE publishing visible translation:
+                # after a restart, completed chunks are not charged twice.
+                progress.publish("translation_parts", fields["translation_parts"])
+                fields["translated"] = "\n\n".join(translations)
+                progress.publish("translated", fields["translated"])
+            fields["translation_complete"] = True
+            progress.publish("translation_complete", True)
 
         # Character reference images still auto-generate where configured.
         # 8-second form generation is a DIFFERENT step requiring an uploaded
@@ -387,40 +422,81 @@ def run_full_job(snapshot, progress):
             try:
                 progress.update(68, "🖼️ Đang phân tích nhân vật...")
                 style = snapshot.get("video_style", "Điện ảnh chân thực")
-                profile_data = parse_json_object(
-                    call(character_bible_prompt(fields["translated"], language, style)),
-                    "character_bible",
-                )
+                profile_data = fields.get("character_profile")
+                if not isinstance(profile_data, dict) or not profile_data.get("character_bible"):
+                    profile_data = parse_json_object(
+                        call(character_bible_prompt(fields["translated"], language, style)),
+                        "character_bible",
+                    )
+                    fields["character_profile"] = profile_data
+                    progress.publish("character_profile", profile_data)
                 bible = profile_data["character_bible"]
                 if not isinstance(bible, str) or not bible.strip():
                     raise ValueError("Không tạo được hồ sơ nhân vật.")
                 fields["character_bible"] = bible.strip()
                 progress.publish("character_bible", fields["character_bible"])
                 image_key = snapshot["image_api_key"]
+                # Durable workers upload PNG into private Supabase Storage.
+                # Local Streamlit workers retain their original in-memory path.
+                manifest_raw = fields.get("character_images_manifest", "")
+                try:
+                    manifest = json.loads(manifest_raw) if manifest_raw else {}
+                except (TypeError, ValueError):
+                    manifest = {}
+                if not isinstance(manifest, dict):
+                    manifest = {}
+                image_sink = snapshot.get("image_sink")
                 for name, description in character_specs(profile_data):
+                    if name in manifest:
+                        continue
                     progress.check_cancelled()
                     progress.update(68, f"🖼️ Đang tạo ảnh nhân vật {name}...")
                     try:
                         png = create_character_png(
                             image_key, name, description,
-                            style=style, bible=bible, model=snapshot.get("image_model") or IMAGE_MODEL,
+                            style=style, bible=bible,
+                            model=snapshot.get("image_model") or IMAGE_MODEL,
                         )
-                        IMAGE_STORE.save(snapshot["image_scope"], snapshot["image_session_id"], name, png)
-                        fields["character_images_count"] = len(
-                            IMAGE_STORE.images(snapshot["image_scope"], snapshot["image_session_id"])
-                        )
-                        progress.publish("character_images_count", fields["character_images_count"])
+                        if callable(image_sink):
+                            manifest[name] = image_sink(name, png)
+                            fields["character_images_manifest"] = json.dumps(
+                                manifest, ensure_ascii=False
+                            )
+                            progress.publish(
+                                "character_images_manifest",
+                                fields["character_images_manifest"],
+                            )
+                            fields["character_images_count"] = len(manifest)
+                        else:
+                            IMAGE_STORE.save(
+                                snapshot["image_scope"], snapshot["image_session_id"],
+                                name, png,
+                            )
+                            fields["character_images_count"] = len(
+                                IMAGE_STORE.images(snapshot["image_scope"],
+                                                   snapshot["image_session_id"])
+                            )
+                        progress.publish("character_images_count",
+                                         fields["character_images_count"])
                     except Exception as exc:
                         fields["character_images_error"] = (
-                            "Tạo ảnh chưa hoàn tất: " + str(exc).replace(image_key, "[IMAGE KEY ĐÃ ẨN]")
+                            "Tạo ảnh chưa hoàn tất: "
+                            + str(exc).replace(image_key, "[IMAGE KEY ĐÃ ẨN]")
                         )[:250]
-                        progress.publish("character_images_error", fields["character_images_error"])
+                        progress.publish("character_images_error",
+                                         fields["character_images_error"])
             except Exception as exc:
                 progress.check_cancelled()
                 message = str(exc).replace(api_key, "[API KEY ĐÃ ẨN]")
                 message = message.replace(snapshot.get("image_api_key", ""), "[IMAGE KEY ĐÃ ẨN]")
                 fields["character_images_error"] = message[:250]
                 progress.publish("character_images_error", fields["character_images_error"])
+
+        if all(isinstance(fields.get(k),str) and fields[k].strip()
+               for k in ("new_title","new_description","seo_tags")):
+            result["ok"] = True
+            progress.update(100, "✅ SEO đã có từ checkpoint; hoàn thành phiên.")
+            return result
 
         # SEO still needs a concise overview for long transcripts, but do
         # not perform any image-prompt generation or publish prompt fields.

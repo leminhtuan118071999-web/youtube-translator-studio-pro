@@ -36,6 +36,8 @@ from video_forms_ui import render_video_forms
 from section_retries import rerun_translation, rerun_seo, portrait_retry_specs
 from character_images import IMAGE_STORE, IMAGE_MODEL, session_images_zip, create_character_png
 from session_name_controls import session_name_control, rename_record
+from durable_queue import (queue_available, worker_healthy, submit_job,
+    get_owned_jobs, apply_owned_job_results, fetch_portrait_images)
 
 st.set_page_config(page_title="LMT Studio Pro", page_icon="🎬", layout="wide")
 st.title("🎬 LMT Studio Pro")
@@ -127,7 +129,7 @@ LANGUAGES = [
     "Tiếng Catalan", "Tiếng Basque", "Tiếng Wales", "Tiếng Luxembourg",
     "Tiếng Macedonia", "Tiếng Việt", "Tiếng Nhật", "Tiếng Hàn",
 ]
-FIELDS = ("url", "source", "title", "description", "translated", "prompts", "metadata", "language", "new_title", "new_description", "seo_tags", "video_forms", "optimized_script", "character_images_error", "character_bible", "seo_stale", "character_bible_stale")
+FIELDS = ("url", "source", "title", "description", "translated", "prompts", "metadata", "language", "new_title", "new_description", "seo_tags", "video_forms", "optimized_script", "character_images_error", "character_bible", "character_images_manifest", "seo_stale", "character_bible_stale")
 FORM_FIELDS = ("url", "language")
 
 
@@ -136,7 +138,7 @@ def blank_session(name):
         "name": name, "url": "", "source": "", "title": "", "description": "",
         "translated": "", "prompts": "", "metadata": "", "language": "Tiếng Ba Lan",
         "saved": False, "processed": False, "saved_order": 0,
-        "new_title": "", "new_description": "", "seo_tags": "", "video_forms": "", "optimized_script": "", "character_images_error": "", "character_bible": "", "seo_stale": False, "character_bible_stale": False,
+        "new_title": "", "new_description": "", "seo_tags": "", "video_forms": "", "optimized_script": "", "character_images_error": "", "character_bible": "", "character_images_manifest": "", "seo_stale": False, "character_bible_stale": False,
     }
 
 
@@ -166,6 +168,11 @@ try:
     CLOUD_ENABLED = configured(st.secrets)
 except (FileNotFoundError, OSError):
     CLOUD_ENABLED = False
+try:
+    DURABLE_QUEUE_ENABLED = bool(CLOUD_ENABLED and queue_available(st.secrets))
+except (FileNotFoundError, OSError):
+    DURABLE_QUEUE_ENABLED = False
+
 
 
 def _cloud_secrets():
@@ -514,6 +521,30 @@ def _video_job_scope():
     return "video:" + _job_scope()
 
 
+def sync_durable_queue():
+    """Read worker checkpoints after browser or Streamlit restart."""
+    if not DURABLE_QUEUE_ENABLED:
+        return False
+    try:
+        changed = apply_owned_job_results(
+            st.session_state.workspaces,
+            get_owned_jobs(st.secrets, _refresh_login()),
+        )
+        st.session_state.pop("_durable_queue_error", None)
+        return changed
+    except Exception as exc:
+        st.session_state["_durable_queue_error"] = str(exc)[:250]
+        return False
+
+
+def ensure_durable_worker_available():
+    if DURABLE_QUEUE_ENABLED and not worker_healthy(st.secrets, _refresh_login()):
+        raise RuntimeError(
+            "Worker độc lập chưa hoạt động (không có heartbeat mới). "
+            "Hãy triển khai worker để chạy qua đêm."
+        )
+
+
 def reattach_video_background_jobs():
     jobs = st.session_state.video_background_jobs
     for session_id, record in st.session_state.workspaces.items():
@@ -782,6 +813,7 @@ reattach_background_jobs()
 collect_completed_jobs()
 reattach_video_background_jobs()
 collect_video_background_jobs()
+sync_durable_queue()
 
 # Use two independent views inside ONE Streamlit entrypoint. Unlike page_link,
 # this needs no page registry, so Cloud cannot raise StreamlitPageNotFoundError.
@@ -1519,6 +1551,16 @@ flash = st.session_state.pop("_session_flash", None)
 if flash:
     st.success(flash)
 st.info(f"📂 **Phiên đang mở:** {session['name']} — mọi kết quả chỉ thuộc phiên này.")
+if DURABLE_QUEUE_ENABLED:
+    st.caption(
+        "🖥️ Hàng đợi bền vững: worker độc lập xử lý và tự lưu lên Supabase "
+        "ngay cả khi Streamlit Cloud ngủ."
+    )
+elif CLOUD_ENABLED:
+    st.caption(
+        "ℹ️ Chưa bật worker độc lập: tác vụ Streamlit có thể dừng nếu "
+        "chính máy chủ bị tạm ngưng hoặc khởi động lại."
+    )
 if session.get("job_state") == "running":
     st.info(
         f"⏳ Phiên này đang xử lý: {session.get('job_stage', 'Đang chạy')} "
@@ -1568,7 +1610,9 @@ if st.button("🚀 BẮT ĐẦU TẠO TOÀN BỘ", type="primary",
         and not st.session_state.background_jobs[sid]["future"].done()
     ):
         st.info("Phiên này đang chạy nền. Bạn có thể bấm Tạo phiên mới ngay.")
-    elif sum(
+    elif DURABLE_QUEUE_ENABLED and session.get("job_state") == "running" and session.get("job_queue_id"):
+        st.info("Phiên này đã ở hàng đợi bền vững; đang chờ hoặc đang được worker xử lý.")
+    elif not DURABLE_QUEUE_ENABLED and sum(
         not job["future"].done()
         for job in st.session_state.background_jobs.values()
     ) >= 3:
@@ -1607,6 +1651,33 @@ if st.button("🚀 BẮT ĐẦU TẠO TOÀN BỘ", type="primary",
             if provider == "API bên thứ ba (tùy chỉnh)":
                 snapshot["api_format"] = api_format
                 snapshot["auth_mode"] = api_auth_mode
+            if DURABLE_QUEUE_ENABLED:
+                ensure_durable_worker_available()
+                # Save selected session AND current encrypted API settings first.
+                _save_cloud_state(force=True)
+                queue_snapshot = {
+                    item: value for item, value in snapshot.items()
+                    if item not in ("api_key", "supadata_key", "image_api_key")
+                }
+                queued = submit_job(
+                    st.secrets, _refresh_login(), sid, "full", queue_snapshot,
+                    {"api_key": key, "supadata_key": transcript_api_key,
+                     "image_api_key": image_api_key},
+                )
+                session["job_queue_id"] = queued
+                session["job_state"] = "running"
+                session["job_percent"] = 0
+                session["job_stage"] = "Đã giao việc cho worker độc lập"
+                session["job_run_id"] = ""
+                session["job_error"] = ""
+                session["saved"] = True
+                session["processed"] = True
+                st.session_state["_session_flash"] = (
+                    "✅ Phiên đã vào hàng đợi bền vững. "
+                    "Bạn có thể ngủ; worker độc lập sẽ xử lý và tự lưu."
+                )
+                _persist_and_rerun()
+                st.stop()
             # Worker keeps its own authenticated checkpoint configuration.
             # Never persist provider keys inside a session record.
             snapshot["sid"] = sid
@@ -1655,7 +1726,8 @@ def show_background_job_progress():
     """Poll in the Streamlit thread; worker threads never call st.*."""
     main_changed = collect_completed_jobs()
     video_changed = collect_video_background_jobs()
-    if main_changed or video_changed:
+    durable_changed = sync_durable_queue()
+    if main_changed or video_changed or durable_changed:
         _persist_and_rerun()
     for session_id, job in list(st.session_state.background_jobs.items()):
         if session_id not in st.session_state.workspaces:
@@ -1663,8 +1735,20 @@ def show_background_job_progress():
         percent, stage = job["progress"].snapshot()
         name = st.session_state.workspaces[session_id]["name"]
         st.progress(percent, text=f"{name}: {stage}")
-    if not st.session_state.background_jobs:
+    active_queue = [
+        (item.get("name","Phiên"), item.get("job_percent",0),
+         item.get("job_stage","Đang chờ worker"))
+        for item in st.session_state.workspaces.values()
+        if DURABLE_QUEUE_ENABLED and item.get("job_queue_id")
+           and item.get("job_state") == "running"
+    ]
+    for name, pct, stage in active_queue:
+        st.progress(int(pct or 0), text=f"{name}: {stage}")
+    if not st.session_state.background_jobs and not active_queue:
         st.caption("Không có phiên nào đang chạy nền.")
+    if st.session_state.get("_durable_queue_error"):
+        st.warning("Không đọc được hàng đợi: "
+                   + st.session_state["_durable_queue_error"])
 
 
 show_background_job_progress()
@@ -1798,6 +1882,31 @@ def launch_video_forms_background(duration, audio_hash, audio_name,
             raise ValueError("Phiên này đã có tác vụ form video đang chạy.")
     if not key.strip() or not model.strip():
         raise ValueError("Cần API key và model AI hợp lệ.")
+    if DURABLE_QUEUE_ENABLED:
+        ensure_durable_worker_available()
+        _save_cloud_state(force=True)
+        queued = submit_job(
+            st.secrets, _refresh_login(), sid, "video_forms",
+            {
+                "translated": translated, "language": target_language,
+                "duration_seconds": duration, "audio_hash": audio_hash,
+                "audio_name": audio_name, "style": style,
+                "character_bible": bible, "existing_plan": existing_plan,
+                "provider": provider, "base_url": base_url, "model": model,
+                "api_format": api_format, "auth_mode": api_auth_mode,
+            },
+            {"api_key": key},
+        )
+        session["video_queue_id"] = queued
+        session["video_job_state"] = "running"
+        session["video_job_stage"] = "Đã giao tạo form cho worker độc lập"
+        session["video_job_percent"] = 0
+        session["video_job_error"] = ""
+        session["video_job_run_id"] = ""
+        session["saved"] = True
+        session["processed"] = True
+        _persist_and_rerun()
+        return
     progress = JobProgress()
     run_id = uuid.uuid4().hex
     snapshot = {
@@ -1855,6 +1964,17 @@ with tab_video:
     )
 
 with tab_characters:
+    if DURABLE_QUEUE_ENABLED and session.get("character_images_manifest"):
+        if not IMAGE_STORE.images(_job_scope(), sid):
+            try:
+                restored = fetch_portrait_images(
+                    st.secrets, _refresh_login(), sid,
+                    session["character_images_manifest"],
+                )
+                for name, image_png in restored.items():
+                    IMAGE_STORE.save(_job_scope(), sid, name, image_png)
+            except Exception as exc:
+                st.warning("Chưa tải được ảnh nhân vật từ Storage: " + str(exc)[:180])
     st.subheader("🖼️ Ảnh nhân vật của phiên này")
     st.caption(
         "Ảnh được tự tạo sau Hồ sơ nhân vật nếu đã nhập OpenAI Images API key. "
