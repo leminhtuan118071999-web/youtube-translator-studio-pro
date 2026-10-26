@@ -38,13 +38,20 @@ def save_cloud_video_checkpoint(snapshot, encoded, state, error=""):
     if not cloud:
         return
     from persistent_store import (
-        get_config, refresh_auth, _request, _user_headers, save_user,
+        get_config, _request, _user_headers, save_user,
     )
     import json as _json
+    import time
     with _persist_lock:
         secrets = cloud["secrets"]
-        auth = refresh_auth(secrets, cloud["auth"])
-        cloud["auth"] = auth
+        auth = cloud["auth"]
+        # Rotating refresh tokens in a worker could invalidate the browser
+        # login when the user opens their laptop again.
+        if time.time() >= auth["expires_at"]:
+            raise RuntimeError(
+                "Phiên lưu trữ đã hết hạn khi máy chủ đang xử lý. "
+                "Mở lại ứng dụng để đăng nhập và tiếp tục từ form đã lưu."
+            )
         url, anon, cipher = get_config(secrets)
         rows = _request(
             "GET", url + "/rest/v1/youtube_studio_state",
