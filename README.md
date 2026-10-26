@@ -2,6 +2,15 @@
 
 Ứng dụng Streamlit xử lý video YouTube: trích xuất phụ đề có sẵn (khi YouTube cho phép), dịch bằng API đa nền tảng, dịch tiêu đề/mô tả và SEO, tự hiển thị thumbnail gốc và cung cấp nút tải ảnh màu xanh dương.
 
+## 🧭 Menu ứng dụng: AI33 / OpenSpeaker
+
+Trong thanh bên **Ứng dụng**, LMT Studio Pro vẫn hiển thị **YouTube Translator**
+là công cụ hiện tại và có nút **🌐 AI33 / OpenSpeaker ↗**. Nhấn nút sẽ mở
+[https://ai33.pro/app](https://ai33.pro/app) trong tab trình duyệt mới (theo
+hành vi chuẩn của Streamlit `st.link_button`). LMT Studio Pro vẫn mở ở tab cũ;
+không nhúng website, không chia sẻ API key hoặc chuyển dữ liệu phiên sang AI33.
+AI33 có thể yêu cầu đăng nhập/gói sử dụng riêng.
+
 ## ☁️ Tự động lưu toàn bộ dữ liệu và cấu hình API qua lần đăng nhập sau
 
 Để lưu bền vững, admin kết nối một dự án Supabase có xác thực email và RLS. Khi đăng nhập, người dùng sẽ thấy lại mọi phiên đã đồng bộ: bản dịch, dữ liệu prompt cũ (nếu có), SEO, phụ đề, link video, tên phiên, trạng thái và cấu hình các nhà cung cấp API. Nhà cung cấp hiện chọn, Base URL, Model ID và API key do người dùng nhập đều được nhớ đến khi thay đổi. Supadata API key cũng được hỗ trợ.
