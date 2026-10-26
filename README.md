@@ -1,3 +1,27 @@
+## 🖥️ Chạy nền khi máy tính ngủ hoặc đóng trình duyệt
+
+Phần **BẮT ĐẦU TẠO TOÀN BỘ** chạy bằng worker máy chủ. Phần
+**🎬 Tạo form 8 giây theo giọng đọc** cũng được gửi lên server worker
+riêng: nhấn một lần, máy chủ tự viết đủ số form ước tính; mỗi nhóm sáu
+form đã kiểm tra được lưu vào phiên. Khi kết nối lại, ứng dụng hiển thị
+tiến độ và kết quả từ đúng phiên.
+
+Nếu đã **đăng nhập và cấu hình Supabase**, worker tạo form tự gửi
+checkpoint về cơ sở dữ liệu ngay cả khi trình duyệt tắt/ngủ, dùng
+quyền của tài khoản đăng nhập (RLS), không dùng service-role API key.
+Nếu dùng **chỉ bộ nhớ trình duyệt**, worker có thể tiếp tục trong bộ
+nhớ máy chủ nhưng không bảo đảm checkpoint được lưu bền vững khi
+trình duyệt đang đóng; nên đăng nhập để có lưu trữ từ server.
+
+**Giới hạn thực tế:** Streamlit Cloud có thể đưa app vào trạng thái
+ngủ hoặc khởi động lại container. Thread của server không tồn tại
+qua việc tắt server; vì vậy không thể bảo đảm chạy xuyên suốt khi
+chính **máy chủ** ngủ/tắt, dù máy tính người dùng ngủ không trực
+tiếp ngắt worker. Form đã lưu có thể tiếp tục bằng nút
+**Chạy lại riêng — Form video 8 giây** sau khi mở app trở lại. Đây
+chưa phải một hàng đợi nền bền vững có khả năng tự khởi chạy
+trên máy chủ mới.
+
 ## Ước tính form theo thời lượng và bản dịch — không phân tích giọng đọc
 
 Sau khi tải file MP3/WAV/M4A/OGG, ứng dụng chỉ đọc **độ dài audio**,
