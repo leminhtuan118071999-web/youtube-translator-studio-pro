@@ -97,8 +97,10 @@ class StreamlitSmokeTests(unittest.TestCase):
         self.assertIn('render_video_forms(', source)
         self.assertNotIn('create_20_prompts(', source)
         self.assertNotIn('🎨 20 prompt hình ảnh', source)
-        self.assertIn('snapshot.get("auto_video_forms", False)', worker)
-        self.assertIn('progress.publish("video_forms", encoded)', worker)
+        self.assertIn('"auto_video_forms": False', source)
+        self.assertNotIn('snapshot.get("auto_video_forms", False)', worker)
+        self.assertIn('render_video_forms(', source)
+        self.assertIn('alignment_api_key=image_api_key', source)
         self.assertIn('key=f"create_video_forms_{sid}"', forms)
         self.assertIn('key=f"continue_video_forms_{sid}"', forms)
         self.assertIn('"📋 Copy toàn bộ form"', forms)
@@ -111,6 +113,10 @@ class StreamlitSmokeTests(unittest.TestCase):
         self.assertNotIn('key=f"video_prompt_{sid}_{n}"', forms)
         self.assertNotIn('key=f"video_transition_{sid}_{n}"', forms)
         self.assertIn('type=["mp3", "wav", "m4a", "ogg"]', forms)
+        self.assertIn('disabled=audio_error or upload is None', forms)
+        self.assertIn('whisper_word_timestamps(', forms)
+        self.assertIn('audio_aligned_plan(', forms)
+        self.assertIn('"🎬 Tạo form 8 giây theo giọng đọc"', forms)
 
         app = self.app.run()
         self.assertFalse(app.exception, [str(x.message) for x in app.exception])
@@ -123,9 +129,10 @@ class StreamlitSmokeTests(unittest.TestCase):
         self.assertTrue(any(
             b.key == f"create_video_forms_{sid}" for b in app.button
         ))
-        self.assertTrue(any(
+        self.assertFalse(any(
             slider.key == f"video_wpm_{sid}" for slider in app.slider
         ))
+        self.assertIn('key=f"video_audio_{sid}"', forms)
         app.session_state["workspaces"][sid]["video_forms"] = (
             '{"version":1,"language":"Tiếng Ba Lan","scenes":[]}'
         )

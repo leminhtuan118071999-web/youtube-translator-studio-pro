@@ -1,3 +1,28 @@
+## 🎙️ Tạo form video 8 giây riêng sau khi tải giọng đọc
+
+Nút **🚀 BẮT ĐẦU TẠO TOÀN BỘ** vẫn chạy lấy phụ đề, tối ưu kịch bản
+dưới 10.000 ký tự, dịch toàn bộ sang ngôn ngữ đích và tạo
+**Tiêu đề • Mô tả • SEO**. Nếu đã cấu hình API ảnh, hệ thống vẫn
+tự tạo hồ sơ và ảnh nhân vật riêng theo phiên. **Không tự chạy tác vụ
+tạo form 8 giây khi nhấn nút này**.
+
+Sau khi có bản dịch, mở tab **🎬 Form video 8 giây**, tải file giọng
+đọc cuối cùng MP3/WAV/M4A/OGG của chính bản dịch đó (bắt buộc),
+rồi bấm **🎬 Tạo form 8 giây theo giọng đọc**.
+Nếu đã cấu hình OpenAI API key trong mục tạo ảnh, hệ thống sẽ
+dùng Whisper để nhận dạng mốc thời gian từng từ từ file và đối chiếu
+với bản dịch; nếu lệch đáng kể sẽ báo lỗi thay vì tạo form sai.
+Mỗi cảnh có khung thời gian 8 giây và phần lời nói ước lượng theo
+mốc audio, kể cả khi cảnh không có lời (B-roll).
+
+**Độ chính xác:** Whisper là nhận dạng lời nói có timestamp, KHÔNG
+phải forced alignment chính xác tuyệt đối. Trường hợp không có
+OpenAI API key, hệ thống chỉ căn ước lượng theo tổng thời lượng.
+Người dùng vẫn phải kiểm tra thời điểm chuyển cảnh và tiếng trong
+phần mềm dựng phim. Không xuất MP4 hoặc trộn file âm thanh.
+File giọng đọc chỉ dùng để lập kế hoạch tại lúc bấm Tạo form;
+nếu đổi file hoặc bản dịch, app báo form cũ không còn khớp.
+
 # 🎬 LMT Studio Pro
 
 Ứng dụng Streamlit xử lý video YouTube: trích xuất phụ đề có sẵn (khi YouTube cho phép), dịch bằng API đa nền tảng, dịch tiêu đề/mô tả và SEO, tự hiển thị thumbnail gốc và cung cấp nút tải ảnh màu xanh dương.

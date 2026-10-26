@@ -60,12 +60,10 @@ def narration_plan(translation, language, *, words_per_minute=DEFAULT_WPM,
             f"Nội dung cần khoảng {count} form. Giới hạn {MAX_SCENES} "
             "form/lần để tránh tạo quá nhiều tác vụ API; hãy chia nội dung thành phần nhỏ."
         )
-    # A long audio track with too little narration cannot be aligned.
-    if count > len(units):
-        raise ValueError(
-            "Giọng đọc dài hơn quá nhiều so với bản dịch. Hãy chọn đúng "
-            "file giọng đọc của bản dịch để tạo form khớp thời lượng."
-        )
+    # Real audio can contain long pauses; preserve 8s silent/B-roll forms
+    # rather than truncating the video when count exceeds spoken word count.
+    if count > len(units) and audio_duration_seconds is None:
+        raise ValueError("Kịch bản quá ngắn so với thời lượng ước lượng.")
     base, extra = divmod(len(units), count)
     out, pos = [], 0
     for index in range(count):
@@ -83,7 +81,7 @@ def narration_plan(translation, language, *, words_per_minute=DEFAULT_WPM,
             "transition_to_next": "" if index == count - 1 else
                 f"crossfade {TRANSITION_SECONDS:.1f}s",
         })
-    if (" ".join(s["voiceover"] for s in out) if has_words
+    if (" ".join(s["voiceover"] for s in out if s["voiceover"]) if has_words
             else "".join(s["voiceover"] for s in out)) != text:
         raise AssertionError("Phân cảnh không giữ trọn bản dịch.")
     return {
@@ -150,6 +148,8 @@ def batch_prompt(plan, scenes, *, style):
         "Do not add new plot points, dialogues or narration; do not translate, "
         "reword or omit the voiceover. Each visual_prompt must cover the "
         "specific events in that scene's voiceover and describe in detail "
+        "If the current 8s voiceover is empty, depict a coherent silent B-roll "
+        "scene grounded in adjacent narrative without inventing new events. "
         "the characters' FULL fixed physical appearances, setting, actions, "
         "movements, facial expressions, camera angle/motion, lighting, visual "
         "style, ambient music and SFX with a clear 0-8 second timeline. "

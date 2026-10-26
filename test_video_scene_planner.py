@@ -70,8 +70,13 @@ class VideoScenePlannerTests(unittest.TestCase):
             with self.assertRaises(ValueError):
                 narration_plan("some text", "Tiếng Anh",
                                audio_duration_seconds=audio)
-        with self.assertRaises(ValueError):
-            narration_plan("two words", "Tiếng Anh", audio_duration_seconds=480)
+        with_pause = narration_plan("two words", "Tiếng Anh", audio_duration_seconds=480)
+        self.assertEqual(len(with_pause["scenes"]), 60)
+        self.assertEqual(
+            " ".join(s["voiceover"] for s in with_pause["scenes"] if s["voiceover"]),
+            "two words",
+        )
+        self.assertTrue(any(not scene["voiceover"] for scene in with_pause["scenes"]))
         with self.assertRaises(ValueError):
             narration_plan("", "Tiếng Anh")
         with self.assertRaises(ValueError):

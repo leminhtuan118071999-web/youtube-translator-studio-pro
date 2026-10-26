@@ -4,6 +4,8 @@ Each scene inherits immutable translation wording, timing and a shared
 character reference. No video rendering/voice synthesis is performed here.
 """
 import json
+import hashlib
+import math
 from io import BytesIO
 
 import streamlit as st
@@ -14,6 +16,8 @@ from video_scene_planner import (
     continuous_video_forms_text,
 )
 from copy_buttons import copy_all_button
+from voice_alignment import (whisper_word_timestamps, align_target_words,
+    audio_aligned_plan, duration_weighted_plan, speech_statistics, MAX_AUDIO_BYTES)
 
 
 def _audio_duration(file):
@@ -39,8 +43,8 @@ def _generate_batch(plan, ai):
 
 
 def render_video_forms(session, sid, language, *, ai, api_key,
-                       mark_processed, persist_and_rerun):
-    """On-demand, session-scoped 8s storyboards alongside Translation and SEO."""
+                       mark_processed, persist_and_rerun, alignment_api_key=""):
+    """Independent voice-first prompt generation after translation."""
     st.subheader(f"🎬 Form video 8 giây — {language}")
     st.caption(
         "Mỗi form là PROMPT tạo clip 8 giây, chưa xuất MP4. "
@@ -58,30 +62,49 @@ def render_video_forms(session, sid, language, *, ai, api_key,
          "Phim tài liệu thiên nhiên"),
         key=f"video_style_{sid}",
     )
-    wpm = st.slider(
-        "🎙️ Tốc độ đọc ước tính (từ/phút) nếu chưa có audio",
-        min_value=80, max_value=220, value=135, step=5,
-        key=f"video_wpm_{sid}",
-    )
+    st.caption("Bước 1: tải file giọng đọc của chính bản dịch này; "
+               "Bước 2: nhấn Tạo form video 8 giây. Không tạo form tự động khi nhấn BẮT ĐẦU TẠO TOÀN BỘ.")
     upload = st.file_uploader(
-        "🎧 Tải MP3 / WAV / M4A / OGG giọng đọc để tính số form (không bắt buộc)",
+        "🎧 Tải file giọng đọc cuối cùng (bắt buộc)",
         type=["mp3", "wav", "m4a", "ogg"],
         key=f"video_audio_{sid}",
     )
     seconds = None
     audio_error = False
+    audio_hash = None
     if upload is not None:
         try:
+            if upload.size > MAX_AUDIO_BYTES:
+                raise ValueError("File trên 25 MB. Hãy nén hoặc chia nhỏ audio.")
             seconds = _audio_duration(upload)
-            st.caption(f"Thời lượng giọng đọc: {seconds:.1f} giây.")
+            audio_hash = hashlib.sha256(upload.getvalue()).hexdigest()
+            st.audio(upload)
+            voice_stats = speech_statistics(translated, seconds)
+            st.info(
+                f"🎞️ Tự tính: {voice_stats['form_count']} form × 8 giây = "
+                f"{voice_stats['video_duration_seconds']} giây. "
+                f"Giọng đọc: {seconds:.2f} giây; "
+                f"tốc độ trung bình {voice_stats['average_wpm']} từ/phút; "
+                f"dư {voice_stats['padding_seconds']} giây ở cuối."
+            )
         except (ValueError, TypeError, OSError) as exc:
             st.error(f"Không đọc được file giọng đọc: {exc}")
             audio_error = True
-    st.caption(
-        "⚠️ Dù đọc được tổng thời lượng âm thanh, cách chia lời theo từng form "
-        "vẫn là ƯỚC TÍNH. Để tiếng khớp từng giây/từng từ cần timestamp hoặc "
-        "forced alignment với chính file giọng đọc khi dựng video."
-    )
+    else:
+        st.info("Vui lòng tải giọng đọc đã hoàn chỉnh trước khi tạo form.")
+    if alignment_api_key:
+        st.caption(
+            "✅ Có OpenAI API: khi bấm Tạo form, hệ thống phân tích từ được nói "
+            "và mốc thời gian bằng Whisper để chia cảnh theo giọng đọc. "
+            "Nội dung vẫn giữ nguyên bản dịch."
+        )
+    else:
+        st.warning(
+            "⚠️ Chưa có OpenAI API key dành cho phân tích audio. "
+            "Ứng dụng chỉ căn theo tổng thời lượng và ước tính chia từ, "
+            "chưa xác định được chính xác thời điểm từng câu. "
+            "Hãy cấu hình OpenAI Images API key (cũng hỗ trợ Whisper) để căn tốt hơn."
+        )
     plan = None
     if session.get("video_forms"):
         try:
@@ -91,31 +114,50 @@ def render_video_forms(session, sid, language, *, ai, api_key,
         except (ValueError, TypeError):
             pass
     source_hash = source_fingerprint(translated, language)
-    stale = plan is not None and plan.get("source_hash") != source_hash
+    stale = plan is not None and (plan.get("source_hash") != source_hash
+            or (audio_hash is not None and plan.get("audio_sha256") != audio_hash))
     if stale:
         st.warning(
-            "Bản dịch/ngôn ngữ đã thay đổi. Form cũ không còn khớp lời đọc. "
-            "Hãy tạo lại các form từ bản dịch mới."
+            "Bản dịch, ngôn ngữ hoặc file giọng đọc đã thay đổi. "
+            "Hãy tạo lại form theo audio mới."
         )
     if st.button(
-        "🎬 Tạo form video 8 giây từ bản dịch",
+        "🎬 Tạo form 8 giây theo giọng đọc",
         type="primary", key=f"create_video_forms_{sid}",
-        disabled=audio_error,
+        disabled=audio_error or upload is None or not translated or bool(session.get("job_state") == "running"),
     ):
         if not api_key.strip():
             st.warning("Hãy nhập API key của nhà cung cấp AI trước khi tạo form.")
         else:
             try:
-                with st.spinner("Đang xây dựng nhân vật và 6 form đầu..."):
-                    new_plan = narration_plan(
-                        translated, language, words_per_minute=wpm,
-                        audio_duration_seconds=seconds,
-                    )
-                    result = parse_json_object(
-                        ai(character_bible_prompt(translated, language, style)),
-                        "character_bible",
-                    )
-                    bible = result["character_bible"]
+                with st.spinner("Đang đối chiếu giọng đọc và bản dịch, tạo 6 form đầu..."):
+                    if alignment_api_key:
+                        stamped = whisper_word_timestamps(
+                            upload.getvalue(), upload.name, alignment_api_key
+                        )
+                        positions, similarity = align_target_words(
+                            translated, stamped, seconds
+                        )
+                        new_plan = audio_aligned_plan(
+                            translated, language, seconds, positions
+                        )
+                        new_plan["voice_match_score"] = similarity
+                        new_plan["speech_stats"] = speech_statistics(
+                            translated, seconds, stamped,
+                        )
+                    else:
+                        new_plan = duration_weighted_plan(
+                            translated, language, seconds,
+                        )
+                    new_plan["audio_sha256"] = audio_hash
+                    new_plan["audio_filename"] = upload.name
+                    bible = session.get("character_bible", "")
+                    if not bible.strip():
+                        result = parse_json_object(
+                            ai(character_bible_prompt(translated, language, style)),
+                            "character_bible",
+                        )
+                        bible = result["character_bible"]
                     if not isinstance(bible, str) or not bible.strip():
                         raise ValueError("AI chưa tạo được hồ sơ nhân vật.")
                     new_plan["character_bible"] = bible.strip()
@@ -137,6 +179,21 @@ def render_video_forms(session, sid, language, *, ai, api_key,
 
     if plan is None or stale:
         return
+    st.caption(
+        "Căn theo từng từ (Whisper, vẫn có sai số)" if plan.get("alignment_mode") == "whisper_word_timestamps"
+        else "Căn ước tính theo tổng thời lượng file; chưa có timestamp từng từ."
+    )
+    if plan.get("voice_match_score") is not None:
+        st.caption(f"Độ tương đồng giọng đọc/bản dịch: {plan['voice_match_score']:.0%}.")
+    if plan.get("speech_stats"):
+        stats = plan["speech_stats"]
+        st.caption(
+            f"Tự phân tích tốc độ: {stats['average_wpm']} từ/phút tính trên toàn audio."
+            + (f" Tốc độ khi thực sự nói: {stats['speaking_wpm']} từ/phút."
+               if stats.get('speaking_wpm') else "")
+            + (f" Khoảng ngừng ước tính: {stats['silence_seconds']} giây."
+               if stats.get('silence_seconds') is not None else "")
+        )
     scenes = plan["scenes"]
     done = sum(bool(scene.get("visual_prompt", "").strip()) for scene in scenes)
     st.success(
