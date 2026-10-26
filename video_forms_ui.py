@@ -171,8 +171,9 @@ def render_video_forms(session, sid, language, *, ai, api_key,
     continuous_text = continuous_video_forms_text(plan)
     with st.expander("📜 Tất cả form video — liền mạch", expanded=False):
         st.caption(
-            "Các form có một dòng trống ngăn cách. Nút Copy toàn bộ "
-            "sao chép đủ lời đọc, prompt và chuyển cảnh theo thứ tự."
+            "Định dạng gọn: số cảnh • 8s • prompt • Voice • Next. "
+            "Mỗi cảnh cách nhau một dòng trống, vẫn giữ đủ nhân vật, "
+            "hình ảnh, lời đọc và chuyển cảnh."
         )
         copy_all_button(
             "📋 Copy toàn bộ form",
@@ -185,7 +186,7 @@ def render_video_forms(session, sid, language, *, ai, api_key,
         )
 
     st.download_button(
-        "⬇️ Tải tất cả form (.txt)", plan_export_text(plan),
+        "⬇️ Tải tất cả form (.txt)", continuous_text,
         file_name=f"video-forms-{sid[:8]}.txt",
         mime="text/plain", key=f"download_video_forms_text_{sid}",
     )
