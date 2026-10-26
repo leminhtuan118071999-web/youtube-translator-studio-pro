@@ -2,7 +2,8 @@ import unittest
 from unittest.mock import patch
 
 from voice_alignment import (
-    align_target_words, audio_aligned_plan, whisper_word_timestamps,\n    speech_statistics, duration_weighted_plan,
+    align_target_words, audio_aligned_plan, whisper_word_timestamps,
+    speech_statistics, duration_weighted_plan,
 )
 
 
