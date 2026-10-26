@@ -144,18 +144,36 @@ class VideoScenePlannerTests(unittest.TestCase):
         out = continuous_video_forms_text(plan)
         blocks = out.split("\n\n")
         self.assertEqual(len(blocks), 2)
-        self.assertTrue(blocks[0].startswith("01 | 8s\n"))
-        self.assertTrue(blocks[1].startswith("02 | 8s\n"))
+        self.assertTrue(all("\\n" not in block for block in blocks))
+        self.assertTrue(blocks[0].startswith("01 | 8s | "))
+        self.assertTrue(blocks[1].startswith("02 | 8s | "))
         self.assertIn("Ala in her red coat.", blocks[0])
         self.assertIn("Camera zoom, dramatic lighting and SFX.", blocks[0])
         self.assertIn("Voice: " + plan["scenes"][0]["voiceover"], blocks[0])
-        self.assertIn("Next: crossfade 0.4s", blocks[0])
-        self.assertIn("Next: crossfade 0.4s", blocks[1])
+        self.assertIn("Next: crossfade 1.0s", blocks[0])
+        self.assertIn("Next: crossfade 1.0s", blocks[1])
         self.assertNotIn("FORM 001", out)
         self.assertNotIn("VOICEOVER (", out)
         self.assertNotIn("VIDEO:", out)
         self.assertNotIn("TRANSITION:", out)
         self.assertEqual(out.count("Voice:"), 2)
+        self.assertTrue(all("\\n" not in block for block in out.split("\\n\\n")))
+
+    def test_model_cannot_override_one_second_transition(self):
+        plan = narration_plan(" ".join(["word"] * 35), "Tiếng Anh")
+        plan["character_bible"] = "Character in red"
+        response = json.dumps({"scenes": [
+            {"number": scene["number"], "visual_prompt": "Detailed scene",
+             "transition_to_next": "hard cut 0.2s"}
+            for scene in plan["scenes"]
+        ]})
+        expected = [scene["number"] for scene in plan["scenes"]]
+        apply_ai_batch(plan, response, expected)
+        self.assertTrue(all(
+            scene["transition_to_next"] == "crossfade 1.0s"
+            for scene in plan["scenes"][:-1]
+        ))
+        self.assertEqual(plan["scenes"][-1]["transition_to_next"], "")
 
     def test_copy_all_skips_unfinished_scenes(self):
         plan = narration_plan(" ".join(["word"] * 80), "Tiếng Anh")
