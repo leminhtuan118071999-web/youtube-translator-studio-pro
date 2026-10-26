@@ -27,6 +27,7 @@ from browser_session_store import (
     STORAGE_KEY, encode_browser_backup, decode_browser_backup,
 )
 from copy_buttons import copy_all_button
+from session_name_controls import session_name_control, rename_record
 
 st.set_page_config(page_title="LMT Studio Pro", page_icon="🎬", layout="wide")
 st.title("🎬 LMT Studio Pro")
@@ -546,28 +547,6 @@ def delete_saved_session(session_id):
     )
 
 
-def rename_saved_session(saved_id):
-    """Persist a changed name immediately when the inline text field is edited."""
-    if saved_id not in st.session_state.workspaces:
-        return
-    item = st.session_state.workspaces[saved_id]
-    widget_key = f"inline_session_name_{saved_id}"
-    new_name = st.session_state.get(widget_key, "").strip()[:80]
-    if not new_name:
-        st.session_state[widget_key] = item["name"]
-        st.session_state["session_name_message"] = "Tên phiên không được để trống."
-        return
-    if any(
-        other_id != saved_id and other["name"].casefold() == new_name.casefold()
-        for other_id, other in st.session_state.workspaces.items()
-    ):
-        st.session_state[widget_key] = item["name"]
-        st.session_state["session_name_message"] = "Tên phiên đã tồn tại. Hãy chọn tên khác."
-        return
-    item["name"] = new_name
-    st.session_state["editing_session_id"] = None
-
-
 # On a rerun after creating or opening a session, set the active session directly.
 # The saved-session buttons are the only navigation controls; no top dropdown.
 if "_open_session_next" in st.session_state:
@@ -589,27 +568,18 @@ with st.sidebar:
     st.markdown(
         """
         <style>
-        [data-testid="stSidebar"] [class*="st-key-edit_session_"] button {
-            color: #16a34a !important;
-            border: 1px solid #16a34a !important;
-            background-color: rgba(22, 163, 74, .12) !important;
-            font-weight: 700 !important;
-        }
-        [data-testid="stSidebar"] [class*="st-key-edit_session_"] button:hover {
-            background-color: rgba(22, 163, 74, .23) !important;
-        }
         [data-testid="stSidebar"] [class*="st-key-delete_session_"] button,
         [data-testid="stSidebar"] .st-key-delete_all_sessions button,
         [data-testid="stSidebar"] [class*="st-key-confirm_delete_"] button {
-            color: #ef4444 !important;
-            border: 1px solid #ef4444 !important;
-            background-color: rgba(239, 68, 68, .12) !important;
-            font-weight: 700 !important;
+            color: #ffffff !important;
+            border: 1px solid #991b1b !important;
+            background: #c62828 !important;
+            font-weight: 800 !important;
         }
         [data-testid="stSidebar"] [class*="st-key-delete_session_"] button:hover,
         [data-testid="stSidebar"] .st-key-delete_all_sessions button:hover,
         [data-testid="stSidebar"] [class*="st-key-confirm_delete_"] button:hover {
-            background-color: rgba(239, 68, 68, .25) !important;
+            background: #e53935 !important;
         }
 
         /* New session: always green. */
@@ -728,8 +698,8 @@ with st.sidebar:
     st.divider()
     st.markdown("**📚 Danh sách phiên đã chạy**")
     st.caption(
-        "Màu phiên: 🟢 hoàn thành · 🔴 đang chạy/chưa xong/lỗi · "
-        "🟡 đang được mở xem. Nút Đổi tên (xanh) và Xóa (đỏ) giữ nguyên."
+        "Nhấp tên phiên để mở · nhấp đúp để đổi tên ngay tại ô (Enter để lưu). "
+        "🟢 Hoàn thành · 🔴 Chưa xong/lỗi · 🟡 Đang xem. Nút Xóa nền đỏ."
     )
     name_message = st.session_state.pop("session_name_message", None)
     if name_message:
@@ -749,24 +719,20 @@ with st.sidebar:
     if not saved_sessions:
         st.caption("Chưa có phiên nào được bắt đầu. Bấm BẮT ĐẦU TẠO TOÀN BỘ trước khi tạo phiên mới.")
     for saved_id, saved_record in saved_sessions:
-        name_col, edit_col, delete_col = st.columns([4.4, 2.7, 1.7], gap="small")
+        name_col, delete_col = st.columns([5.5, 1.5], gap="small")
         with name_col:
             job = st.session_state.background_jobs.get(saved_id)
-            if job and not job["future"].done():
-                pct, stage = job["progress"].snapshot()
-                status_icon = f" ⏳ {pct}%"
-            elif saved_record.get("job_state") == "completed":
-                status_icon = " ✅"
-            elif saved_record.get("job_state") in ("failed", "interrupted"):
-                status_icon = " ⚠️"
-            elif saved_record.get("job_state") == "running":
-                status_icon = " ⏳"
-            else:
-                status_icon = ""
-            label = f"📄 {saved_record['name']}{status_icon}" + (" ✓" if saved_id == sid else "")
-            # Priority: viewing (yellow) > completed (green) > all other
-            # unfinished/interrupted/failed states (red).
             currently_running = bool(job and not job["future"].done())
+            if currently_running:
+                pct, _ = job["progress"].snapshot()
+                status_suffix = f" ⏳ {pct}%"
+            elif saved_record.get("job_state") in ("failed", "interrupted"):
+                status_suffix = " ⚠️"
+            elif saved_record.get("job_state") == "running":
+                status_suffix = " ⏳"
+            else:
+                # Finished sessions are green by color only, without a checkmark.
+                status_suffix = ""
             if saved_id == sid:
                 session_tone = "selected"
             elif saved_record.get("job_state") == "completed" and not currently_running:
@@ -774,26 +740,51 @@ with st.sidebar:
             else:
                 session_tone = "pending"
             with st.container(key=f"session_status_{session_tone}_{saved_id}"):
-                if st.button(
-                    label,
-                    key=f"open_saved_session_{saved_id}",
-                    use_container_width=True,
-                    type="primary" if saved_id == sid else "secondary",
-                ):
-                    if saved_id != sid:
-                        sync_form(sid)
-                        st.session_state["_open_session_next"] = saved_id
-                        _persist_and_rerun()
-        with edit_col:
-            if st.button(
-                "Đổi tên",
-                key=f"edit_session_{saved_id}",
-                use_container_width=True,
-            ):
-                st.session_state["editing_session_id"] = (
-                    None if st.session_state.get("editing_session_id") == saved_id else saved_id
-                )
-                _persist_and_rerun()
+                if streamlit_runtime_exists():
+                    # Native Streamlit buttons have no double-click event.
+                    # A small browser component distinguishes one click (open)
+                    # from two clicks (edit name directly inside the same box).
+                    event = session_name_control(
+                        saved_record["name"], status_suffix, session_tone,
+                        key=f"session_name_control_{saved_id}",
+                    )
+                    if isinstance(event, dict) and isinstance(event.get("seq"), str):
+                        seen = st.session_state.setdefault("_session_name_events_seen", {})
+                        if event["seq"] != seen.get(saved_id):
+                            seen[saved_id] = event["seq"]
+                            action = event.get("action")
+                            if action == "open" and saved_id != sid:
+                                sync_form(sid)
+                                st.session_state["_open_session_next"] = saved_id
+                                _persist_and_rerun()
+                            elif action == "rename":
+                                try:
+                                    new_name = rename_record(
+                                        st.session_state.workspaces, saved_id,
+                                        event.get("name"),
+                                    )
+                                except ValueError as exc:
+                                    st.session_state["session_name_message"] = str(exc)
+                                    st.rerun()
+                                else:
+                                    st.session_state["_session_flash"] = (
+                                        f"✅ Đã đổi tên phiên thành '{new_name}'."
+                                    )
+                                    _persist_and_rerun()
+                else:
+                    # Streamlit AppTest has no JavaScript/browser; retain the
+                    # one-click selection control for automated smoke tests.
+                    label = f"📄 {saved_record['name']}{status_suffix}"
+                    if st.button(
+                        label,
+                        key=f"open_saved_session_{saved_id}",
+                        use_container_width=True,
+                        type="primary" if saved_id == sid else "secondary",
+                    ):
+                        if saved_id != sid:
+                            sync_form(sid)
+                            st.session_state["_open_session_next"] = saved_id
+                            _persist_and_rerun()
         with delete_col:
             if st.button(
                 "Xóa",
@@ -828,14 +819,6 @@ with st.sidebar:
                 ):
                     st.session_state["confirm_delete_session_id"] = None
                     st.rerun()
-        if st.session_state.get("editing_session_id") == saved_id:
-            st.text_input(
-                "Tên mới (nhấn Enter để lưu)",
-                value=saved_record["name"],
-                key=f"inline_session_name_{saved_id}",
-                on_change=rename_saved_session,
-                args=(saved_id,),
-            )
     st.caption(
         f"{len(saved_sessions)} phiên đã chạy hoặc đang xử lý. "
         "Có thể tạo phiên mới trong khi phiên cũ tiếp tục chạy. "
