@@ -6,7 +6,8 @@ from unittest.mock import Mock, patch
 from cryptography.fernet import Fernet
 from persistent_store import (
     backup_state, configured, get_config, load_user, normalize_sessions,
-    restore_widget_settings, save_user, settings_from_widgets, snapshot_hash,
+    restore_widget_settings, activate_provider_settings, remember_widget_settings,
+    save_user, settings_from_widgets, snapshot_hash,
     sign_in, refresh_auth,
 )
 
@@ -72,6 +73,47 @@ class PersistentStoreTests(unittest.TestCase):
         restore_widget_settings(restored, saved)
         self.assertEqual(restored, settings)
 
+
+    def test_provider_keys_survive_switching_and_inactive_widget_cleanup(self):
+        state = {
+            "api_provider": "Groq", "api_key_Groq": "old-groq-secret",
+            "api_model_id_Groq": "groq-model",
+            "supadata_api_key_input": "subtitle-secret",
+        }
+        remember_widget_settings(state)
+        # Simulate Streamlit deleting the previous provider's widget keys.
+        del state["api_key_Groq"]
+        del state["api_model_id_Groq"]
+        state["api_provider"] = "Google Gemini"
+        state["api_key_Google Gemini"] = "gemini-secret"
+        remember_widget_settings(state)
+        self.assertEqual(
+            settings_from_widgets(state)["api_key_Groq"], "old-groq-secret"
+        )
+        activate_provider_settings(state, "Groq")
+        self.assertEqual(state["api_key_Groq"], "old-groq-secret")
+        self.assertEqual(state["api_model_id_Groq"], "groq-model")
+        self.assertEqual(state["api_key_Google Gemini"], "gemini-secret")
+        self.assertEqual(state["supadata_api_key_input"], "subtitle-secret")
+
+    def test_update_and_clear_credentials_override_old_retained_values(self):
+        state = {}
+        restore_widget_settings(state, {
+            "api_key_Groq": "original-key",
+            "api_base_Groq": "https://api.groq.com/openai/v1",
+            "api_provider": "Groq",
+            "supadata_api_key_input": "original-subtitle-key",
+            "login_password": "NEVER_RESTORE",
+        })
+        self.assertNotIn("login_password", state)
+        state["api_key_Groq"] = "replacement-key"
+        state["supadata_api_key_input"] = ""
+        state["api_base_Groq"] = "https://example.org/v1"
+        remember_widget_settings(state)
+        self.assertEqual(settings_from_widgets(state)["api_key_Groq"], "replacement-key")
+        self.assertEqual(settings_from_widgets(state)["supadata_api_key_input"], "")
+        self.assertEqual(settings_from_widgets(state)["api_base_Groq"], "https://example.org/v1")
+        self.assertNotIn("login_password", settings_from_widgets(state))
 
     @patch("persistent_store._request")
     def test_save_encrypts_keys_and_uses_account_jwt(self, call):
