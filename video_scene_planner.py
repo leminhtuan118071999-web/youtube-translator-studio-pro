@@ -226,22 +226,23 @@ def plan_export_text(plan):
 
 
 def continuous_video_forms_text(plan):
-    """All finished forms in sequence, one form per line break.
+    """Compact, copy-ready 8-second scene prompts separated by a blank line.
 
-    Copy text is generated from the same current scene data as the editor,
-    including original narration and continuity/transition instructions.
+    Keep the full scene prompt (including consistent character descriptions),
+    narration in the selected target language, and cut instructions. Only
+    remove redundant field names/global timecodes; never summarize or alter
+    the generated visual instructions.
     """
-    lines = []
+    blocks = []
     for scene in plan.get("scenes", []):
         if not isinstance(scene, dict) or not str(scene.get("visual_prompt", "")).strip():
             continue
-        n = int(scene["number"])
-        intro = (
-            f"FORM {n:03d} [{scene['start_seconds']}-{scene['end_seconds']}s | 8s] "
-            f"VOICEOVER ({plan.get('language', '')}): {scene.get('voiceover', '')} "
-            f"VIDEO: {scene.get('visual_prompt', '')}"
-        )
-        if scene.get("transition_to_next"):
-            intro += f" TRANSITION: {scene['transition_to_next']}"
-        lines.append(" ".join(intro.splitlines()))
-    return "\n\n".join(lines)
+        number = int(scene["number"])
+        visual = " ".join(scene["visual_prompt"].split())
+        voice = " ".join(str(scene.get("voiceover", "")).split())
+        transition = " ".join(str(scene.get("transition_to_next", "")).split())
+        block = f"{number:02d} | 8s\n{visual}\nVoice: {voice}"
+        if transition:
+            block += f"\nNext: {transition}"
+        blocks.append(block)
+    return "\n\n".join(blocks)
