@@ -99,6 +99,16 @@ form, hồ sơ nhân vật và các kết quả văn bản vẫn được tự l
 Đồng nhất tuyệt đối giữa ảnh và video sinh bởi công cụ khác không được
 bảo đảm chỉ bằng prompt tham chiếu.
 
+### Copy form gọn để đưa vào công cụ làm video
+
+Trong **📜 Tất cả form video — liền mạch**, bản xem và nút **📋 Copy toàn bộ form**
+dùng format ngắn: **01 | 8s**, prompt cảnh đầy đủ, **Voice:** (lời đọc
+nguyên văn bản dịch), **Next:** (chuyển cảnh, nếu có). Mỗi form cách nhau
+**một dòng trống**. Bỏ các nhãn dài dư thừa FORM/VOICEOVER/VIDEO/
+TRANSITION và timecode lặp mà không cắt nội dung cảnh, nhân vật, âm thanh,
+ánh sáng hoặc lời đọc. File TXT tải về cũng theo cùng định dạng; JSON vẫn
+giữ toàn bộ cấu trúc phục vụ hậu kỳ.
+
 ## 🎬 Form video 8 giây — ngay cạnh Tiêu đề • Mô tả • SEO
 
 Khu vực kết quả của **YouTube Translator** có tab thứ ba
