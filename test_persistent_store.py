@@ -6,7 +6,8 @@ from unittest.mock import Mock, patch
 from cryptography.fernet import Fernet
 from persistent_store import (
     backup_state, configured, get_config, load_user, normalize_sessions,
-    restore_widget_settings, activate_provider_settings, remember_widget_settings,
+    restore_widget_settings, activate_provider_settings,
+    activate_shared_api_settings, remember_widget_settings,
     save_user, settings_from_widgets, snapshot_hash,
     sign_in, refresh_auth,
 )
@@ -96,6 +97,33 @@ class PersistentStoreTests(unittest.TestCase):
         self.assertEqual(state["api_model_id_Groq"], "groq-model")
         self.assertEqual(state["api_key_Google Gemini"], "gemini-secret")
         self.assertEqual(state["supadata_api_key_input"], "subtitle-secret")
+
+    def test_switching_pages_restores_supadata_and_selected_provider(self):
+        state = {
+            "api_provider": "Google Gemini",
+            "supadata_api_key_input": "supadata-key",
+            "api_key_Google Gemini": "gemini-key",
+            "api_model_id_Google Gemini": "gemini-2.5-flash",
+        }
+        remember_widget_settings(state)
+        del state["api_provider"]
+        del state["supadata_api_key_input"]
+        del state["api_key_Google Gemini"]
+        del state["api_model_id_Google Gemini"]
+        activate_shared_api_settings(state)
+        self.assertEqual(state["api_provider"], "Google Gemini")
+        self.assertEqual(state["supadata_api_key_input"], "supadata-key")
+        activate_provider_settings(state, state["api_provider"])
+        self.assertEqual(state["api_key_Google Gemini"], "gemini-key")
+        self.assertEqual(
+            state["api_model_id_Google Gemini"], "gemini-2.5-flash"
+        )
+        # A newly entered provider / key always wins over the saved value.
+        state["api_provider"] = "Groq"
+        state["supadata_api_key_input"] = ""
+        activate_shared_api_settings(state)
+        self.assertEqual(state["api_provider"], "Groq")
+        self.assertEqual(state["supadata_api_key_input"], "")
 
     def test_update_and_clear_credentials_override_old_retained_values(self):
         state = {}

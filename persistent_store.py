@@ -224,6 +224,20 @@ def remember_widget_settings(state):
     return settings
 
 
+def activate_shared_api_settings(state):
+    """Restore shared API widgets after switching between Streamlit pages.
+
+    Streamlit may remove widget state when an input's page is not rendered.
+    Never overwrite a value already present in the active widget state.
+    """
+    kept = state.get("_retained_api_settings", {})
+    if not isinstance(kept, dict):
+        return
+    for name in API_WIDGET_EXACT:
+        if name not in state and _valid_api_setting(name, kept.get(name)):
+            state[name] = kept[name]
+
+
 def activate_provider_settings(state, provider):
     """Restore saved settings before creating a provider's input widgets."""
     kept = state.get("_retained_api_settings", {})

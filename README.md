@@ -2,14 +2,14 @@
 
 Ứng dụng Streamlit xử lý video YouTube: trích xuất phụ đề có sẵn (khi YouTube cho phép), dịch bằng API đa nền tảng, dịch tiêu đề/mô tả và SEO, tự hiển thị thumbnail gốc và cung cấp nút tải ảnh màu xanh dương.
 
-## 🧭 Menu ứng dụng: AI33 / OpenSpeaker
+## 🧭 Hai ứng dụng trong cùng website LMT Studio Pro
 
-Trong thanh bên **Ứng dụng**, LMT Studio Pro vẫn hiển thị **YouTube Translator**
-là công cụ hiện tại và có nút **🌐 AI33 / OpenSpeaker ↗**. Nhấn nút sẽ mở
-[https://ai33.pro/app](https://ai33.pro/app) trong tab trình duyệt mới (theo
-hành vi chuẩn của Streamlit `st.link_button`). LMT Studio Pro vẫn mở ở tab cũ;
-không nhúng website, không chia sẻ API key hoặc chuyển dữ liệu phiên sang AI33.
-AI33 có thể yêu cầu đăng nhập/gói sử dụng riêng.
+- **App 1 — 🎬 YouTube Translator:** trang chính như trước, giữ nguyên chức năng dịch phụ đề, SEO, thumbnail, API và các phiên đã lưu.
+- **App 2 — 🎙️ AI33 / OpenSpeaker:** trang riêng qua menu Streamlit trong cùng website; khung `iframe` thử hiển thị `https://ai33.pro/app` ngay bên trong LMT. Có nút mở website riêng nếu trình duyệt/AI33 từ chối nhúng, không đăng nhập được hoặc iframe bị chặn bởi CSP/X-Frame-Options. Không gửi API key, nội dung phiên hoặc tài khoản LMT cho AI33.
+
+Chuyển giữa hai trang bằng **menu Streamlit**, không nhập lại địa chỉ và không cần đóng tab. Các tác vụ YouTube Translator đã gửi vào worker trong **cùng phiên Streamlit** tiếp tục chạy khi chuyển sang trang AI33 **miễn là tiến trình máy chủ còn chạy và phiên không bị hủy**; App 2 cho xem tiến độ gần nhất trong sidebar và App 1 sẽ thu thập kết quả khi trở lại. Nhưng việc chuyển trang có thể tải lại iframe AI33, và quyền nhúng do AI33 quản lý.
+
+**Không thể bảo đảm tác vụ cả hai app chạy đến cùng sau khi đóng trình duyệt hoặc reload:** tiến trình ThreadPoolExecutor của YouTube Translator không phải hàng đợi bền vững; Streamlit Cloud có thể ngủ/khởi động lại, và công việc đang chạy sẽ khôi phục dưới trạng thái gián đoạn. Website AI33 hoạt động độc lập; LMT không thể khôi phục tác vụ chưa lưu mã công việc. Để đáp ứng yêu cầu chạy đến hoàn thành kể cả khi offline, cần bổ sung **máy chủ worker chạy thường trực, hàng đợi tác vụ và lưu trạng thái/kết quả bền vững** cho App 1; với App 2 cần tích hợp OpenSpeaker API, lưu `task_id` để tra cứu hoặc nhận webhook của nhà cung cấp. Chỉ nhúng iframe không làm được điều này.
 
 ## ☁️ Tự động lưu toàn bộ dữ liệu và cấu hình API qua lần đăng nhập sau
 

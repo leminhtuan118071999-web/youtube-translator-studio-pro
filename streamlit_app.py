@@ -22,7 +22,8 @@ from persistent_store import (
     backup_state, configured, get_config, sign_in, sign_up,
     load_user, refresh_auth, save_user, settings_from_widgets,
     remember_widget_settings, activate_provider_settings,
-    restore_widget_settings, snapshot_hash, normalize_sessions,
+    activate_shared_api_settings, restore_widget_settings,
+    snapshot_hash, normalize_sessions,
 )
 from browser_session_store import (
     STORAGE_KEY, API_SETTINGS_STORAGE_KEY,
@@ -265,6 +266,9 @@ _restore_cloud_profile()
 # Preserve API key and model values from the former 'Anthropic Claude' label.
 migrate_claude_settings(st.session_state)
 migrate_free_provider_settings(st.session_state)
+# Streamlit may prune widgets from the previous page during navigation.
+# Restore Supadata and selected-provider values before rendering those inputs.
+activate_shared_api_settings(st.session_state)
 
 
 def _save_cloud_state(force=False):
@@ -673,14 +677,14 @@ with st.sidebar:
         st.session_state.selected_session = sid
     session = st.session_state.workspaces[sid]
 
-    # External app launcher: open AI33 in a new browser tab without
-    # rerunning LMT Studio Pro or changing any session/API data.
+    # Same-origin multipage navigation. The two app panels share one
+    # Streamlit session without sharing YouTube credentials with AI33.
     st.markdown("**🧭 Ứng dụng**")
     st.caption("🎬 YouTube Translator — đang sử dụng")
-    st.link_button(
-        "🌐 AI33 / OpenSpeaker ↗",
-        "https://ai33.pro/app",
-        type="secondary",
+    st.page_link(
+        "pages/2_AI33_OpenSpeaker.py",
+        label="🎙️ AI33 / OpenSpeaker",
+        icon="🎙️",
         use_container_width=True,
     )
     st.divider()
