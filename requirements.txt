@@ -3,3 +3,4 @@ requests>=2.31,<3
 Pillow>=10,<13
 youtube-transcript-api>=1.2,<2
 cryptography>=42,<47
+mutagen>=1.47,<2
