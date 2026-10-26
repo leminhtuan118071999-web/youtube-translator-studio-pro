@@ -33,7 +33,7 @@ from browser_session_store import (
 from copy_buttons import copy_all_button
 from video_forms_ui import render_video_forms
 from section_retries import rerun_translation, rerun_seo, portrait_retry_specs
-from character_images import IMAGE_STORE, IMAGE_MODEL, session_images_zip
+from character_images import IMAGE_STORE, IMAGE_MODEL, session_images_zip, create_character_png
 from session_name_controls import session_name_control, rename_record
 
 st.set_page_config(page_title="LMT Studio Pro", page_icon="🎬", layout="wide")
