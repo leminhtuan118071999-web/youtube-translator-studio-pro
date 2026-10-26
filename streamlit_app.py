@@ -125,7 +125,7 @@ LANGUAGES = [
     "Tiếng Catalan", "Tiếng Basque", "Tiếng Wales", "Tiếng Luxembourg",
     "Tiếng Macedonia", "Tiếng Việt", "Tiếng Nhật", "Tiếng Hàn",
 ]
-FIELDS = ("url", "source", "title", "description", "translated", "prompts", "metadata", "language", "new_title", "new_description", "seo_tags", "video_forms", "optimized_script", "character_images_error")
+FIELDS = ("url", "source", "title", "description", "translated", "prompts", "metadata", "language", "new_title", "new_description", "seo_tags", "video_forms", "optimized_script", "character_images_error", "character_bible")
 FORM_FIELDS = ("url", "language")
 
 
@@ -134,7 +134,7 @@ def blank_session(name):
         "name": name, "url": "", "source": "", "title": "", "description": "",
         "translated": "", "prompts": "", "metadata": "", "language": "Tiếng Ba Lan",
         "saved": False, "processed": False, "saved_order": 0,
-        "new_title": "", "new_description": "", "seo_tags": "", "video_forms": "", "optimized_script": "", "character_images_error": "",
+        "new_title": "", "new_description": "", "seo_tags": "", "video_forms": "", "optimized_script": "", "character_images_error": "", "character_bible": "",
     }
 
 
@@ -1511,7 +1511,7 @@ if st.button("🚀 BẮT ĐẦU TẠO TOÀN BỘ", type="primary",
                 "base_url": base_url,
                 "model": model,
                 "api_key": key,
-                "auto_video_forms": True,
+                "auto_video_forms": False,  # Generate ONLY after audio upload + user action.
                 "video_style": "Điện ảnh chân thực",
                 "auto_character_images": bool(image_api_key),
                 "image_api_key": image_api_key,
@@ -1688,6 +1688,7 @@ with tab_video:
     render_video_forms(
         session, sid, language,
         ai=ai, api_key=key,
+        alignment_api_key=image_api_key,
         mark_processed=mark_session_processed,
         persist_and_rerun=_persist_and_rerun,
     )
