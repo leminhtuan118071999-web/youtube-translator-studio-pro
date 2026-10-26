@@ -9,6 +9,11 @@ from thumbnail_ai import (
 )
 
 
+def image_provider_for_main_api(provider):
+    """Only known official image-capable APIs may reuse the text API key."""
+    return {"Google Gemini": "Gemini", "OpenAI": "OpenAI"}.get(provider)
+
+
 def render_thumbnail_ai(sid, vid, original_thumbnail, language):
     with st.expander("🎨 Thumbnail AI – Tạo lại ảnh / Dịch chữ trên ảnh", expanded=False):
         st.caption(
@@ -26,21 +31,45 @@ def render_thumbnail_ai(sid, vid, original_thumbnail, language):
         if not source:
             st.info("Dán link YouTube hợp lệ hoặc tải ảnh thumbnail lên để bắt đầu.")
 
-        image_provider = st.selectbox(
-            "Dịch vụ chỉnh sửa ảnh",
-            ["Gemini", "OpenAI"],
-            key=f"thumb_{sid}_image_provider",
-            help="Chọn Gemini hoặc OpenAI: các model Groq/Claude xử lý văn bản không tự tạo ảnh.",
-        )
+        # Reuse the key already configured in the main multiprovider panel.
+        # The selected text model can be different from the image model.
+        main_provider = st.session_state.get("api_provider", "")
+        shared_provider = image_provider_for_main_api(main_provider)
+        if shared_provider:
+            use_shared = st.checkbox(
+                f"🔗 Dùng chung API Key {main_provider} trong Cấu hình API đa nền tảng",
+                value=True, key=f"thumb_{sid}_ai_use_shared",
+            )
+            if use_shared:
+                image_provider = shared_provider
+                st.caption(
+                    f"✅ Dùng chung API Key {main_provider} đã cấu hình. "
+                    "Chỉ cần chọn model tạo ảnh phù hợp; không cần nhập lại khóa."
+                )
+            else:
+                image_provider = st.selectbox(
+                    "Dịch vụ chỉnh sửa ảnh riêng",
+                    ["Gemini", "OpenAI"],
+                    key=f"thumb_{sid}_image_provider",
+                )
+        else:
+            use_shared = False
+            st.info(
+                "API đang chọn để dịch video không phải API chỉnh sửa ảnh "
+                "Gemini/OpenAI. Vẫn giữ nguyên API dịch video; hãy chọn "
+                "Gemini hoặc OpenAI cho phần Thumbnail AI."
+            )
+            image_provider = st.selectbox(
+                "Dịch vụ chỉnh sửa ảnh",
+                ["Gemini", "OpenAI"],
+                key=f"thumb_{sid}_image_provider",
+            )
+
         models = GEMINI_IMAGE_MODELS if image_provider == "Gemini" else OPENAI_IMAGE_MODELS
         image_model = st.selectbox(
             "Model tạo/sửa ảnh",
             list(models),
             key=f"thumb_{sid}_image_model_{image_provider}",
-        )
-        supplied_key = st.text_input(
-            "🔐 API key tạo ảnh (có thể để trống nếu đã nhập API key Gemini/OpenAI)",
-            type="password", key=f"thumb_{sid}_image_key_{image_provider}",
         )
         api_id = "Google Gemini" if image_provider == "Gemini" else "OpenAI"
         configured_key = str(st.session_state.get(f"api_key_{api_id}", "") or "").strip()
@@ -50,7 +79,22 @@ def render_thumbnail_ai(sid, vid, original_thumbnail, language):
             ) or "").strip()
         except (FileNotFoundError, OSError, KeyError, AttributeError):
             secret_key = ""
-        image_key = supplied_key.strip() or configured_key or secret_key
+        supplied_key = ""
+        if not use_shared:
+            supplied_key = st.text_input(
+                "🔐 API Key chỉnh sửa ảnh (để trống nếu đã lưu Gemini/OpenAI trong cấu hình API)",
+                type="password",
+                key=f"thumb_{sid}_image_key_{image_provider}",
+            )
+        image_key = (
+            configured_key or secret_key
+            if use_shared else supplied_key.strip() or configured_key or secret_key
+        )
+        if not image_key:
+            st.warning(
+                f"Chưa có API Key {api_id} để tạo ảnh. "
+                "Bạn có thể nhập trong Cấu hình API đa nền tảng."
+            )
         preserve = st.checkbox(
             "Giữ bố cục, nhân vật và phong cách ảnh gốc tối đa",
             value=True, key=f"thumb_{sid}_ai_preserve",
