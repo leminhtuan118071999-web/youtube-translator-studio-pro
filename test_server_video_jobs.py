@@ -29,7 +29,7 @@ class BackgroundVideoTests(unittest.TestCase):
         rows = json.loads(prompt.split("Input scenes:\n", 1)[1])
         return json.dumps({"scenes": [
             {"number": row["number"], "visual_prompt": "Ala walks.",
-             "transition_to_next": "crossfade 1.0s"} for row in rows,
+             "transition_to_next": "crossfade 1.0s"} for row in rows
         ]})
 
     def test_109_forms_continue_without_client_polling(self):
