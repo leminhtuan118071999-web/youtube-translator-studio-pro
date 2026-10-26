@@ -58,9 +58,9 @@ Tài liệu tích hợp Supadata: https://github.com/supadata-ai/skills/blob/mai
 
 - **➕ Tạo phiên mới:** nút nền xanh lá.
 - Trong **📚 Danh sách phiên đã chạy**, tên phiên **hoàn thành** có nền xanh lá; phiên **đang chạy, chưa xong, lỗi hoặc bị gián đoạn** có nền đỏ.
-- **Phiên đang được chọn để xem** luôn có nền vàng, không phụ thuộc trạng thái xử lý. Khi mở sang phiên khác, ô đang xem chuyển vàng còn ô vừa bỏ chọn trở về xanh/đỏ đúng trạng thái.
+- **Phiên đang được chọn để xem** có **dấu tích xanh (✓)** bên trong ô tên; nền ô vẫn xanh lá (đã hoàn thành) hoặc đỏ (chưa xong/lỗi). Khi mở phiên khác, dấu tích sẽ chuyển sang ô vừa chọn. Không còn nền vàng.
 - **Nhấp một lần vào ô tên** để mở phiên; **nhấp đúp vào chính ô đó** để chỉnh sửa tên tại chỗ, nhấn **Enter** hoặc nhấp ra ngoài để lưu; nhấn **Esc** để hủy sửa. Nút Đổi tên riêng đã được bỏ.
-- Chỉ còn nút **Xóa** nền đỏ bên phải ô tên; vẫn cần xác nhận trước khi xóa. Ô tên không còn biểu tượng dấu tích xanh (✅ hoặc ✓), vì màu nền đã biểu thị trạng thái.
+- Chỉ còn nút **Xóa** nền đỏ bên phải ô tên; vẫn cần xác nhận trước khi xóa. Dấu tích xanh chỉ đánh dấu phiên **đang được xem**, không biểu thị đã hoàn thành.
 
 ## 📁 Phần quản lý phiên ở góc trái (đã tối giản)
 
