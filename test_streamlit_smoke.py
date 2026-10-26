@@ -95,7 +95,8 @@ class StreamlitSmokeTests(unittest.TestCase):
         self.assertIn('render_video_forms(', source)
         self.assertNotIn('create_20_prompts(', source)
         self.assertNotIn('🎨 20 prompt hình ảnh', source)
-        self.assertNotIn('video_forms', worker)  # No extra automatic API calls.
+        self.assertIn('snapshot.get("auto_video_forms", False)', worker)
+        self.assertIn('progress.publish("video_forms", encoded)', worker)
         self.assertIn('key=f"create_video_forms_{sid}"', forms)
         self.assertIn('key=f"continue_video_forms_{sid}"', forms)
         self.assertIn('source_fingerprint(translated, language)', forms)
