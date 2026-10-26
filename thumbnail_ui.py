@@ -1,11 +1,15 @@
 """The optional Thumbnail AI panel, independent of translation provider."""
 import hashlib
+import time
 
 import streamlit as st
 
 from thumbnail_ai import (
     GEMINI_IMAGE_MODELS, OPENAI_IMAGE_MODELS,
     normalize_thumbnail, recognize_and_translate, build_edit_prompt, edit_thumbnail,
+)
+from image_model_discovery import (
+    discover_image_models, key_fingerprint, rank_image_models,
 )
 
 
@@ -65,12 +69,6 @@ def render_thumbnail_ai(sid, vid, original_thumbnail, language):
                 key=f"thumb_{sid}_image_provider",
             )
 
-        models = GEMINI_IMAGE_MODELS if image_provider == "Gemini" else OPENAI_IMAGE_MODELS
-        image_model = st.selectbox(
-            "Model tạo/sửa ảnh",
-            list(models),
-            key=f"thumb_{sid}_image_model_{image_provider}",
-        )
         api_id = "Google Gemini" if image_provider == "Gemini" else "OpenAI"
         configured_key = str(st.session_state.get(f"api_key_{api_id}", "") or "").strip()
         try:
@@ -83,13 +81,100 @@ def render_thumbnail_ai(sid, vid, original_thumbnail, language):
         if not use_shared:
             supplied_key = st.text_input(
                 "🔐 API Key chỉnh sửa ảnh (để trống nếu đã lưu Gemini/OpenAI trong cấu hình API)",
-                type="password",
-                key=f"thumb_{sid}_image_key_{image_provider}",
+                type="password", key=f"thumb_{sid}_image_key_{image_provider}",
+                help="Nhấn Enter hoặc rời khỏi ô sau khi nhập để tự nhận diện model.",
             )
         image_key = (
             configured_key or secret_key
             if use_shared else supplied_key.strip() or configured_key or secret_key
         )
+
+        # Scan ONLY when a nonempty credential is committed, changed or the
+        # user explicitly requests a refresh. Key fingerprints are hashed;
+        # never save raw keys inside the scan record.
+        discovery_id = f"thumb_{sid}_image_discovery_{image_provider}"
+        discovered = st.session_state.get(discovery_id)
+        fingerprint = key_fingerprint(image_provider, image_key) if image_key else None
+        rescan = st.button(
+            "🔎 Quét lại model ảnh",
+            use_container_width=True,
+            key=f"thumb_{sid}_image_rescan_{image_provider}",
+            disabled=not bool(image_key),
+        )
+        scan_changed = (
+            image_key and (
+                not isinstance(discovered, dict)
+                or discovered.get("fingerprint") != fingerprint
+                or time.time() - discovered.get("checked_at", 0) > 1800
+            )
+        )
+        if image_key and (scan_changed or rescan):
+            with st.spinner("🔎 Đang tự nhận diện model tạo/sửa ảnh..."):
+                try:
+                    found = discover_image_models(image_provider, image_key)
+                    discovered = {
+                        "fingerprint": fingerprint,
+                        "checked_at": time.time(),
+                        "models": found,
+                        "error": "",
+                    }
+                except Exception as exc:
+                    # Discovery errors are intentionally generic and tokenless;
+                    # still scrub the provided key before showing any message.
+                    discovered = {
+                        "fingerprint": fingerprint,
+                        "checked_at": time.time(),
+                        "models": [],
+                        "error": str(exc).replace(image_key, "[API KEY ẨN]"),
+                    }
+                st.session_state[discovery_id] = discovered
+        if not image_key:
+            discovered = None
+            st.session_state.pop(discovery_id, None)
+
+        # A response from /models means the ID is visible, not that billing,
+        # quotas, image editing or upload access has been granted.
+        verified = (
+            discovered.get("models", [])
+            if isinstance(discovered, dict) and discovered.get("fingerprint") == fingerprint
+            else []
+        )
+        known_models = GEMINI_IMAGE_MODELS if image_provider == "Gemini" else OPENAI_IMAGE_MODELS
+        options = list(verified) if verified else list(known_models)
+        model_widget = f"thumb_{sid}_image_model_{image_provider}"
+        if st.session_state.get(model_widget) not in options:
+            # First valid returned model is selected automatically, preserving
+            # an existing manual choice if still present.
+            st.session_state[model_widget] = options[0]
+        image_model = st.selectbox(
+            "Model tạo/sửa ảnh", options,
+            key=model_widget,
+        )
+        if verified:
+            st.success(
+                f"✅ Tự nhận diện {len(verified)} model ảnh từ API. "
+                f"Đã chọn: {image_model}. Có thể chọn model khác."
+            )
+            st.caption(
+                "API liệt kê model thành công, nhưng quyền chỉnh sửa ảnh "
+                "và hạn mức vẫn cần xác nhận khi tạo ảnh."
+            )
+        elif image_key and isinstance(discovered, dict) and discovered.get("error"):
+            st.warning(
+                discovered["error"] + " Đã hiển thị danh sách model gợi ý "
+                "để bạn chọn thủ công; chưa xác nhận model khả dụng."
+            )
+        elif image_key and isinstance(discovered, dict):
+            st.warning(
+                "API không trả model chỉnh sửa ảnh được hỗ trợ. "
+                "Các model hiển thị chỉ là lựa chọn thủ công; "
+                "cần kiểm tra quyền và hạn mức nhà cung cấp."
+            )
+        else:
+            st.caption(
+                "Nhập API key rồi nhấn Enter hoặc rời ô nhập để tự quét model. "
+                "Các lựa chọn hiện tại chưa được xác minh với tài khoản."
+            )
         if not image_key:
             st.warning(
                 f"Chưa có API Key {api_id} để tạo ảnh. "
