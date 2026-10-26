@@ -1,3 +1,20 @@
+## 🔄 Chạy lại riêng từng mục khi một bước bị lỗi
+
+**Bước đầu tiên vẫn là 🚀 BẮT ĐẦU TẠO TOÀN BỘ** để tự chạy
+lấy phụ đề, tối ưu kịch bản dưới 10.000 ký tự, bản dịch đích,
+tiêu đề/mô tả/SEO, và hồ sơ/ảnh nhân vật nếu có OpenAI Images API.
+**Chỉ riêng 🎬 Form video 8 giây** phải đợi tải bản giọng đọc cuối cùng
+và bấm **Tạo form 8 giây theo giọng đọc**.
+
+Sau khi chạy toàn bộ, nếu **một mục riêng lẻ bị lỗi**, có thể bấm
+**🔄 Chạy lại riêng** ngay bên trong tab đó, không cần thực hiện lại
+toàn bộ: 🌍 Bản dịch, 📝 Tiêu đề • Mô tả • SEO, 🎬 Form video 8 giây,
+hoặc 🖼️ Ảnh nhân vật. Nút form yêu cầu đúng audio đã tải; nút ảnh
+yêu cầu OpenAI Images API key. Lỗi khi chạy lại không xóa kết quả
+đã hoàn tất trước đó. Dịch lại sẽ dùng kịch bản đã tối ưu (không
+tóm tắt lại văn bản gốc) và cảnh báo khi SEO, hình ảnh hay form cũ
+không còn đồng nhất với bản dịch mới.
+
 ## 📜 Chia form thành từng ô 99 cảnh
 
 Trong mục **Tất cả form video — liền mạch**, các form được chia thành

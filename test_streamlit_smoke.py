@@ -83,6 +83,21 @@ class StreamlitSmokeTests(unittest.TestCase):
         )
         self.assertIs(app.session_state["background_jobs"][sid]["future"], job_future)
 
+    def test_each_results_tab_has_independent_retry(self):
+        from pathlib import Path
+        main = Path("streamlit_app.py").read_text(encoding="utf-8")
+        forms = Path("video_forms_ui.py").read_text(encoding="utf-8")
+        for snippet in (
+            '"🔄 Chạy lại riêng — Bản dịch"',
+            '"🔄 Chạy lại riêng — Tiêu đề • Mô tả • SEO"',
+            '"🔄 Chạy lại riêng — Ảnh nhân vật"',
+            'rerun_translation(', 'rerun_seo(', 'portrait_retry_specs(',
+        ):
+            self.assertIn(snippet, main)
+        self.assertIn('"🔄 Chạy lại riêng — Form video 8 giây"', forms)
+        self.assertIn('key=f"retry_video_forms_{sid}"', forms)
+        self.assertIn('if generate_clicked or retry_clicked:', forms)
+
     def test_video_form_tab_is_isolated_source_locked_and_editable(self):
         """New 8s prompt tab appears after SEO, without resurrecting old tab."""
         from pathlib import Path
@@ -114,7 +129,8 @@ class StreamlitSmokeTests(unittest.TestCase):
         self.assertNotIn('key=f"video_prompt_{sid}_{n}"', forms)
         self.assertNotIn('key=f"video_transition_{sid}_{n}"', forms)
         self.assertIn('type=["mp3", "wav", "m4a", "ogg"]', forms)
-        self.assertIn('disabled=audio_error or upload is None', forms)
+        self.assertIn('audio_error or upload is None or not translated', forms)
+        self.assertIn('disabled=cannot_generate', forms)
         self.assertIn('whisper_word_timestamps(', forms)
         self.assertIn('except TransientAudioAPIError as exc:', forms)
         self.assertIn('new_plan["alignment_warning"]', forms)

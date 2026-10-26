@@ -32,7 +32,8 @@ from browser_session_store import (
 )
 from copy_buttons import copy_all_button
 from video_forms_ui import render_video_forms
-from character_images import IMAGE_STORE, IMAGE_MODEL, session_images_zip
+from section_retries import rerun_translation, rerun_seo, portrait_retry_specs
+from character_images import IMAGE_STORE, IMAGE_MODEL, session_images_zip, create_character_png
 from session_name_controls import session_name_control, rename_record
 
 st.set_page_config(page_title="LMT Studio Pro", page_icon="🎬", layout="wide")
@@ -125,7 +126,7 @@ LANGUAGES = [
     "Tiếng Catalan", "Tiếng Basque", "Tiếng Wales", "Tiếng Luxembourg",
     "Tiếng Macedonia", "Tiếng Việt", "Tiếng Nhật", "Tiếng Hàn",
 ]
-FIELDS = ("url", "source", "title", "description", "translated", "prompts", "metadata", "language", "new_title", "new_description", "seo_tags", "video_forms", "optimized_script", "character_images_error", "character_bible")
+FIELDS = ("url", "source", "title", "description", "translated", "prompts", "metadata", "language", "new_title", "new_description", "seo_tags", "video_forms", "optimized_script", "character_images_error", "character_bible", "seo_stale", "character_bible_stale")
 FORM_FIELDS = ("url", "language")
 
 
@@ -134,7 +135,7 @@ def blank_session(name):
         "name": name, "url": "", "source": "", "title": "", "description": "",
         "translated": "", "prompts": "", "metadata": "", "language": "Tiếng Ba Lan",
         "saved": False, "processed": False, "saved_order": 0,
-        "new_title": "", "new_description": "", "seo_tags": "", "video_forms": "", "optimized_script": "", "character_images_error": "", "character_bible": "",
+        "new_title": "", "new_description": "", "seo_tags": "", "video_forms": "", "optimized_script": "", "character_images_error": "", "character_bible": "", "seo_stale": False, "character_bible_stale": False,
     }
 
 
@@ -1615,17 +1616,25 @@ with tab_translate:
         with st.expander("✍️ Kịch bản đã tối ưu (dưới 10.000 ký tự)", expanded=False):
             st.caption("Tạo từ phụ đề gốc trước khi dịch, giữ nguyên phụ đề để đối chiếu.")
             st.code(session["optimized_script"], language=None, wrap_lines=True)
-    if st.button("🌍 Dịch lại toàn bộ", key=f"translate_{sid}"):
-        if not session["source"].strip():
-            st.warning("Hãy trích xuất phụ đề hoặc nhập văn bản trước.")
-        else:
-            try:
-                with st.spinner(f"Đang dịch sang {language}..."):
-                    session["translated"] = translate_full_script(session["source"], language)
-                mark_session_processed(session)
-                _persist_and_rerun()
-            except Exception as exc:
-                st.error(str(exc))
+    if st.button(
+        "🔄 Chạy lại riêng — Bản dịch", key=f"translate_{sid}",
+        disabled=session.get("job_state") == "running",
+    ):
+        try:
+            with st.spinner(f"Đang dịch lại kịch bản đã tối ưu sang {language}..."):
+                rerun_translation(
+                    session, language,
+                    lambda source, target: translate_full_script(source, target),
+                )
+            mark_session_processed(session)
+            _persist_and_rerun()
+        except Exception as exc:
+            st.error(f"Không thể chạy lại Bản dịch: {exc}")
+    if session.get("seo_stale") or session.get("character_bible_stale"):
+        st.warning(
+            "Bản dịch đã thay đổi. SEO, hồ sơ/ảnh nhân vật và form video cũ "
+            "có thể không còn khớp; hãy chạy lại các mục phụ thuộc nếu cần."
+        )
     copy_all_button(
         "📋 Copy toàn bộ bản dịch",
         session["translated"],
@@ -1636,26 +1645,19 @@ with tab_translate:
         output("📋 Copy toàn bộ bản dịch", session["translated"], allow_download=True)
 
 with tab_seo:
-    if st.button("📝 Tạo lại tiêu đề • mô tả • SEO", key=f"seo_{sid}"):
-        base = session["translated"] or session["source"]
-        if not base.strip():
-            st.warning("Chưa có bản dịch hoặc phụ đề.")
-        else:
-            try:
-                with st.spinner(f"Đang tạo nội dung YouTube bằng {language}..."):
-                    (
-                        session["new_title"], session["new_description"], session["seo_tags"]
-                    ) = create_target_metadata(
-                        base, session["title"], session["description"], language
-                    )
-                session["metadata"] = "\n\n".join([
-                    session["new_title"], session["new_description"], session["seo_tags"]
-                ])
-                mark_session_processed(session)
-                _persist_and_rerun()
-            except Exception as exc:
-                st.error(str(exc))
-
+    if st.button(
+        "🔄 Chạy lại riêng — Tiêu đề • Mô tả • SEO",
+        key=f"seo_{sid}", disabled=session.get("job_state") == "running",
+    ):
+        try:
+            with st.spinner(f"Đang tạo lại SEO bằng {language}..."):
+                rerun_seo(session, language, create_target_metadata)
+            mark_session_processed(session)
+            _persist_and_rerun()
+        except Exception as exc:
+            st.error(f"Không thể chạy lại SEO: {exc}")
+    if session.get("seo_stale"):
+        st.warning("SEO đang dựa trên bản dịch cũ. Nhấn Chạy lại riêng để đồng bộ.")
     st.subheader(f"🎬 Tiêu đề đã dịch ({language})")
     copy_all_button(
         "📋 Copy toàn bộ tiêu đề", session.get("new_title", ""),
@@ -1699,6 +1701,49 @@ with tab_characters:
         "Ảnh được tự tạo sau Hồ sơ nhân vật nếu đã nhập OpenAI Images API key. "
         "Chỉ chứa nhân vật thuộc phiên hiện tại, không lẫn phiên khác."
     )
+    if st.button(
+        "🔄 Chạy lại riêng — Ảnh nhân vật",
+        key=f"retry_character_images_{sid}",
+        disabled=session.get("job_state") == "running",
+    ):
+        if not image_api_key:
+            st.warning("Hãy nhập OpenAI Images API key trước khi chạy lại ảnh.")
+        elif not key.strip():
+            st.warning("Hãy nhập API văn bản để nhận diện nhân vật từ hồ sơ.")
+        else:
+            try:
+                with st.spinner("Đang phân tích lại hồ sơ và tạo ảnh nhân vật..."):
+                    style = st.session_state.get(f"video_style_{sid}", "Điện ảnh chân thực")
+                    bible, specs, changed = portrait_retry_specs(session, language, style, ai)
+                    if not specs:
+                        raise ValueError("Hồ sơ không có nhân vật được nhận diện.")
+                    failures = []
+                    successes = 0
+                    for name, desc in specs:
+                        try:
+                            png = create_character_png(
+                                image_api_key, name, desc, style=style,
+                                bible=bible, model=IMAGE_MODEL,
+                            )
+                            IMAGE_STORE.save(_job_scope(), sid, name, png)
+                            successes += 1
+                        except Exception as error:
+                            failures.append(f"{name}: {str(error).replace(image_api_key, '[KEY ĐÃ ẨN]')}")
+                    if successes:
+                        if changed:
+                            session["character_bible"] = bible
+                            session["character_bible_stale"] = False
+                        session["character_images_error"] = (
+                            "Một số ảnh chưa tạo được: " + "; ".join(failures)
+                        )[:350] if failures else ""
+                        mark_session_processed(session)
+                        _persist_and_rerun()
+                    else:
+                        raise ValueError("Không tạo được ảnh nào. " + "; ".join(failures))
+            except Exception as exc:
+                st.error(f"Không thể chạy lại ảnh nhân vật: {exc}")
+    if session.get("character_bible_stale"):
+        st.warning("Hồ sơ nhân vật có thể không còn khớp bản dịch mới.")
     scene_images = IMAGE_STORE.images(_job_scope(), sid)
     if scene_images:
         st.success(f"Đã có {len(scene_images)} ảnh nhân vật.")

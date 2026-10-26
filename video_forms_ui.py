@@ -122,11 +122,21 @@ def render_video_forms(session, sid, language, *, ai, api_key,
             "Bản dịch, ngôn ngữ hoặc file giọng đọc đã thay đổi. "
             "Hãy tạo lại form theo audio mới."
         )
-    if st.button(
+    cannot_generate = (
+        audio_error or upload is None or not translated
+        or bool(session.get("job_state") == "running")
+    )
+    generate_clicked = st.button(
         "🎬 Tạo form 8 giây theo giọng đọc",
         type="primary", key=f"create_video_forms_{sid}",
-        disabled=audio_error or upload is None or not translated or bool(session.get("job_state") == "running"),
-    ):
+        disabled=cannot_generate,
+    )
+    retry_clicked = st.button(
+        "🔄 Chạy lại riêng — Form video 8 giây",
+        key=f"retry_video_forms_{sid}",
+        disabled=cannot_generate or plan is None,
+    )
+    if generate_clicked or retry_clicked:
         if not api_key.strip():
             st.warning("Hãy nhập API key của nhà cung cấp AI trước khi tạo form.")
         else:
