@@ -117,9 +117,13 @@ def render_video_forms(session, sid, language, *, ai, api_key,
                 f"🎞️ Tự tính: {voice_stats['form_count']} form × 8 giây = "
                 f"{voice_stats['video_duration_seconds']} giây. "
                 f"Giọng đọc: {seconds:.2f} giây; "
-                f"tốc độ trung bình {voice_stats['average_wpm']} từ/phút; "
+                f"bản dịch {voice_stats['translated_word_count']} từ, "
+                f"trung bình {voice_stats['words_per_8s']} từ/form; "
+                f"tốc độ ước tính {voice_stats['average_wpm']} từ/phút; "
                 f"dư {voice_stats['padding_seconds']} giây ở cuối."
             )
+            if voice_stats["pacing_notice"]:
+                st.warning(voice_stats["pacing_notice"])
         except (ValueError, TypeError, OSError) as exc:
             st.error(f"Không đọc được file giọng đọc: {exc}")
             audio_error = True
