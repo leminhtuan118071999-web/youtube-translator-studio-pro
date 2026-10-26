@@ -52,7 +52,7 @@ class VideoScenePlannerTests(unittest.TestCase):
             wav.setnchannels(1)
             wav.setsampwidth(2)
             wav.setframerate(8000)
-            wav.writeframes(b"\\x00\\x00" * (8000 * 3))
+            wav.writeframes(bytes([0, 0]) * (8000 * 3))
         class Uploaded:
             def getvalue(self):
                 return payload.getvalue()
@@ -150,7 +150,7 @@ class VideoScenePlannerTests(unittest.TestCase):
         self.assertIn("Camera zoom, dramatic lighting and SFX.", blocks[0])
         self.assertIn("Voice: " + plan["scenes"][0]["voiceover"], blocks[0])
         self.assertIn("Next: crossfade 0.4s", blocks[0])
-        self.assertNotIn("Next:", blocks[1])
+        self.assertIn("Next: crossfade 0.4s", blocks[1])
         self.assertNotIn("FORM 001", out)
         self.assertNotIn("VOICEOVER (", out)
         self.assertNotIn("VIDEO:", out)
