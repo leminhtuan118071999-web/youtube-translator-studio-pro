@@ -594,18 +594,8 @@ with st.sidebar:
             background: #1b994e !important;
         }
 
-        /* Saved sessions: selected (yellow) takes priority over job status. */
-        [data-testid="stSidebar"] [class*="st-key-session_status_selected_"] button {
-            color: #272112 !important;
-            background: #facc15 !important;
-            border: 1px solid #d4a000 !important;
-            font-weight: 800 !important;
-            box-shadow: 0 2px 0 #9a7000;
-        }
-        [data-testid="stSidebar"] [class*="st-key-session_status_selected_"] button:hover {
-            background: #ffe45c !important;
-        }
-        /* Finished: green. Pending/running/failed/interrupted: red. */
+        /* Finished: green. Pending/running/failed/interrupted: red.
+           Selection is shown by a green checkmark, not a yellow box. */
         [data-testid="stSidebar"] [class*="st-key-session_status_completed_"] button {
             color: #ffffff !important;
             background: #16803e !important;
@@ -699,7 +689,8 @@ with st.sidebar:
     st.markdown("**📚 Danh sách phiên đã chạy**")
     st.caption(
         "Nhấp tên phiên để mở · nhấp đúp để đổi tên ngay tại ô (Enter để lưu). "
-        "🟢 Hoàn thành · 🔴 Chưa xong/lỗi · 🟡 Đang xem. Nút Xóa nền đỏ."
+        "🟢 Hoàn thành · 🔴 Chưa xong/lỗi · ✅ Đang xem có dấu tích xanh. "
+        "Nút Xóa nền đỏ."
     )
     name_message = st.session_state.pop("session_name_message", None)
     if name_message:
@@ -733,12 +724,14 @@ with st.sidebar:
             else:
                 # Finished sessions are green by color only, without a checkmark.
                 status_suffix = ""
-            if saved_id == sid:
-                session_tone = "selected"
-            elif saved_record.get("job_state") == "completed" and not currently_running:
-                session_tone = "completed"
-            else:
-                session_tone = "pending"
+            # Completion color is independent of the session being viewed.
+            # The selected session has a small green check inside its name.
+            is_selected = saved_id == sid
+            session_tone = (
+                "completed"
+                if saved_record.get("job_state") == "completed" and not currently_running
+                else "pending"
+            )
             with st.container(key=f"session_status_{session_tone}_{saved_id}"):
                 if streamlit_runtime_exists() and not st.session_state.get("_session_name_test_fallback", False):
                     # Native Streamlit buttons have no double-click event.
@@ -746,6 +739,7 @@ with st.sidebar:
                     # from two clicks (edit name directly inside the same box).
                     event = session_name_control(
                         saved_record["name"], status_suffix, session_tone,
+                        selected=is_selected,
                         key=f"session_name_control_{saved_id}",
                     )
                     if isinstance(event, dict) and isinstance(event.get("seq"), str):
@@ -775,6 +769,8 @@ with st.sidebar:
                     # Streamlit AppTest has no JavaScript/browser; retain the
                     # one-click selection control for automated smoke tests.
                     label = f"📄 {saved_record['name']}{status_suffix}"
+                    if is_selected:
+                        label += " ✅"
                     if st.button(
                         label,
                         key=f"open_saved_session_{saved_id}",
