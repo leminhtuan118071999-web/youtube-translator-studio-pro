@@ -16,9 +16,7 @@ from video_scene_planner import (
     continuous_video_forms_text, grouped_video_forms,
 )
 from copy_buttons import copy_all_button
-from voice_alignment import (whisper_word_timestamps, align_target_words,
-    audio_aligned_plan, duration_weighted_plan, speech_statistics,
-    TransientAudioAPIError, MAX_AUDIO_BYTES)
+from voice_alignment import duration_weighted_plan, speech_statistics, MAX_AUDIO_BYTES
 
 
 def _audio_duration(file):
@@ -76,13 +74,13 @@ def _generate_all_remaining(plan, ai, *, progress=None, checkpoint=None):
 
 
 def render_video_forms(session, sid, language, *, ai, api_key,
-                       mark_processed, persist_and_rerun, alignment_api_key=""):
+                       mark_processed, persist_and_rerun):
     """Independent voice-first prompt generation after translation."""
     st.subheader(f"🎬 Form video 8 giây — {language}")
     st.caption(
         "Mỗi form là PROMPT tạo clip 8 giây, chưa xuất MP4. "
         "Lời đọc lấy nguyên văn từ BẢN DỊCH của đúng phiên và cùng ngôn ngữ đích. "
-        "Giữa các clip dùng hiệu ứng chuyển cảnh 0,4 giây nằm trong 8 giây."
+        "Giữa các clip dùng hiệu ứng chuyển cảnh 1 giây trong đoạn cuối của mỗi clip 8 giây."
     )
     translated = session.get("translated", "").strip()
     if not translated:
@@ -117,27 +115,23 @@ def render_video_forms(session, sid, language, *, ai, api_key,
                 f"🎞️ Tự tính: {voice_stats['form_count']} form × 8 giây = "
                 f"{voice_stats['video_duration_seconds']} giây. "
                 f"Giọng đọc: {seconds:.2f} giây; "
-                f"tốc độ trung bình {voice_stats['average_wpm']} từ/phút; "
+                f"bản dịch {voice_stats['translated_word_count']} từ, "
+                f"trung bình {voice_stats['words_per_8s']} từ/form; "
+                f"tốc độ ước tính {voice_stats['average_wpm']} từ/phút; "
                 f"dư {voice_stats['padding_seconds']} giây ở cuối."
             )
+            if voice_stats["pacing_notice"]:
+                st.warning(voice_stats["pacing_notice"])
         except (ValueError, TypeError, OSError) as exc:
             st.error(f"Không đọc được file giọng đọc: {exc}")
             audio_error = True
     else:
         st.info("Vui lòng tải giọng đọc đã hoàn chỉnh trước khi tạo form.")
-    if alignment_api_key:
-        st.caption(
-            "✅ Có OpenAI API: khi bấm Tạo form, hệ thống phân tích từ được nói "
-            "và mốc thời gian bằng Whisper để chia cảnh theo giọng đọc. "
-            "Nội dung vẫn giữ nguyên bản dịch."
-        )
-    else:
-        st.warning(
-            "⚠️ Chưa có OpenAI API key dành cho phân tích audio. "
-            "Ứng dụng chỉ căn theo tổng thời lượng và ước tính chia từ, "
-            "chưa xác định được chính xác thời điểm từng câu. "
-            "Hãy cấu hình OpenAI Images API key (cũng hỗ trợ Whisper) để căn tốt hơn."
-        )
+    st.caption(
+        "📏 Hệ thống chỉ dùng thời lượng file giọng đọc và độ dài bản dịch "
+        "để ƯỚC TÍNH tốc độ đọc và phân chia lời đọc cho từng form. "
+        "Không phân tích hay gửi nội dung file âm thanh tới Whisper."
+    )
     plan = None
     if session.get("video_forms"):
         try:
@@ -200,38 +194,11 @@ def render_video_forms(session, sid, language, *, ai, api_key,
                     show_progress(working_plan, "🔄 Tiếp tục từ form còn thiếu")
                 else:
                     progress_slot.progress(
-                        0, text="🎧 Bước 1/3 — Phân tích giọng đọc..."
+                        0, text="🎧 Bước 1/3 — Đọc thời lượng âm thanh và ước tính nhịp đọc..."
                     )
-                    if alignment_api_key:
-                        try:
-                            stamped = whisper_word_timestamps(
-                                upload.getvalue(), upload.name, alignment_api_key
-                            )
-                        except TransientAudioAPIError as exc:
-                            working_plan = duration_weighted_plan(
-                                translated, language, seconds,
-                            )
-                            working_plan["alignment_warning"] = (
-                                f"{exc} Đã chuyển sang chế độ ƯỚC TÍNH "
-                                "theo độ dài giọng đọc và bản dịch; "
-                                "chưa căn chính xác theo từng từ."
-                            )
-                        else:
-                            positions, similarity = align_target_words(
-                                translated, stamped, seconds
-                            )
-                            working_plan = audio_aligned_plan(
-                                translated, language, seconds, positions
-                            )
-                            working_plan["voice_match_score"] = similarity
-                            working_plan["speech_stats"] = speech_statistics(
-                                translated, seconds, stamped,
-                            )
-                    else:
-                        working_plan = duration_weighted_plan(
-                            translated, language, seconds,
-                        )
-
+                    working_plan = duration_weighted_plan(
+                        translated, language, seconds,
+                    )
                     working_plan["audio_sha256"] = audio_hash
                     working_plan["audio_filename"] = upload.name
                     progress_slot.progress(
@@ -286,11 +253,9 @@ def render_video_forms(session, sid, language, *, ai, api_key,
     if plan.get("alignment_warning"):
         st.warning(plan["alignment_warning"])
     st.caption(
-        "Căn theo từng từ (Whisper, vẫn có sai số)" if plan.get("alignment_mode") == "whisper_word_timestamps"
-        else "Căn ước tính theo tổng thời lượng file; chưa có timestamp từng từ."
+        "Căn ƯỚC TÍNH theo thời lượng file và độ dài bản dịch; "
+        "không dùng nhận dạng lời nói hay timestamp từng từ."
     )
-    if plan.get("voice_match_score") is not None:
-        st.caption(f"Độ tương đồng giọng đọc/bản dịch: {plan['voice_match_score']:.0%}.")
     if plan.get("speech_stats"):
         stats = plan["speech_stats"]
         st.caption(

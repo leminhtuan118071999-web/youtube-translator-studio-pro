@@ -1695,7 +1695,6 @@ with tab_video:
     render_video_forms(
         session, sid, language,
         ai=ai, api_key=key,
-        alignment_api_key=image_api_key,
         mark_processed=mark_session_processed,
         persist_and_rerun=_persist_and_rerun,
     )
