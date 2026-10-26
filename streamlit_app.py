@@ -673,6 +673,18 @@ with st.sidebar:
         st.session_state.selected_session = sid
     session = st.session_state.workspaces[sid]
 
+    # External app launcher: open AI33 in a new browser tab without
+    # rerunning LMT Studio Pro or changing any session/API data.
+    st.markdown("**🧭 Ứng dụng**")
+    st.caption("🎬 YouTube Translator — đang sử dụng")
+    st.link_button(
+        "🌐 AI33 / OpenSpeaker ↗",
+        "https://ai33.pro/app",
+        type="secondary",
+        use_container_width=True,
+    )
+    st.divider()
+
     st.header("📁 Quản lý phiên làm việc")
     # Style only the named session actions, not the app's other buttons.
     # Streamlit adds the widget key as a CSS class (st-key-<key>).
