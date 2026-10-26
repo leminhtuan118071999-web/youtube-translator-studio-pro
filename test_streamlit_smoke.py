@@ -105,8 +105,9 @@ class StreamlitSmokeTests(unittest.TestCase):
         self.assertIn('continuous_video_forms_text(plan)', forms)
         self.assertIn('key=f"copy_all_video_forms_{sid}"', forms)
         self.assertIn('source_fingerprint(translated, language)', forms)
-        self.assertIn('key=f"video_prompt_{sid}_{n}"', forms)
-        self.assertIn('key=f"video_transition_{sid}_{n}"', forms)
+        self.assertNotIn('st.number_input(', forms)
+        self.assertNotIn('key=f"video_prompt_{sid}_{n}"', forms)
+        self.assertNotIn('key=f"video_transition_{sid}_{n}"', forms)
         self.assertIn('type=["mp3", "wav", "m4a", "ogg"]', forms)
 
         app = self.app.run()
