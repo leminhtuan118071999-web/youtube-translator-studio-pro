@@ -657,50 +657,6 @@ def _clear_session_widgets(session_id):
             st.session_state.pop(widget_key, None)
 
 
-def delete_saved_session(session_id):
-    """Purge one session's work, checkpoints and saved-view data.
-
-    The following _persist_and_rerun saves the reduced workspace list to
-    Supabase or local browser storage. Other session data remains untouched.
-    """
-    if session_id not in st.session_state.workspaces:
-        return
-    removed = st.session_state.workspaces[session_id]
-    removed_name = removed.get("name", "Phiên")
-    get_job_registry().cancel(removed.get("job_run_id"), session_id, _job_scope())
-    job = st.session_state.background_jobs.pop(session_id, None)
-    if job:
-        job["progress"].cancel()
-        job["future"].cancel()
-    del st.session_state.workspaces[session_id]
-    _clear_session_widgets(session_id)
-    # Each deletion gets a unique browser-storage acknowledgement. Only the
-    # reduced snapshot is written; existing provider API settings are retained.
-    st.session_state["_browser_delete_revision"] = uuid.uuid4().hex
-    st.session_state.pop("_browser_delete_confirmed", None)
-    if not st.session_state.workspaces:
-        # Keep the app usable even after deleting its very last session.
-        new_id = uuid.uuid4().hex
-        st.session_state.saved_session_order += 1
-        new_record = blank_session("Phiên mới")
-        new_record["saved_order"] = st.session_state.saved_session_order
-        st.session_state.workspaces[new_id] = new_record
-    if st.session_state.selected_session == session_id:
-        remaining_id = max(
-            st.session_state.workspaces,
-            key=lambda key: st.session_state.workspaces[key].get("saved_order", 0),
-        )
-        st.session_state.selected_session = remaining_id
-        st.session_state["_open_session_next"] = remaining_id
-    if st.session_state.get("editing_session_id") == session_id:
-        st.session_state["editing_session_id"] = None
-    st.session_state["confirm_delete_session_id"] = None
-    st.session_state["_session_flash"] = (
-        f"🗑️ Đã xóa phiên '{removed_name}' cùng nội dung, bản dịch, "
-        "prompt, SEO và dữ liệu bản lưu liên quan. Các phiên khác được giữ nguyên."
-    )
-
-
 # On a rerun after creating or opening a session, set the active session directly.
 # The saved-session buttons are the only navigation controls; no top dropdown.
 if "_open_session_next" in st.session_state:
@@ -773,36 +729,11 @@ with st.sidebar:
     session = st.session_state.workspaces[sid]
 
     st.header("📁 Quản lý phiên làm việc")
-    # Style only the named session actions, not the app's other buttons.
-    # Streamlit adds the widget key as a CSS class (st-key-<key>).
+    # Style saved-session status buttons and New Session; no individual
+    # deletion controls are rendered, so no red Xóa buttons can be truncated.
     st.markdown(
         """
         <style>
-        [data-testid="stSidebar"] [class*="st-key-delete_session_"] button,
-        [data-testid="stSidebar"] .st-key-delete_all_sessions button,
-        [data-testid="stSidebar"] [class*="st-key-confirm_delete_"] button {
-            color: #ffffff !important;
-            border: 1px solid #991b1b !important;
-            background: #c62828 !important;
-            font-weight: 800 !important;
-        }
-        /* Give each Xóa label enough space instead of truncating it to X... */
-        [data-testid="stSidebar"] [class*="st-key-delete_session_"] button {
-            min-width: 72px !important;
-            padding-inline: 10px !important;
-            white-space: nowrap !important;
-        }
-        [data-testid="stSidebar"] [class*="st-key-delete_session_"] button p {
-            white-space: nowrap !important;
-            text-overflow: clip !important;
-            overflow: visible !important;
-        }
-        [data-testid="stSidebar"] [class*="st-key-delete_session_"] button:hover,
-        [data-testid="stSidebar"] .st-key-delete_all_sessions button:hover,
-        [data-testid="stSidebar"] [class*="st-key-confirm_delete_"] button:hover {
-            background: #e53935 !important;
-        }
-
         /* New session: always green. */
         [data-testid="stSidebar"] .st-key-create_new_session button {
             color: #ffffff !important;
@@ -914,8 +845,7 @@ with st.sidebar:
     st.markdown("**📚 Danh sách phiên đã chạy**")
     st.caption(
         "Nhấp tên phiên để mở · nhấp đúp để đổi tên ngay tại ô (Enter để lưu). "
-        "🟢 Hoàn thành · 🔴 Chưa xong/lỗi · ✅ Đang xem có dấu tích xanh. "
-        "Nút Xóa nền đỏ."
+        "🟢 Hoàn thành · 🔴 Chưa xong/lỗi · ✅ Đang xem có dấu tích xanh."
     )
     name_message = st.session_state.pop("session_name_message", None)
     if name_message:
@@ -935,9 +865,7 @@ with st.sidebar:
     if not saved_sessions:
         st.caption("Chưa có phiên nào được bắt đầu. Bấm BẮT ĐẦU TẠO TOÀN BỘ trước khi tạo phiên mới.")
     for saved_id, saved_record in saved_sessions:
-        # Reserve enough sidebar width to show "Xóa" without ellipsis.
-        name_col, delete_col = st.columns([4.5, 2.5], gap="small")
-        with name_col:
+        with st.container():
             job = st.session_state.background_jobs.get(saved_id)
             currently_running = bool(job and not job["future"].done())
             if currently_running:
@@ -1007,40 +935,6 @@ with st.sidebar:
                             sync_form(sid)
                             st.session_state["_open_session_next"] = saved_id
                             _persist_and_rerun()
-        with delete_col:
-            if st.button(
-                "Xóa",
-                key=f"delete_session_{saved_id}",
-                use_container_width=True,
-            ):
-                current_confirm = st.session_state.get("confirm_delete_session_id")
-                st.session_state["confirm_delete_session_id"] = (
-                    None if current_confirm == saved_id else saved_id
-                )
-                _persist_and_rerun()
-        if st.session_state.get("confirm_delete_session_id") == saved_id:
-            st.warning(
-                f"Xác nhận xóa phiên '{saved_record['name']}' và toàn bộ "
-                "dữ liệu liên quan (bản dịch, prompt, SEO, trạng thái, phụ đề) "
-                "trong app và bản lưu? Thao tác này không thể hoàn tác."
-            )
-            confirm_col, cancel_col = st.columns(2, gap="small")
-            with confirm_col:
-                if st.button(
-                    "✅ Xác nhận xóa",
-                    key=f"confirm_delete_{saved_id}",
-                    use_container_width=True,
-                ):
-                    delete_saved_session(saved_id)
-                    _persist_and_rerun()
-            with cancel_col:
-                if st.button(
-                    "Hủy",
-                    key=f"cancel_delete_{saved_id}",
-                    use_container_width=True,
-                ):
-                    st.session_state["confirm_delete_session_id"] = None
-                    st.rerun()
     # Session content still auto-saves on every rerun via Supabase or
     # local browser storage. Only the optional backup/import UI is removed.
     # Keep cloud logout accessible outside the retired backup section.
