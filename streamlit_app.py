@@ -21,10 +21,12 @@ from transcript_sources import parse_uploaded_subtitles
 from persistent_store import (
     backup_state, configured, get_config, sign_in, sign_up,
     load_user, refresh_auth, save_user, settings_from_widgets,
+    remember_widget_settings, activate_provider_settings,
     restore_widget_settings, snapshot_hash, normalize_sessions,
 )
 from browser_session_store import (
-    STORAGE_KEY, encode_browser_backup, decode_browser_backup,
+    STORAGE_KEY, API_SETTINGS_STORAGE_KEY,
+    encode_browser_backup, decode_browser_backup,
 )
 from copy_buttons import copy_all_button
 from session_name_controls import session_name_control, rename_record
@@ -276,7 +278,7 @@ def _save_cloud_state(force=False):
         st.session_state.workspaces, active,
         st.session_state.get("saved_session_order", 0)
     )
-    settings = settings_from_widgets(st.session_state)
+    settings = remember_widget_settings(st.session_state)
     fingerprint = snapshot_hash(payload, settings)
     if fingerprint == st.session_state.get("_cloud_saved_hash"):
         return
@@ -303,9 +305,8 @@ def _persist_and_rerun():
     st.rerun()
 
 
-# No Supabase? Restore sessions from this browser's localStorage before we
-# initialize a new empty workspace. Local storage is origin/browser-specific
-# and intentionally NEVER contains API keys.
+# Without Supabase, session content and encrypted API configuration live in
+# separate origin-scoped browser stores. Session backups never contain keys.
 @st.cache_resource
 def _browser_component():
     return components.declare_component(
@@ -315,6 +316,27 @@ def _browser_component():
 
 
 BROWSER_LOCAL_ENABLED = not CLOUD_ENABLED and streamlit_runtime_exists()
+
+# Hydrate saved API widgets before their initial rendering. The encrypted
+# browser record uses a non-exportable, browser-only AES key stored in IndexedDB.
+if BROWSER_LOCAL_ENABLED and not st.session_state.get("_browser_api_restored"):
+    restored_api = _browser_component()(
+        mode="api_read", storageKey=API_SETTINGS_STORAGE_KEY,
+        key="browser_api_settings_loader", default=None,
+    )
+    if restored_api is None:
+        st.caption("🔐 Đang khôi phục cấu hình API đã lưu trên trình duyệt...")
+        st.stop()
+    st.session_state["_browser_api_restored"] = True
+    if restored_api.get("ok") and isinstance(restored_api.get("settings"), dict):
+        restore_widget_settings(st.session_state, restored_api["settings"])
+    else:
+        st.session_state["_browser_api_storage_disabled"] = True
+        st.session_state["_browser_api_error"] = restored_api.get(
+            "message", "Không đọc được cấu hình API trên trình duyệt."
+        )
+    st.rerun()
+
 if BROWSER_LOCAL_ENABLED and not st.session_state.get("_browser_sessions_restored"):
     stored = _browser_component()(
         mode="read", storageKey=STORAGE_KEY,
@@ -406,6 +428,38 @@ def _save_browser_sessions():
     except (ValueError, TypeError) as exc:
         st.session_state["_browser_save_error"] = str(exc)
         st.session_state["_browser_sessions_disabled"] = True
+
+
+def _save_browser_api_settings():
+    """Persist only allowlisted settings as AES-GCM ciphertext on this browser.
+
+    Provider keys must never join session backups or plaintext localStorage.
+    A failed browser storage operation leaves the live widgets untouched.
+    """
+    settings = remember_widget_settings(st.session_state)
+    if not BROWSER_LOCAL_ENABLED or st.session_state.get("_browser_api_storage_disabled"):
+        return
+    fingerprint = snapshot_hash({}, settings)
+    if fingerprint == st.session_state.get("_browser_api_saved_hash"):
+        return
+    try:
+        outcome = _browser_component()(
+            mode="api_write", storageKey=API_SETTINGS_STORAGE_KEY,
+            payload=json.dumps(settings, ensure_ascii=False, sort_keys=True),
+            revision=fingerprint, key="browser_api_settings_writer", default=None,
+        )
+        if isinstance(outcome, dict):
+            if outcome.get("ok") and outcome.get("revision") == fingerprint:
+                st.session_state["_browser_api_saved_hash"] = fingerprint
+                st.session_state.pop("_browser_api_error", None)
+            elif not outcome.get("ok", True):
+                st.session_state["_browser_api_storage_disabled"] = True
+                st.session_state["_browser_api_error"] = outcome.get(
+                    "message", "Trình duyệt không thể lưu cấu hình API."
+                )
+    except (TypeError, ValueError) as exc:
+        st.session_state["_browser_api_storage_disabled"] = True
+        st.session_state["_browser_api_error"] = "Không thể lưu cấu hình API trên trình duyệt."
 
 
 # Data belong to this browser's current Streamlit session, never a shared server file.
@@ -908,6 +962,7 @@ with st.sidebar:
         transcript_api_key = transcript_api_key_entered.strip() or backup_key_secret.strip()
         st.markdown("[🔗 Lấy API key phụ đề Supadata](https://supadata.ai/)")
         st.caption("Dịch vụ phụ đề có giới hạn lượt và có thể tính phí. Không bắt buộc nếu bạn dùng file phụ đề.")
+        st.caption("🔒 API key sẽ tự lưu mã hóa theo tài khoản (Supabase) hoặc trên trình duyệt này nếu không dùng Supabase.")
 
     st.divider()
     with st.expander("🔑 Cấu hình API đa nền tảng", expanded=False):
@@ -922,6 +977,9 @@ with st.sidebar:
         )
         preset = PROVIDERS[provider]
         provider_id = provider
+        # Rehydrate keys and model IDs when changing back to a provider:
+        # Streamlit automatically prunes inactive input widget state.
+        activate_provider_settings(st.session_state, provider)
         secret_name = preset["secret"]
         # Apply profile changes before instantiating Streamlit input widgets.
         pending_free = st.session_state.pop("_pending_free_provider", None)
@@ -1122,6 +1180,7 @@ with st.sidebar:
         )
         test_api = st.button("🧪 Kiểm tra kết nối API", use_container_width=True)
         st.caption("API key không được ghi vào GitHub hoặc dữ liệu phiên. Dịch vụ API có thể tính phí.")
+        st.caption("💾 Cấu hình từng nhà cung cấp được tự lưu và khôi phục khi mở lại app; có thể thay đổi bất cứ lúc nào.")
 
 
 def ai(prompt):
@@ -1519,6 +1578,7 @@ st.caption("📋 Nút Copy toàn bộ nằm ngay bên ngoài từng mục và sa
 # Automatically save changed sessions and ALL manually-entered API provider
 # settings/keys, encrypted, after widgets update on each Streamlit rerun.
 _save_cloud_state()
+_save_browser_api_settings()
 _save_browser_sessions()
 if st.session_state.pop("_browser_delete_confirmed", False):
     st.caption("✅ Đã cập nhật bản lưu trình duyệt sau khi xóa phiên.")
@@ -1526,6 +1586,12 @@ if st.session_state.get("_browser_delete_revision"):
     st.caption("💾 Đang xác nhận xóa dữ liệu phiên khỏi bộ nhớ trình duyệt...")
 if not CLOUD_ENABLED and st.session_state.get("_browser_restore_success"):
     st.caption("💾 Đã khôi phục danh sách phiên từ trình duyệt này.")
+if not CLOUD_ENABLED and st.session_state.get("_browser_api_error"):
+    st.warning(
+        "⚠️ Cấu hình API chưa được tự lưu trên trình duyệt: "
+        + st.session_state["_browser_api_error"]
+        + " Có thể dùng Supabase để lưu mã hóa theo tài khoản."
+    )
 if not CLOUD_ENABLED and st.session_state.get("_browser_save_error"):
     st.warning(
         "⚠️ Không thể tự lưu danh sách phiên: "

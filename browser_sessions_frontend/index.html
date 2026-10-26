@@ -14,10 +14,132 @@
   function report(value) {
     send("streamlit:setComponentValue", { value: value, dataType: "json" });
   }
+  // API keys are never saved as plaintext in localStorage. A non-exportable
+  // AES-GCM key lives in IndexedDB for this browser and origin only.
+  const enc = new TextEncoder();
+  const dec = new TextDecoder();
+  const DB_NAME = "lmt-studio-pro:api-keyring:v1";
+  const KEY_STORE = "keys";
+  const KEY_ID = "local-api-settings";
+  function base64(buffer) {
+    const bytes = new Uint8Array(buffer);
+    let result = "";
+    for (let i = 0; i < bytes.length; i += 32768) {
+      result += String.fromCharCode(...bytes.subarray(i, i + 32768));
+    }
+    return btoa(result);
+  }
+  function unbase64(value) {
+    const binary = atob(value);
+    return Uint8Array.from(binary, c => c.charCodeAt(0));
+  }
+  function openKeyDatabase() {
+    return new Promise((resolve, reject) => {
+      const request = indexedDB.open(DB_NAME, 1);
+      request.onupgradeneeded = () => request.result.createObjectStore(KEY_STORE);
+      request.onsuccess = () => resolve(request.result);
+      request.onerror = () => reject(new Error("IndexedDB unavailable"));
+    });
+  }
+  async function browserDeviceKey(create) {
+    if (!crypto || !crypto.subtle || !indexedDB) throw new Error("No secure browser storage");
+    const db = await openKeyDatabase();
+    try {
+      const current = await new Promise((resolve, reject) => {
+        const req = db.transaction(KEY_STORE, "readonly").objectStore(KEY_STORE).get(KEY_ID);
+        req.onsuccess = () => resolve(req.result);
+        req.onerror = () => reject(new Error("Cannot read browser key"));
+      });
+      if (current) return current;
+      if (!create) throw new Error("Encrypted settings cannot be decrypted");
+      const newKey = await crypto.subtle.generateKey(
+        { name: "AES-GCM", length: 256 }, false, ["encrypt", "decrypt"]
+      );
+      try {
+        await new Promise((resolve, reject) => {
+          const tx = db.transaction(KEY_STORE, "readwrite");
+          tx.objectStore(KEY_STORE).add(newKey, KEY_ID);
+          tx.oncomplete = () => resolve();
+          tx.onerror = () => reject(new Error("Key already exists"));
+          tx.onabort = () => reject(new Error("Key write failed"));
+        });
+        return newKey;
+      } catch (_race) {
+        // Another browser tab may have created the key first.
+        return await new Promise((resolve, reject) => {
+          const req = db.transaction(KEY_STORE, "readonly").objectStore(KEY_STORE).get(KEY_ID);
+          req.onsuccess = () => req.result ? resolve(req.result) : reject(new Error("Missing key"));
+          req.onerror = () => reject(new Error("Cannot read shared browser key"));
+        });
+      }
+    } finally {
+      db.close();
+    }
+  }
+  async function readEncryptedSettings(storageKey) {
+    const envelopeText = localStorage.getItem(storageKey);
+    if (!envelopeText) return {};
+    if (envelopeText.length > 200000) throw new Error("Invalid settings length");
+    const envelope = JSON.parse(envelopeText);
+    if (envelope.version !== 1 || typeof envelope.iv !== "string" ||
+        typeof envelope.ciphertext !== "string") throw new Error("Invalid settings format");
+    const key = await browserDeviceKey(false);
+    const data = await crypto.subtle.decrypt(
+      { name: "AES-GCM", iv: unbase64(envelope.iv) },
+      key, unbase64(envelope.ciphertext)
+    );
+    const settings = JSON.parse(dec.decode(data));
+    if (!settings || typeof settings !== "object" || Array.isArray(settings)) {
+      throw new Error("Invalid decrypted settings");
+    }
+    return settings;
+  }
+  async function writeEncryptedSettings(storageKey, payload, revision) {
+    if (typeof payload !== "string" || payload.length > 120000) {
+      throw new Error("Invalid settings payload");
+    }
+    const existing = localStorage.getItem(storageKey);
+    if (existing) {
+      try {
+        const old = JSON.parse(existing);
+        if (old.version === 1 && old.revision === revision) return;
+      } catch (_invalid) {
+        throw new Error("Existing settings are invalid");
+      }
+    }
+    const key = await browserDeviceKey(true);
+    const iv = crypto.getRandomValues(new Uint8Array(12));
+    const encrypted = await crypto.subtle.encrypt(
+      { name: "AES-GCM", iv: iv }, key, enc.encode(payload)
+    );
+    localStorage.setItem(storageKey, JSON.stringify({
+      version: 1, revision: revision, iv: base64(iv),
+      ciphertext: base64(encrypted)
+    }));
+  }
+  async function processApiSettings(args) {
+    try {
+      if (args.mode === "api_read") {
+        report({ ok: true, settings: await readEncryptedSettings(args.storageKey) });
+      } else if (args.mode === "api_write") {
+        await writeEncryptedSettings(args.storageKey, args.payload, args.revision);
+        report({ ok: true, revision: args.revision });
+      }
+    } catch (_error) {
+      // Do not echo browser exceptions: some include sensitive input.
+      report({ ok: false, revision: args.revision || null,
+               message: "Không thể đọc/lưu cấu hình API mã hóa trên trình duyệt." });
+    }
+    send("streamlit:setFrameHeight", { height: 0 });
+  }
   function onRender(evt) {
     const message = evt.data;
     if (!message || message.type !== "streamlit:render" || !message.args) return;
     const args = message.args;
+    if (args.mode === "api_read" || args.mode === "api_write") {
+      void processApiSettings(args);
+      return;
+    }
     if (args.mode === "read") {
       try {
         const value = window.localStorage.getItem(args.storageKey);
