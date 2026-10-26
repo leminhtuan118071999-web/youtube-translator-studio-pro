@@ -185,6 +185,17 @@ Tại thanh bên trái:
 
 **Lưu ý:** Các dịch vụ OpenAI-compatible dùng endpoint chat completions; Anthropic dùng Messages API. Không phải mọi model đều hỗ trợ chức năng/dung lượng giống nhau. Quét model có thể không khả dụng trên một số server, nhưng vẫn có thể nhập thủ công. Base URL tùy chỉnh chỉ chấp nhận HTTPS công khai, chặn địa chỉ nội bộ và không tự theo chuyển hướng HTTP. Chỉ cung cấp API key cho máy chủ bạn tin tưởng vì key sẽ được gửi tới Base URL đã nhập. API có thể tính phí. Nếu app ở chế độ công khai và dùng key trong Secrets, cần bật hạn chế truy cập để tránh người khác sử dụng API của bạn.
 
+## 🎨 Thumbnail AI – dùng chung API đa nền tảng
+
+Bên dưới thumbnail YouTube gốc có khung **Thumbnail AI – Tạo lại ảnh / Dịch chữ trên ảnh** với hai nút độc lập:
+
+- **🖼️ Tạo lại thumbnail gốc:** dùng AI chỉnh ảnh để giữ tối đa chủ thể/bố cục, tăng độ sắc nét và cân bằng chữ.
+- **🌍 Dịch chữ trên thumbnail sang ngôn ngữ đích:** nhận diện chữ bằng vision, dịch sang ngôn ngữ đích hiện tại, sau đó yêu cầu mô hình chỉnh ảnh xóa chữ cũ, tái tạo nền và bố trí lại chữ dịch. Có xem trước và nút tải PNG 1280 × 720.
+
+**Dùng chung API key đã nhập:** nếu trong **🔑 Cấu hình API đa nền tảng** bạn đang chọn **Google Gemini** hoặc **OpenAI**, khung Thumbnail AI bật sẵn tùy chọn **🔗 Dùng chung API Key**. Ứng dụng lấy API key từ mục đó hoặc từ Streamlit Secrets, **không cần nhập khóa lần hai**. Dù dùng chung một key, bạn vẫn cần chọn **model ảnh** riêng; model dịch văn bản không tự có khả năng tạo ảnh. Nếu chọn **Groq, Claude, gateway, OpenRouter hoặc bên thứ ba** làm nhà cung cấp dịch văn bản, app giữ nguyên cấu hình dịch và cho chọn **Gemini/OpenAI** riêng để tạo ảnh; nếu đã lưu key Gemini/OpenAI trong cấu hình đa nền tảng thì app cũng có thể dùng khóa đó. Không tự giả định rằng một gateway tùy chỉnh hỗ trợ endpoint sửa ảnh.
+
+**Điều kiện:** Tài khoản API phải có quyền dùng model chỉnh ảnh, thường có phí và không nằm trong hạn mức miễn phí của API text. Lấy ảnh từ link YouTube hoặc tải PNG/JPEG/WebP. Chỉ ảnh thumbnail được phép sử dụng mới nên gửi tới API chỉnh sửa. Các model ảnh có thể thay đổi cách trình bày chữ hoặc chi tiết khuôn mặt, vì vậy kiểm tra ảnh trước khi xuất bản. Kết quả PNG đang để trong phiên Streamlit và **không được sao lưu trong Supabase/localStorage**, nên hãy tải về ngay. Key riêng trong mục Thumbnail AI không lưu cùng bản sao dữ liệu phiên.
+
 ## Triển khai
 
 Repository: `leminhtuan118071999-web/youtube-translator-studio-pro`; branch: `main`; entry: `streamlit_app.py`.
