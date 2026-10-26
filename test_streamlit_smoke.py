@@ -17,36 +17,71 @@ class StreamlitSmokeTests(unittest.TestCase):
         self.app.session_state["_browser_api_restored"] = True
         self.app.session_state["_session_name_test_fallback"] = True
 
-    def test_ai33_has_own_internal_page_without_changing_translator(self):
-        """Two same-site areas, iframe fallback, no credential sharing."""
+    def test_ai33_app_switch_avoids_page_lookup_and_preserves_work(self):
+        """Switch both views without re-registering pages or losing futures."""
+        from concurrent.futures import Future
         from pathlib import Path
+        from background_jobs import JobProgress
 
         source = Path("streamlit_app.py").read_text(encoding="utf-8")
-        ai33 = Path("pages/2_AI33_OpenSpeaker.py").read_text(encoding="utf-8")
-        self.assertIn('st.markdown("**🧭 Ứng dụng**")', source)
-        self.assertIn('st.caption("🎬 YouTube Translator — đang sử dụng")', source)
-        self.assertIn('st.page_link(\n        "pages/2_AI33_OpenSpeaker.py",', source)
-        self.assertNotIn('st.link_button(\n        "🌐 AI33 / OpenSpeaker ↗",', source)
-        self.assertIn('st.sidebar.page_link(\n    "streamlit_app.py",', ai33)
-        self.assertIn('AI33_URL = "https://ai33.pro/app"', ai33)
-        self.assertIn('components.iframe(AI33_URL, height=920, scrolling=True)', ai33)
-        self.assertIn('st.link_button(', ai33)
-        self.assertIn('jobs = st.session_state.get("background_jobs", {})', ai33)
-        self.assertIn('job["progress"].snapshot()', ai33)
-        self.assertIn('job["future"].done()', ai33)
-        self.assertIn("không thể bảo đảm", ai33)
+        self.assertNotIn("st.page_link(", source)
+        self.assertNotIn("st.navigation(", source)
+        self.assertIn('key="_lmt_selected_app"', source)
+        self.assertIn('if selected_app == "🎙️ AI33 / OpenSpeaker":', source)
+        self.assertIn(
+            'components.iframe("https://ai33.pro/app", height=920, scrolling=True)',
+            source,
+        )
+        self.assertIn("↗ Mở AI33 trực tiếp nếu khung không hoạt động", source)
+        self.assertIn("chưa có hàng đợi bền vững", source)
         self.assertIn('st.subheader("🖼️ Thumbnail gốc chất lượng cao")', source)
         self.assertIn('["🌍 Bản dịch", "📝 Tiêu đề • Mô tả • SEO"]', source)
         self.assertIn('key="api_provider"', source)
+
         app = self.app.run()
-        self.assertFalse(app.exception, [str(item.message) for item in app.exception])
+        self.assertFalse(app.exception, [str(x.message) for x in app.exception])
+        sid = app.session_state["selected_session"]
+        app.session_state["workspaces"][sid]["translated"] = "Giữ nguyên bản dịch"
+        # A worker must match the active session's run_id or it is deliberately
+        # discarded by collect_completed_jobs() as a stale, canceled attempt.
+        app.session_state["workspaces"][sid]["job_run_id"] = "test-run"
+        app.session_state["workspaces"][sid]["job_state"] = "running"
+        job_future = Future()  # A queued job still pending on the server.
+        progress = JobProgress()
+        app.session_state["background_jobs"][sid] = {
+            "future": job_future, "progress": progress, "run_id": "test-run",
+        }
+        nav = next(x for x in app.radio if x.key == "_lmt_selected_app")
+        self.assertEqual(nav.value, "🎬 YouTube Translator")
+        nav.set_value("🎙️ AI33 / OpenSpeaker")
+        app.run()
+        self.assertFalse(app.exception, [str(x.message) for x in app.exception])
         self.assertTrue(any(
-            button.label == "➕ Tạo phiên mới" for button in app.button
+            "App 2 — AI33" in x.value for x in app.subheader
         ))
+        self.assertFalse(any(
+            x.label == "🚀 BẮT ĐẦU TẠO TOÀN BỘ" for x in app.button
+        ))
+        self.assertEqual(
+            app.session_state["workspaces"][sid]["translated"],
+            "Giữ nguyên bản dịch",
+        )
+        self.assertIs(app.session_state["background_jobs"][sid]["future"], job_future)
+        self.assertFalse(job_future.done())
+
+        next(x for x in app.radio if x.key == "_lmt_selected_app").set_value(
+            "🎬 YouTube Translator"
+        )
+        app.run()
+        self.assertFalse(app.exception, [str(x.message) for x in app.exception])
         self.assertTrue(any(
-            item.label == "🔑 Cấu hình API đa nền tảng"
-            for item in app.get("expander")
+            x.label == "🚀 BẮT ĐẦU TẠO TOÀN BỘ" for x in app.button
         ))
+        self.assertEqual(
+            app.session_state["workspaces"][sid]["translated"],
+            "Giữ nguyên bản dịch",
+        )
+        self.assertIs(app.session_state["background_jobs"][sid]["future"], job_future)
 
     def test_both_api_sections_autosave_without_touching_workspaces(self):
         """Inputs remain interactive; storage and restored provider settings are scoped."""

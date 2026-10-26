@@ -667,8 +667,62 @@ def delete_saved_session(session_id):
 if "_open_session_next" in st.session_state:
     st.session_state.selected_session = st.session_state.pop("_open_session_next")
 
-# Merge finished work before the sidebar reads the session list.
+# Always collect finished work even while the AI33 view is on screen.
 collect_completed_jobs()
+
+# Use two independent views inside ONE Streamlit entrypoint. Unlike page_link,
+# this needs no page registry, so Cloud cannot raise StreamlitPageNotFoundError.
+with st.sidebar:
+    st.markdown("**🧭 Ứng dụng**")
+    selected_app = st.radio(
+        "Chọn ứng dụng",
+        ("🎬 YouTube Translator", "🎙️ AI33 / OpenSpeaker"),
+        key="_lmt_selected_app",
+        label_visibility="collapsed",
+    )
+    st.divider()
+
+if selected_app == "🎙️ AI33 / OpenSpeaker":
+    with st.sidebar:
+        jobs = st.session_state.get("background_jobs", {})
+        workspaces = st.session_state.get("workspaces", {})
+        if isinstance(jobs, dict) and jobs:
+            st.markdown("**⏳ Tiến độ YouTube Translator**")
+            for session_id, job in list(jobs.items()):
+                if not isinstance(job, dict):
+                    continue
+                try:
+                    pct, stage = job["progress"].snapshot()
+                    done = job["future"].done()
+                except (KeyError, AttributeError, TypeError):
+                    continue
+                name = workspaces.get(session_id, {}).get("name", "Phiên dịch")
+                if done:
+                    st.success(f"✅ {name}: hoàn tất. Về App 1 để nhận kết quả.")
+                else:
+                    st.progress(pct, text=f"{name}: {stage}")
+    st.subheader("🎙️ App 2 — AI33 / OpenSpeaker")
+    st.info(
+        "AI33 là website độc lập. Nếu website không cho nhúng hoặc đăng nhập "
+        "trong iframe bị chặn, hãy sử dụng nút mở AI33 bên dưới."
+    )
+    # Do not transfer any translator settings, keys or session data to AI33.
+    components.iframe("https://ai33.pro/app", height=920, scrolling=True)
+    st.link_button(
+        "↗ Mở AI33 trực tiếp nếu khung không hoạt động",
+        "https://ai33.pro/app",
+        use_container_width=True,
+    )
+    st.caption(
+        "Chuyển giữa hai khu vực sẽ giữ phiên dịch đang xử lý nếu máy chủ còn "
+        "hoạt động. Đóng/tải lại trang hoặc máy chủ khởi động lại có thể gián "
+        "đoạn tác vụ; chưa có hàng đợi bền vững đảm bảo chạy đến hoàn thành. "
+        "Tác vụ của AI33 do AI33 quản lý riêng."
+    )
+    _save_cloud_state()
+    _save_browser_api_settings()
+    _save_browser_sessions()
+    st.stop()
 
 with st.sidebar:
     sid = st.session_state.selected_session
@@ -676,18 +730,6 @@ with st.sidebar:
         sid = next(iter(st.session_state.workspaces))
         st.session_state.selected_session = sid
     session = st.session_state.workspaces[sid]
-
-    # Same-origin multipage navigation. The two app panels share one
-    # Streamlit session without sharing YouTube credentials with AI33.
-    st.markdown("**🧭 Ứng dụng**")
-    st.caption("🎬 YouTube Translator — đang sử dụng")
-    st.page_link(
-        "pages/2_AI33_OpenSpeaker.py",
-        label="🎙️ AI33 / OpenSpeaker",
-        icon="🎙️",
-        use_container_width=True,
-    )
-    st.divider()
 
     st.header("📁 Quản lý phiên làm việc")
     # Style only the named session actions, not the app's other buttons.
