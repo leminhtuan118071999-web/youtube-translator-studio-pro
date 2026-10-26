@@ -13,30 +13,44 @@
       font: inherit; text-align: left;
     }
     #name-button {
-      cursor: pointer; white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
-      color: #fff;
+      display: flex; align-items: center; gap: 7px;
+      cursor: pointer; color: #fff; min-width: 0;
     }
-    #name-button.selected { background: #facc15; color: #272112; border-color: #d4a000; box-shadow: 0 2px 0 #9a7000; }
-    #name-button.selected:hover { background: #ffe45c; }
+    #name-label {
+      min-width: 0; flex: 1 1 auto;
+      white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
+    }
+    /* Viewed session is identified only by this high-contrast green check. */
+    #selected-check {
+      display: inline-flex; flex: none;
+      align-items: center; justify-content: center;
+      width: 21px; height: 21px; border-radius: 50%;
+      color: #128238; background: #ffffff;
+      border: 1px solid #d3f5da;
+      font: 900 16px/1 system-ui, sans-serif;
+      box-shadow: 0 1px 3px rgba(0,0,0,.22);
+    }
     #name-button.completed { background: #16803e; border-color: #166534; }
     #name-button.completed:hover { background: #1b994e; }
     #name-button.pending { background: #c62828; border-color: #991b1b; }
     #name-button.pending:hover { background: #dc3636; }
     #name-button:focus-visible { outline: 3px solid #60a5fa; outline-offset: -3px; }
-    #name-input { background: #fff; color: #16181c; border: 2px solid #f0b429; font-weight: 700; }
-    #name-input:focus { outline: 1px solid #facc15; }
+    #name-input { background: #fff; color: #16181c; border: 2px solid #4a9fea; font-weight: 700; }
+    #name-input:focus { outline: 1px solid #60a5fa; }
     [hidden] { display: none !important; }
   </style>
 </head>
 <body>
-  <button type="button" id="name-button" class="pending" title="Nhấp để mở; nhấp đúp để đổi tên"></button>
+  <button type="button" id="name-button" class="pending" title="Nhấp để mở; nhấp đúp để đổi tên"><span id="name-label"></span><span id="selected-check" aria-hidden="true" hidden>✓</span></button>
   <input type="text" id="name-input" aria-label="Đổi tên phiên" maxlength="80" autocomplete="off" hidden/>
   <script>
   "use strict";
   (function () {
     const button = document.getElementById("name-button");
+    const nameLabel = document.getElementById("name-label");
+    const selectedCheck = document.getElementById("selected-check");
     const input = document.getElementById("name-input");
-    let name = "", suffix = "", tone = "pending", clickTimer = null, editing = false;
+    let name = "", suffix = "", tone = "pending", selected = false, clickTimer = null, editing = false;
     let nonce = 0;
     const send = (type, fields) => {
       window.parent.postMessage({isStreamlitMessage: true, type, ...fields}, "*");
@@ -100,10 +114,12 @@
       if (editing && newName !== name) exitEditor();
       name = newName;
       suffix = typeof args.suffix === "string" ? args.suffix : "";
-      tone = ["selected", "completed", "pending"].includes(args.tone) ? args.tone : "pending";
-      button.textContent = "📄 " + name + suffix;
+      tone = ["completed", "pending"].includes(args.tone) ? args.tone : "pending";
+      selected = args.selected === true;
+      nameLabel.textContent = "📄 " + name + suffix;
+      selectedCheck.hidden = !selected;
       button.className = tone;
-      button.setAttribute("aria-label", name + ". Nhấp để mở, nhấp đúp để đổi tên.");
+      button.setAttribute("aria-label", name + (selected ? ". Đang xem." : ".") + " Nhấp để mở, nhấp đúp để đổi tên.");
       send("streamlit:setFrameHeight", {height: 44});
     });
     send("streamlit:componentReady", {apiVersion: 1});
