@@ -1,3 +1,12 @@
+## 📜 Chia form thành từng ô 99 cảnh
+
+Trong mục **Tất cả form video — liền mạch**, các form được chia thành
+những ô độc lập: ô 1 gồm form 001–099, ô 2 gồm 100–198, ô 3 gồm
+199–240 (tùy thời lượng giọng đọc). Mỗi ô có thể mở rộng/thu gọn riêng
+và có nút **Copy toàn bộ ô**; chỉ nội dung các form đã tạo trong khoảng
+đó được sao chép, không trộn với ô khác. Giữ một dòng trống giữa các
+form. File TXT toàn bộ và JSON vẫn tải được như cũ.
+
 ## 🎙️ Tạo form video 8 giây riêng sau khi tải giọng đọc
 
 Nút **🚀 BẮT ĐẦU TẠO TOÀN BỘ** vẫn chạy lấy phụ đề, tối ưu kịch bản
