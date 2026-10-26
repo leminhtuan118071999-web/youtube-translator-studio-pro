@@ -30,13 +30,11 @@ class BackgroundJobsTests(unittest.TestCase):
 
     @patch("background_jobs.fetch_subtitles", return_value=("Original subtitle content.", "English"))
     @patch("background_jobs.generate_text")
-    def test_completed_video_uses_snapshot_and_returns_all_fields(self, api, subs):
+    def test_completed_video_generates_translation_and_seo_without_image_prompts(self, api, subs):
         def mock_ai(provider, base_url, model, api_key, prompt):
             self.assertEqual(api_key, self.config["api_key"])
             if "CHỈ xuất bản dịch" in prompt:
                 return "Treść przetłumaczona na język polski."
-            if "ĐÚNG 20 prompt" in prompt:
-                return json.dumps({"prompts": ["Obraz " + str(i) for i in range(20)]})
             if "Soạn YouTube tiêu đề" in prompt:
                 return json.dumps({"title": "Tytuł", "description": "Opis", "tags": ["tag-a","tag-b"]})
             self.fail("Unexpected prompt: " + prompt[:100])
@@ -48,24 +46,25 @@ class BackgroundJobsTests(unittest.TestCase):
         self.assertEqual(result["fields"]["new_title"], "Tytuł")
         self.assertEqual(result["fields"]["new_description"], "Opis")
         self.assertEqual(result["fields"]["seo_tags"], "tag-a, tag-b")
-        self.assertEqual(len(json.loads(result["fields"]["prompts"])), 20)
+        self.assertNotIn("prompts", result["fields"])
+        self.assertEqual(api.call_count, 2)  # Translation + SEO, no image request
         self.assertEqual(progress.snapshot()[0], 100)
         self.assertNotIn("api_key", result["fields"])
         self.assertNotIn(self.config["api_key"], repr(result))
 
     @patch("background_jobs.fetch_subtitles", return_value=("Original subtitle.", "English"))
     @patch("background_jobs.generate_text")
-    def test_partial_work_kept_when_prompts_fail(self, api, subs):
+    def test_partial_work_kept_when_seo_fails(self, api, subs):
         def mock_ai(_provider, _url, _model, _key, prompt):
             if "CHỈ xuất bản dịch" in prompt:
                 return "Przetłumaczony tekst."
-            return '{"prompts": ["only one scene"]}'
+            raise RuntimeError("SEO request failed")
         api.side_effect = mock_ai
         result = run_full_job(self.config.copy(), JobProgress())
         self.assertFalse(result["ok"])
         self.assertIn("translated", result["fields"])
         self.assertNotIn("prompts", result["fields"])
-        self.assertIn("20", result["error"])
+        self.assertIn("SEO request failed", result["error"])
 
     @patch("background_jobs.fetch_subtitles", return_value=("Subtitle from video.", "English"))
     @patch("background_jobs.generate_text")
@@ -73,9 +72,7 @@ class BackgroundJobsTests(unittest.TestCase):
         def mock_ai(_provider, _url, _model, _key, prompt):
             if "CHỈ xuất bản dịch" in prompt:
                 return "Przetłumaczony tekst"
-            if "ĐÚNG 20 prompt" in prompt:
-                return '{"prompts":["one scene only"]}'
-            self.fail("Unexpected prompt")
+            raise RuntimeError("SEO unavailable")
         api.side_effect = mock_ai
         progress = JobProgress()
         response = run_full_job(self.config.copy(), progress)
@@ -83,6 +80,7 @@ class BackgroundJobsTests(unittest.TestCase):
         live = progress.partial_result()
         self.assertEqual(live["source"], "Subtitle from video.")
         self.assertEqual(live["translated"], "Przetłumaczony tekst")
+        self.assertNotIn("prompts", live)
         self.assertNotIn("api_key", live)
         self.assertNotIn(self.config["api_key"], repr(live))
 
@@ -99,8 +97,6 @@ class BackgroundJobsTests(unittest.TestCase):
         def mock_ai(_provider, _url, _model, _key, prompt):
             if "CHỈ xuất bản dịch" in prompt:
                 return "Przetłumaczony tekst."
-            if "ĐÚNG 20 prompt" in prompt:
-                return json.dumps({"prompts": ["Scena " + str(i) for i in range(20)]})
             if "Soạn YouTube tiêu đề" in prompt:
                 return json.dumps({"title":"Tytuł","description":"Opis","tags":["a","b"]})
             self.fail("Unexpected text request")
@@ -132,8 +128,6 @@ class BackgroundJobsTests(unittest.TestCase):
                 if calls["translate"] == 1:
                     raise RateLimitError("Too many tokens", retry_after=2)
                 return "Tłumaczenie."
-            if "ĐÚNG 20 prompt" in prompt:
-                return json.dumps({"prompts": [f"Scena {n}" for n in range(20)]})
             if "Soạn YouTube tiêu đề" in prompt:
                 return json.dumps({"title":"Tytuł","description":"Opis","tags":["tag1","tag2"]})
             self.fail("Unexpected query")
@@ -175,8 +169,6 @@ class BackgroundJobsTests(unittest.TestCase):
             if "CHỈ xuất bản dịch" in prompt:
                 prompt_lengths.append(len(prompt))
                 return "Translation."
-            if "ĐÚNG 20 prompt" in prompt:
-                return json.dumps({"prompts": [f"Scene {n}" for n in range(20)]})
             if "Soạn YouTube tiêu đề" in prompt:
                 return json.dumps({"title":"Title","description":"Description","tags":["tag1"]})
             if "Summarize" in prompt or "Condense" in prompt:
@@ -199,8 +191,6 @@ class BackgroundJobsTests(unittest.TestCase):
                 index = len(seen_chunks) + 1
                 seen_chunks.append(prompt)
                 return f"Bản dịch phần {index}"
-            if "ĐÚNG 20 prompt" in prompt:
-                return json.dumps({"prompts": [f"Scene {i}" for i in range(20)]})
             if "Soạn YouTube tiêu đề" in prompt:
                 return json.dumps({"title": "Title", "description": "Description", "tags": ["tag"]})
             if "Summarize" in prompt or "Condense" in prompt:
@@ -237,8 +227,6 @@ class BackgroundJobsTests(unittest.TestCase):
                         status_code=502, retry_after=2
                     )
                 return "Translation done"
-            if "ĐÚNG 20 prompt" in prompt:
-                return json.dumps({"prompts": [f"Scene {i}" for i in range(20)]})
             if "Soạn YouTube tiêu đề" in prompt:
                 return json.dumps({
                     "title": "Title", "description": "Description", "tags": ["tag"]
@@ -301,8 +289,6 @@ class BackgroundJobsTests(unittest.TestCase):
             })
             if "CHỈ xuất bản dịch" in prompt:
                 return "Dịch xong"
-            if "ĐÚNG 20 prompt" in prompt:
-                return json.dumps({"prompts": [f"Cảnh {i}" for i in range(20)]})
             if "Soạn YouTube tiêu đề" in prompt:
                 return json.dumps({
                     "title": "Tiêu đề", "description": "Mô tả",
@@ -312,7 +298,7 @@ class BackgroundJobsTests(unittest.TestCase):
         api.side_effect = respond
         result = run_full_job(config, JobProgress())
         self.assertTrue(result["ok"], result["error"])
-        self.assertGreaterEqual(api.call_count, 3)
+        self.assertEqual(api.call_count, 2)  # Translation and SEO
         self.assertEqual(result["fields"]["translated"], "Dịch xong")
 
     def test_cancel_does_not_touch_provider(self):
