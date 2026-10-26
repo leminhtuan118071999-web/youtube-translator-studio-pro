@@ -12,6 +12,7 @@ import zlib
 from persistent_store import MAX_BYTES, normalize_sessions
 
 STORAGE_KEY = "lmt-studio-pro:session-backup:v1"
+API_SETTINGS_STORAGE_KEY = "lmt-studio-pro:encrypted-api-settings:v1"
 MAX_LOCAL_CHARACTERS = 2_000_000
 
 
