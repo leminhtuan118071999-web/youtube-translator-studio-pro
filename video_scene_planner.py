@@ -128,7 +128,9 @@ def character_bible_prompt(translation, language, style):
         "behavior. If a detail is absent, choose one neutral consistent design "
         "instead of alleging the story stated it. Keep the visual style "
         f"consistent: {style}. Return JSON only with a non-empty string "
-        'field: {"character_bible":"..."}. Translate all descriptions into '
+        'fields: {"character_bible":"...", "characters":[{"name":"...", "description":"..."}]}. '
+        "The characters array must list each named recurring character with "
+        "complete visual identity. Translate all descriptions into "
         f"{language}. The reference must be concise and reusable. "
         "Source translated script:\n" + sample
     )

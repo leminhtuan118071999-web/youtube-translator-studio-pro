@@ -32,6 +32,7 @@ from browser_session_store import (
 )
 from copy_buttons import copy_all_button
 from video_forms_ui import render_video_forms
+from character_images import IMAGE_STORE, IMAGE_MODEL, session_images_zip
 from session_name_controls import session_name_control, rename_record
 
 st.set_page_config(page_title="LMT Studio Pro", page_icon="🎬", layout="wide")
@@ -124,7 +125,7 @@ LANGUAGES = [
     "Tiếng Catalan", "Tiếng Basque", "Tiếng Wales", "Tiếng Luxembourg",
     "Tiếng Macedonia", "Tiếng Việt", "Tiếng Nhật", "Tiếng Hàn",
 ]
-FIELDS = ("url", "source", "title", "description", "translated", "prompts", "metadata", "language", "new_title", "new_description", "seo_tags", "video_forms", "optimized_script")
+FIELDS = ("url", "source", "title", "description", "translated", "prompts", "metadata", "language", "new_title", "new_description", "seo_tags", "video_forms", "optimized_script", "character_images_error")
 FORM_FIELDS = ("url", "language")
 
 
@@ -133,7 +134,7 @@ def blank_session(name):
         "name": name, "url": "", "source": "", "title": "", "description": "",
         "translated": "", "prompts": "", "metadata": "", "language": "Tiếng Ba Lan",
         "saved": False, "processed": False, "saved_order": 0,
-        "new_title": "", "new_description": "", "seo_tags": "", "video_forms": "", "optimized_script": "",
+        "new_title": "", "new_description": "", "seo_tags": "", "video_forms": "", "optimized_script": "", "character_images_error": "",
     }
 
 
@@ -664,6 +665,7 @@ def delete_saved_session(session_id):
         return
     old = st.session_state.workspaces[session_id]
     get_job_registry().cancel(old.get("job_run_id"), session_id, _job_scope())
+    IMAGE_STORE.clear(_job_scope(), session_id)
     job = st.session_state.background_jobs.pop(session_id, None)
     if job:
         job["progress"].cancel()
@@ -853,6 +855,7 @@ with st.sidebar:
         st.session_state.saved_session_order = 1
         # Cancel queued jobs; running requests may finish but their results are discarded.
         for old_session_id, old_session in st.session_state.workspaces.items():
+            IMAGE_STORE.clear(_job_scope(), old_session_id)
             get_job_registry().cancel(
                 old_session.get("job_run_id"), old_session_id, _job_scope()
             )
@@ -1007,6 +1010,7 @@ with st.sidebar:
                 st.error(f"Chưa thể lưu trước khi đăng xuất: {exc}")
             else:
                 for old_sid, old_record in st.session_state.workspaces.items():
+                    IMAGE_STORE.clear(_job_scope(), old_sid)
                     get_job_registry().cancel(
                         old_record.get("job_run_id"), old_sid, _job_scope()
                     )
@@ -1036,6 +1040,25 @@ with st.sidebar:
         st.markdown("[🔗 Lấy API key phụ đề Supadata](https://supadata.ai/)")
         st.caption("Dịch vụ phụ đề có giới hạn lượt và có thể tính phí. Không bắt buộc nếu bạn dùng file phụ đề.")
         st.caption("🔒 API key sẽ tự lưu mã hóa theo tài khoản (Supabase) hoặc trên trình duyệt này nếu không dùng Supabase.")
+
+    st.divider()
+    with st.expander("🖼️ API tạo ảnh nhân vật", expanded=False):
+        st.caption(
+            "Tự tạo ảnh ngay khi xong hồ sơ nhân vật. Cần OpenAI Images API "
+            "(khác API dịch Groq/Gemini). Có thể phát sinh phí theo số nhân vật."
+        )
+        image_api_key_entered = st.text_input(
+            "🔐 OpenAI Images API key", type="password",
+            key="image_api_key_input",
+        )
+        try:
+            image_key_secret = str(st.secrets.get("OPENAI_IMAGE_API_KEY", "") or "")
+        except (FileNotFoundError, OSError):
+            image_key_secret = ""
+        image_api_key = image_api_key_entered.strip() or image_key_secret.strip()
+        if not image_api_key:
+            st.caption("Chưa có API ảnh: app vẫn tạo bản dịch, SEO và form video; chưa thể tạo PNG.")
+        st.caption(f"Model ảnh mặc định: {IMAGE_MODEL}. Tối đa 8 nhân vật/phiên.")
 
     st.divider()
     with st.expander("🔑 Cấu hình API đa nền tảng", expanded=False):
@@ -1490,6 +1513,11 @@ if st.button("🚀 BẮT ĐẦU TẠO TOÀN BỘ", type="primary",
                 "api_key": key,
                 "auto_video_forms": True,
                 "video_style": "Điện ảnh chân thực",
+                "auto_character_images": bool(image_api_key),
+                "image_api_key": image_api_key,
+                "image_model": IMAGE_MODEL,
+                "image_scope": _job_scope(),
+                "image_session_id": sid,
             }
             if provider == "API bên thứ ba (tùy chỉnh)":
                 snapshot["api_format"] = api_format
@@ -1578,8 +1606,9 @@ if vid:
 # but only target-language results are shown to the user.
 
 with st.container(key="result_tabs"):
-    tab_translate, tab_seo, tab_video = st.tabs(
-        ["🌍 Bản dịch", "📝 Tiêu đề • Mô tả • SEO", "🎬 Form video 8 giây"]
+    tab_translate, tab_seo, tab_video, tab_characters = st.tabs(
+        ["🌍 Bản dịch", "📝 Tiêu đề • Mô tả • SEO",
+         "🎬 Form video 8 giây", "🖼️ Ảnh nhân vật"]
     )
 with tab_translate:
     if session.get("optimized_script", "").strip():
@@ -1662,6 +1691,43 @@ with tab_video:
         mark_processed=mark_session_processed,
         persist_and_rerun=_persist_and_rerun,
     )
+
+with tab_characters:
+    st.subheader("🖼️ Ảnh nhân vật của phiên này")
+    st.caption(
+        "Ảnh được tự tạo sau Hồ sơ nhân vật nếu đã nhập OpenAI Images API key. "
+        "Chỉ chứa nhân vật thuộc phiên hiện tại, không lẫn phiên khác."
+    )
+    scene_images = IMAGE_STORE.images(_job_scope(), sid)
+    if scene_images:
+        st.success(f"Đã có {len(scene_images)} ảnh nhân vật.")
+        for person_name, image_png in scene_images.items():
+            st.markdown(f"**{person_name}**")
+            st.image(image_png, width=260)
+        archive_name, archive_data = session_images_zip(
+            scene_images, session["name"]
+        )
+        st.download_button(
+            "⬇️ Tải tất cả ảnh nhân vật của phiên (.ZIP)",
+            archive_data,
+            file_name=archive_name,
+            mime="application/zip",
+            key=f"download_character_images_zip_{sid}",
+            use_container_width=True,
+            type="primary",
+        )
+        st.caption(
+            "Muốn chọn thư mục lưu, bật tùy chọn trình duyệt 'Hỏi vị trí lưu "
+            "mỗi file trước khi tải xuống'."
+        )
+    elif session.get("job_state") == "running":
+        st.info("Đang chờ hoàn thành Hồ sơ nhân vật / tạo ảnh...")
+    elif not image_api_key:
+        st.warning("Hãy nhập OpenAI Images API key trong thanh bên để tự tạo ảnh ở phiên mới.")
+    else:
+        st.info("Phiên này chưa có ảnh; hãy chạy BẮT ĐẦU TẠO TOÀN BỘ.")
+    if session.get("character_images_error"):
+        st.warning(str(session["character_images_error"]))
 
 st.caption("📋 Nút Copy toàn bộ nằm ngay bên ngoài từng mục và sao chép đầy đủ nội dung, kể cả khi khung xem đang thu gọn.")
 

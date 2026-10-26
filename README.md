@@ -71,6 +71,34 @@ sơ nhân vật thống nhất và chuyển cảnh theo từng form. Form đư�
 không xóa bản dịch và không chặn phần SEO. Tạo form tự động dùng thêm lượt
 API và có thể mất thời gian đối với video dài.
 
+## 🖼️ Ảnh nhân vật — tạo tự động và tải một lần theo phiên
+
+Tab **🖼️ Ảnh nhân vật** nằm ngay bên phải **🎬 Form video 8 giây**.
+Khi nhấn **🚀 BẮT ĐẦU TẠO TOÀN BỘ**, sau khi tạo xong
+Hồ sơ nhân vật, ứng dụng tự gọi **OpenAI Images API** để tạo tối đa
+8 ảnh PNG (một ảnh/nhân vật) theo phong cách chung của phiên; không cần
+nhấn thêm nút tạo ảnh. Để sử dụng chức năng này, nhập **OpenAI Images
+API key** trong phần **🖼️ API tạo ảnh nhân vật** ở thanh bên. API dịch
+Groq/Gemini/Claude không tự có quyền tạo ảnh OpenAI; việc sinh ảnh có thể
+phát sinh phí riêng. Nếu chưa nhập API ảnh, ứng dụng vẫn dịch/tạo SEO và
+form video bình thường, nhưng không tạo ảnh giả.
+
+Mỗi phiên giữ ảnh tách biệt trên bộ nhớ máy chủ đang chạy. Tab ảnh hiển thị
+bản xem trước và nút **⬇️ Tải tất cả ảnh nhân vật của phiên (.ZIP)**. Mỗi
+file PNG trong ZIP mang **tên nhân vật đã lọc ký tự không hợp lệ**, tên
+file ZIP mang tên phiên. **Chọn thư mục lưu:** trong Chrome/Edge hoặc trình
+duyệt tương tự, bật cài đặt **Hỏi vị trí lưu mỗi file trước khi tải xuống**,
+sau đó khi tải ZIP chọn thư mục mong muốn. Streamlit web không tự mở
+hộp chọn thư mục nội bộ hoặc tự ghi vào ổ máy tính.
+
+**Giới hạn lưu trữ:** Các byte PNG được giữ trong bộ nhớ Python và chỉ
+gắn với phiên + tài khoản, không đưa vào Supabase JSON hay bản sao lưu
+trình duyệt (để tránh quá dung lượng). Do đó khi máy chủ Cloud khởi động
+lại, ảnh chưa tải có thể mất; **nên tải ZIP ngay khi hoàn thành**. Phần
+form, hồ sơ nhân vật và các kết quả văn bản vẫn được tự lưu như trước.
+Đồng nhất tuyệt đối giữa ảnh và video sinh bởi công cụ khác không được
+bảo đảm chỉ bằng prompt tham chiếu.
+
 ## 🎬 Form video 8 giây — ngay cạnh Tiêu đề • Mô tả • SEO
 
 Khu vực kết quả của **YouTube Translator** có tab thứ ba
