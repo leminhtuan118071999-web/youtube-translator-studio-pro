@@ -71,7 +71,8 @@ class PersistentStoreTests(unittest.TestCase):
         saved = settings_from_widgets(settings)
         restored = {}
         restore_widget_settings(restored, saved)
-        self.assertEqual(restored, settings)
+        self.assertEqual(settings_from_widgets(restored), settings)
+        self.assertEqual(restored["_retained_api_settings"], settings)
 
 
     def test_provider_keys_survive_switching_and_inactive_widget_cleanup(self):
