@@ -15,16 +15,28 @@ class StreamlitSmokeTests(unittest.TestCase):
         self.app.session_state["_browser_sessions_restored"] = True
         self.app.session_state["_session_name_test_fallback"] = True
 
-    def test_thumbnail_features_removed_and_video_url_still_works(self):
-        """No thumbnail controls or network image fetch during normal app use."""
+    def test_original_thumbnail_is_downloadable_and_uses_blue_button(self):
+        """A pasted YouTube URL triggers the original preview, without Thumbnail AI."""
+        from io import BytesIO
         from pathlib import Path
+        from unittest.mock import Mock, patch
+        from PIL import Image
 
         source = Path("streamlit_app.py").read_text(encoding="utf-8")
         self.assertNotIn("render_thumbnail_ai", source)
-        self.assertNotIn("get_thumbnail(", source)
-        self.assertNotIn("i.ytimg.com", source)
-        self.assertNotIn("Thumbnail gốc chất lượng cao", source)
-        self.assertNotIn("Thumbnail • Quản lý phiên", source)
+        self.assertIn('st.subheader("🖼️ Thumbnail gốc chất lượng cao")', source)
+        self.assertIn('with st.container(key="original_thumbnail_download"):', source)
+        self.assertIn('type="primary", key=f"thumb_{sid}_{vid}"', source)
+        self.assertIn("background-color: #2563eb !important", source)
+        self.assertIn("⬇️ Tải thumbnail gốc", source)
+        self.assertIn("@st.cache_data(ttl=3600", source)
+        self.assertNotIn("Quét lại model ảnh", source)
+
+        picture = BytesIO()
+        Image.new("RGB", (640, 360), "blue").save(picture, format="JPEG")
+        response = Mock()
+        response.content = picture.getvalue()
+        response.raise_for_status.return_value = None
 
         app = self.app.run()
         self.assertFalse(app.exception, [str(x.message) for x in app.exception])
@@ -33,15 +45,33 @@ class StreamlitSmokeTests(unittest.TestCase):
             if item.key and item.key.endswith("_url")
             and item.key.startswith("field_")
         )
-        url_field.set_value("https://www.youtube.com/watch?v=dQw4w9WgXcQ")
-        app.run()
-        self.assertFalse(app.exception, [str(x.message) for x in app.exception])
-        self.assertFalse(any(
-            "Thumbnail" in item.label for item in app.get("expander")
-        ))
-        self.assertFalse(any(
-            "thumbnail" in item.label.lower() for item in app.button
-        ))
+        with patch("requests.get", return_value=response) as get:
+            url_field.set_value("https://www.youtube.com/watch?v=testThumb01")
+            app.run()
+            self.assertFalse(app.exception, [str(x.message) for x in app.exception])
+            get.assert_called_once()
+            self.assertIn("i.ytimg.com/vi/testThumb01/maxresdefault.jpg",
+                          get.call_args.args[0])
+            # Streamlit cache avoids repeated YouTube network calls on reruns.
+            app.run()
+            self.assertFalse(app.exception, [str(x.message) for x in app.exception])
+            self.assertEqual(get.call_count, 1)
+
+    def test_thumbnail_network_fetch_is_skipped_without_valid_video_url(self):
+        from unittest.mock import patch
+
+        with patch("requests.get") as get:
+            app = self.app.run()
+            self.assertFalse(app.exception, [str(x.message) for x in app.exception])
+            field = next(
+                item for item in app.get("text_input")
+                if item.key and item.key.endswith("_url")
+                and item.key.startswith("field_")
+            )
+            field.set_value("not-a-youtube-link")
+            app.run()
+            self.assertFalse(app.exception, [str(x.message) for x in app.exception])
+            get.assert_not_called()
         self.assertTrue(any(
             item.label == "🚀 BẮT ĐẦU TẠO TOÀN BỘ" for item in app.button
         ))
