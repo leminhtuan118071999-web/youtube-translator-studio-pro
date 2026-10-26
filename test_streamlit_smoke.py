@@ -17,20 +17,24 @@ class StreamlitSmokeTests(unittest.TestCase):
         self.app.session_state["_browser_api_restored"] = True
         self.app.session_state["_session_name_test_fallback"] = True
 
-    def test_ai33_external_link_in_sidebar_preserves_lmt_ui(self):
-        """AI33 opens externally; the current translator stays unchanged."""
+    def test_ai33_has_own_internal_page_without_changing_translator(self):
+        """Two same-site areas, iframe fallback, no credential sharing."""
         from pathlib import Path
 
         source = Path("streamlit_app.py").read_text(encoding="utf-8")
+        ai33 = Path("pages/2_AI33_OpenSpeaker.py").read_text(encoding="utf-8")
         self.assertIn('st.markdown("**🧭 Ứng dụng**")', source)
         self.assertIn('st.caption("🎬 YouTube Translator — đang sử dụng")', source)
-        self.assertIn('st.link_button(\n        "🌐 AI33 / OpenSpeaker ↗",', source)
-        self.assertIn('"https://ai33.pro/app",', source)
-        self.assertIn('type="secondary",\n        use_container_width=True,', source)
-        self.assertLess(
-            source.index('st.link_button(\n        "🌐 AI33 / OpenSpeaker ↗",'),
-            source.index('st.header("📁 Quản lý phiên làm việc")'),
-        )
+        self.assertIn('st.page_link(\n        "pages/2_AI33_OpenSpeaker.py",', source)
+        self.assertNotIn('st.link_button(\n        "🌐 AI33 / OpenSpeaker ↗",', source)
+        self.assertIn('st.sidebar.page_link(\n    "streamlit_app.py",', ai33)
+        self.assertIn('AI33_URL = "https://ai33.pro/app"', ai33)
+        self.assertIn('components.iframe(AI33_URL, height=920, scrolling=True)', ai33)
+        self.assertIn('st.link_button(', ai33)
+        self.assertIn('jobs = st.session_state.get("background_jobs", {})', ai33)
+        self.assertIn('job["progress"].snapshot()', ai33)
+        self.assertIn('job["future"].done()', ai33)
+        self.assertIn("không thể bảo đảm", ai33)
         self.assertIn('st.subheader("🖼️ Thumbnail gốc chất lượng cao")', source)
         self.assertIn('["🌍 Bản dịch", "📝 Tiêu đề • Mô tả • SEO"]', source)
         self.assertIn('key="api_provider"', source)
