@@ -17,6 +17,33 @@ class StreamlitSmokeTests(unittest.TestCase):
         self.app.session_state["_browser_api_restored"] = True
         self.app.session_state["_session_name_test_fallback"] = True
 
+    def test_ai33_external_link_in_sidebar_preserves_lmt_ui(self):
+        """AI33 opens externally; the current translator stays unchanged."""
+        from pathlib import Path
+
+        source = Path("streamlit_app.py").read_text(encoding="utf-8")
+        self.assertIn('st.markdown("**🧭 Ứng dụng**")', source)
+        self.assertIn('st.caption("🎬 YouTube Translator — đang sử dụng")', source)
+        self.assertIn('st.link_button(\n        "🌐 AI33 / OpenSpeaker ↗",', source)
+        self.assertIn('"https://ai33.pro/app",', source)
+        self.assertIn('type="secondary",\n        use_container_width=True,', source)
+        self.assertLess(
+            source.index('st.link_button(\n        "🌐 AI33 / OpenSpeaker ↗",'),
+            source.index('st.header("📁 Quản lý phiên làm việc")'),
+        )
+        self.assertIn('st.subheader("🖼️ Thumbnail gốc chất lượng cao")', source)
+        self.assertIn('["🌍 Bản dịch", "📝 Tiêu đề • Mô tả • SEO"]', source)
+        self.assertIn('key="api_provider"', source)
+        app = self.app.run()
+        self.assertFalse(app.exception, [str(item.message) for item in app.exception])
+        self.assertTrue(any(
+            button.label == "➕ Tạo phiên mới" for button in app.button
+        ))
+        self.assertTrue(any(
+            item.label == "🔑 Cấu hình API đa nền tảng"
+            for item in app.get("expander")
+        ))
+
     def test_both_api_sections_autosave_without_touching_workspaces(self):
         """Inputs remain interactive; storage and restored provider settings are scoped."""
         from pathlib import Path
