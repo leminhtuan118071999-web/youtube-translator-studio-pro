@@ -82,7 +82,7 @@ def render_video_forms(session, sid, language, *, ai, api_key,
     st.caption(
         "Mỗi form là PROMPT tạo clip 8 giây, chưa xuất MP4. "
         "Lời đọc lấy nguyên văn từ BẢN DỊCH của đúng phiên và cùng ngôn ngữ đích. "
-        "Giữa các clip dùng hiệu ứng chuyển cảnh 0,4 giây nằm trong 8 giây."
+        "Giữa các clip dùng hiệu ứng chuyển cảnh 1 giây trong đoạn cuối của mỗi clip 8 giây."
     )
     translated = session.get("translated", "").strip()
     if not translated:
