@@ -1,7 +1,11 @@
 """Browser session backup regression tests (no Streamlit runtime needed)."""
 import json
+import re
+import shutil
+import subprocess
 import unittest
 import uuid
+from pathlib import Path
 
 from browser_session_store import (
     STORAGE_KEY, encode_browser_backup, decode_browser_backup,
@@ -89,6 +93,28 @@ class BrowserSessionBackupTests(unittest.TestCase):
         self.assertTrue(old_ids.isdisjoint(reloaded["workspaces"]))
         self.assertNotIn("Bản dịch", str(reloaded))
         self.assertNotIn("Provider failed", str(reloaded))
+
+    def test_api_key_backup_is_encrypted_and_js_is_parseable(self):
+        """Keep provider credentials outside plaintext session snapshots."""
+        from browser_session_store import API_SETTINGS_STORAGE_KEY
+
+        self.assertNotEqual(API_SETTINGS_STORAGE_KEY, STORAGE_KEY)
+        self.assertIn("lmt-studio-pro", API_SETTINGS_STORAGE_KEY)
+        html = (Path(__file__).resolve().parent /
+                "browser_sessions_frontend" / "index.html").read_text(encoding="utf-8")
+        self.assertIn('name: "AES-GCM"', html)
+        self.assertIn('crypto.subtle.encrypt(', html)
+        self.assertIn('crypto.subtle.decrypt(', html)
+        self.assertIn('indexedDB.open(DB_NAME, 1)', html)
+        self.assertIn('localStorage.setItem(storageKey, JSON.stringify({', html)
+        self.assertNotIn('localStorage.setItem(storageKey, payload)', html)
+        match = re.search(r"<script>(.*?)</script>", html, re.S)
+        self.assertIsNotNone(match)
+        if shutil.which("node"):
+            subprocess.run(
+                ["node", "--check", "-"], input=match.group(1),
+                text=True, capture_output=True, check=True,
+            )
 
     def test_key_is_scoped_to_lmt_studio(self):
         self.assertIn("lmt-studio-pro", STORAGE_KEY)
