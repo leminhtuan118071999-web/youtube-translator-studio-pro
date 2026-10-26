@@ -132,9 +132,7 @@ class StreamlitSmokeTests(unittest.TestCase):
         self.assertFalse(any(
             slider.key == f"video_wpm_{sid}" for slider in app.slider
         ))
-        self.assertTrue(any(
-            uploader.key == f"video_audio_{sid}" for uploader in app.get("file_uploader")
-        ))
+        self.assertIn('key=f"video_audio_{sid}"', forms)
         app.session_state["workspaces"][sid]["video_forms"] = (
             '{"version":1,"language":"Tiếng Ba Lan","scenes":[]}'
         )
