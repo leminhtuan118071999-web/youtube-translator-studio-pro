@@ -33,7 +33,20 @@ def _audio_duration(file):
     return seconds
 
 
+def _completed_count(plan):
+    return sum(bool(scene.get("visual_prompt", "").strip())
+               for scene in plan.get("scenes", []))
+
+
+def _progress_description(plan, stage):
+    completed = _completed_count(plan)
+    total = len(plan.get("scenes", []))
+    percent = round(completed * 100 / total) if total else 0
+    return completed, total, percent, f"{stage} • {completed}/{total} form ({percent}%)"
+
+
 def _generate_batch(plan, ai):
+    """One atomic six-scene provider call, used internally by auto-completion."""
     pending = [s for s in plan["scenes"] if not s.get("visual_prompt", "").strip()][:6]
     if not pending:
         return 0
@@ -41,6 +54,25 @@ def _generate_batch(plan, ai):
     answer = ai(batch_prompt(plan, pending, style=plan["style"]))
     apply_ai_batch(plan, answer, expected)
     return len(pending)
+
+
+def _generate_all_remaining(plan, ai, *, progress=None, checkpoint=None):
+    """Write ALL estimated scenes with one click; checkpoint each completed batch.
+
+    Checkpoints happen only after an entire AI batch validates successfully.
+    On provider errors, previously generated prompts remain intact.
+    """
+    while _completed_count(plan) < len(plan["scenes"]):
+        if progress:
+            progress(plan, "🎬 Đang viết form video")
+        written = _generate_batch(plan, ai)
+        if not written:
+            raise RuntimeError("Không thể tiếp tục tạo form video.")
+        if checkpoint:
+            checkpoint(plan)
+        if progress:
+            progress(plan, "🎬 Đã hoàn thành nhóm form")
+    return _completed_count(plan)
 
 
 def render_video_forms(session, sid, language, *, ai, api_key,
@@ -140,21 +172,46 @@ def render_video_forms(session, sid, language, *, ai, api_key,
         if not api_key.strip():
             st.warning("Hãy nhập API key của nhà cung cấp AI trước khi tạo form.")
         else:
+            progress_slot = st.empty()
+            progress_text = st.empty()
+
+            def show_progress(current_plan, stage):
+                completed, total, percentage, label = _progress_description(
+                    current_plan, stage
+                )
+                progress_slot.progress(percentage, text=label)
+                progress_text.caption(
+                    f"Đã hoàn thành {completed}/{total} form, "
+                    f"còn {total - completed} form."
+                )
+
+            def save_checkpoint(current_plan):
+                encoded = json.dumps(current_plan, ensure_ascii=False)
+                if len(encoded) > 390000:
+                    raise ValueError("Form quá lớn để tự lưu; hãy chia nội dung.")
+                session["video_forms"] = encoded
+
+            working_plan = None
             try:
-                with st.spinner("Đang đối chiếu giọng đọc và bản dịch, tạo 6 form đầu..."):
+                if retry_clicked and plan is not None and not stale:
+                    # Continue unfinished scenes without retranscribing audio
+                    # or discarding the completed forms.
+                    working_plan = plan
+                    show_progress(working_plan, "🔄 Tiếp tục từ form còn thiếu")
+                else:
+                    progress_slot.progress(
+                        0, text="🎧 Bước 1/3 — Phân tích giọng đọc..."
+                    )
                     if alignment_api_key:
                         try:
                             stamped = whisper_word_timestamps(
                                 upload.getvalue(), upload.name, alignment_api_key
                             )
                         except TransientAudioAPIError as exc:
-                            # A temporary Whisper 502 is not evidence that the
-                            # uploaded narration is invalid. Continue visibly
-                            # in estimated mode rather than losing the whole job.
-                            new_plan = duration_weighted_plan(
+                            working_plan = duration_weighted_plan(
                                 translated, language, seconds,
                             )
-                            new_plan["alignment_warning"] = (
+                            working_plan["alignment_warning"] = (
                                 f"{exc} Đã chuyển sang chế độ ƯỚC TÍNH "
                                 "theo độ dài giọng đọc và bản dịch; "
                                 "chưa căn chính xác theo từng từ."
@@ -163,19 +220,23 @@ def render_video_forms(session, sid, language, *, ai, api_key,
                             positions, similarity = align_target_words(
                                 translated, stamped, seconds
                             )
-                            new_plan = audio_aligned_plan(
+                            working_plan = audio_aligned_plan(
                                 translated, language, seconds, positions
                             )
-                            new_plan["voice_match_score"] = similarity
-                            new_plan["speech_stats"] = speech_statistics(
+                            working_plan["voice_match_score"] = similarity
+                            working_plan["speech_stats"] = speech_statistics(
                                 translated, seconds, stamped,
                             )
                     else:
-                        new_plan = duration_weighted_plan(
+                        working_plan = duration_weighted_plan(
                             translated, language, seconds,
                         )
-                    new_plan["audio_sha256"] = audio_hash
-                    new_plan["audio_filename"] = upload.name
+
+                    working_plan["audio_sha256"] = audio_hash
+                    working_plan["audio_filename"] = upload.name
+                    progress_slot.progress(
+                        0, text="👤 Bước 2/3 — Chuẩn bị hồ sơ nhân vật..."
+                    )
                     bible = session.get("character_bible", "")
                     if not bible.strip():
                         result = parse_json_object(
@@ -185,23 +246,41 @@ def render_video_forms(session, sid, language, *, ai, api_key,
                         bible = result["character_bible"]
                     if not isinstance(bible, str) or not bible.strip():
                         raise ValueError("AI chưa tạo được hồ sơ nhân vật.")
-                    new_plan["character_bible"] = bible.strip()
-                    new_plan["style"] = style
-                    _generate_batch(new_plan, ai)
-                    encoded = json.dumps(new_plan, ensure_ascii=False)
-                    if len(encoded) > 390000:
-                        raise ValueError("Form quá lớn để tự lưu; hãy chia nội dung.")
-                    session["video_forms"] = encoded
-                    mark_processed(session)
-                    for widget_key in list(st.session_state):
-                        if widget_key.startswith((
-                            f"video_prompt_{sid}_", f"video_transition_{sid}_"
-                        )):
-                            st.session_state.pop(widget_key, None)
-                    persist_and_rerun()
-            except (TypeError, ValueError, RuntimeError, KeyError) as exc:
-                st.error(f"Không thể tạo form video: {exc}")
+                    working_plan["character_bible"] = bible.strip()
+                    working_plan["style"] = style
+                    # Save the timing plan before the first AI video request.
+                    save_checkpoint(working_plan)
 
+                show_progress(working_plan, "🎬 Bước 3/3 — Bắt đầu tạo form")
+                _generate_all_remaining(
+                    working_plan, ai, progress=show_progress,
+                    checkpoint=save_checkpoint,
+                )
+                mark_processed(session)
+                show_progress(working_plan, "✅ Hoàn thành tất cả form")
+                persist_and_rerun()
+            except (TypeError, ValueError, RuntimeError, KeyError) as exc:
+                if working_plan is not None:
+                    # The last successful batch is saved; retry will resume
+                    # from that point with the same uploaded recording.
+                    plan = working_plan
+                    stale = False
+                    try:
+                        save_checkpoint(working_plan)
+                    except ValueError:
+                        pass
+                    show_progress(working_plan, "⚠️ Tạm dừng — có thể chạy lại")
+                st.error(
+                    f"Chưa thể hoàn tất tất cả form: {exc}. "
+                    "Các form đã tạo được giữ lại. "
+                    "Nhấn '🔄 Chạy lại riêng — Form video 8 giây' để tiếp tục."
+                )
+
+    if plan is not None and not stale:
+        count, total, ratio, label = _progress_description(
+            plan, "📊 Tiến trình tạo form"
+        )
+        st.progress(ratio, text=label)
     if plan is None or stale:
         return
     if plan.get("alignment_warning"):
@@ -234,23 +313,12 @@ def render_video_forms(session, sid, language, *, ai, api_key,
         )
     with st.expander("📌 Hồ sơ nhân vật/bối cảnh cố định cho mọi form", expanded=False):
         st.code(plan.get("character_bible", ""), language=None, wrap_lines=True)
-    if done < len(scenes) and st.button(
-        "▶️ Tạo tiếp 6 form còn thiếu", key=f"continue_video_forms_{sid}"
-    ):
-        if not api_key.strip():
-            st.warning("Hãy nhập API key trước khi tiếp tục.")
-        else:
-            try:
-                with st.spinner("Đang tạo form tiếp theo..."):
-                    _generate_batch(plan, ai)
-                    encoded = json.dumps(plan, ensure_ascii=False)
-                    if len(encoded) > 390000:
-                        raise ValueError("Form quá lớn để tự lưu.")
-                    session["video_forms"] = encoded
-                    mark_processed(session)
-                    persist_and_rerun()
-            except (TypeError, ValueError, RuntimeError, KeyError) as exc:
-                st.error(f"Không thể tạo các form tiếp theo: {exc}")
+    if done < len(scenes):
+        st.info(
+            f"Còn {len(scenes) - done} form chưa hoàn thành. "
+            "Nhấn '🔄 Chạy lại riêng — Form video 8 giây' ở trên "
+            "để hệ thống tự tạo tiếp toàn bộ từ vị trí chưa xong."
+        )
 
     continuous_text = continuous_video_forms_text(plan)
     st.markdown("**📜 Tất cả form video — liền mạch**")
