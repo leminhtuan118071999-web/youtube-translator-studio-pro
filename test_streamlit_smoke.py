@@ -15,6 +15,40 @@ class StreamlitSmokeTests(unittest.TestCase):
         self.app.session_state["_browser_sessions_restored"] = True
         self.app.session_state["_session_name_test_fallback"] = True
 
+    def test_thumbnail_ai_reuses_main_gemini_api_key(self):
+        app = self.app.run()
+        provider = next(
+            item for item in app.selectbox if item.label == "CHỌN NỀN TẢNG AI"
+        )
+        provider.set_value("Google Gemini")
+        app.run()
+        self.assertFalse(app.exception, [str(x.message) for x in app.exception])
+        shared = next(
+            c for c in app.checkbox
+            if c.key and c.key.endswith("_ai_use_shared")
+        )
+        self.assertTrue(shared.value)
+        self.assertIn("Google Gemini", shared.label)
+        self.assertTrue(any(
+            item.label == "Model tạo/sửa ảnh" for item in app.selectbox
+        ))
+        # The UI must not force a duplicate key when sharing is enabled.
+        self.assertFalse(any(
+            item.key and "_image_key_" in item.key
+            for item in app.get("text_input")
+        ))
+
+    def test_thumbnail_ai_shows_separate_image_provider_for_groq(self):
+        app = self.app.run()
+        self.assertFalse(app.exception, [str(x.message) for x in app.exception])
+        self.assertFalse(any(
+            c.key and c.key.endswith("_ai_use_shared") for c in app.checkbox
+        ))
+        self.assertTrue(any(
+            item.label == "Dịch vụ chỉnh sửa ảnh"
+            for item in app.selectbox
+        ))
+
     def test_thumbnail_ai_panel_keeps_original_and_two_actions(self):
         from pathlib import Path
         code = Path("streamlit_app.py").read_text(encoding="utf-8")
