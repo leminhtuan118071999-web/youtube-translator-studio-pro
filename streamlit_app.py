@@ -1882,6 +1882,31 @@ def launch_video_forms_background(duration, audio_hash, audio_name,
             raise ValueError("Phiên này đã có tác vụ form video đang chạy.")
     if not key.strip() or not model.strip():
         raise ValueError("Cần API key và model AI hợp lệ.")
+    if DURABLE_QUEUE_ENABLED:
+        ensure_durable_worker_available()
+        _save_cloud_state(force=True)
+        queued = submit_job(
+            st.secrets, _refresh_login(), sid, "video_forms",
+            {
+                "translated": translated, "language": target_language,
+                "duration_seconds": duration, "audio_hash": audio_hash,
+                "audio_name": audio_name, "style": style,
+                "character_bible": bible, "existing_plan": existing_plan,
+                "provider": provider, "base_url": base_url, "model": model,
+                "api_format": api_format, "auth_mode": api_auth_mode,
+            },
+            {"api_key": key},
+        )
+        session["video_queue_id"] = queued
+        session["video_job_state"] = "running"
+        session["video_job_stage"] = "Đã giao tạo form cho worker độc lập"
+        session["video_job_percent"] = 0
+        session["video_job_error"] = ""
+        session["video_job_run_id"] = ""
+        session["saved"] = True
+        session["processed"] = True
+        _persist_and_rerun()
+        return
     progress = JobProgress()
     run_id = uuid.uuid4().hex
     snapshot = {
@@ -1939,6 +1964,17 @@ with tab_video:
     )
 
 with tab_characters:
+    if DURABLE_QUEUE_ENABLED and session.get("character_images_manifest"):
+        if not IMAGE_STORE.images(_job_scope(), sid):
+            try:
+                restored = fetch_portrait_images(
+                    st.secrets, _refresh_login(), sid,
+                    session["character_images_manifest"],
+                )
+                for name, image_png in restored.items():
+                    IMAGE_STORE.save(_job_scope(), sid, name, image_png)
+            except Exception as exc:
+                st.warning("Chưa tải được ảnh nhân vật từ Storage: " + str(exc)[:180])
     st.subheader("🖼️ Ảnh nhân vật của phiên này")
     st.caption(
         "Ảnh được tự tạo sau Hồ sơ nhân vật nếu đã nhập OpenAI Images API key. "
