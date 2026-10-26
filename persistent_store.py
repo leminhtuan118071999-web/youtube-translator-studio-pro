@@ -21,7 +21,7 @@ CONTENT_FIELDS = (
     "job_error", "job_percent", "job_stage", "job_run_id", "video_forms", "optimized_script",
 )
 API_WIDGET_PREFIXES = ("api_key_", "api_base_", "api_model_id_", "api_format_", "api_auth_mode_")
-API_WIDGET_EXACT = ("api_provider", "supadata_api_key_input")
+API_WIDGET_EXACT = ("api_provider", "supadata_api_key_input", "image_api_key_input")
 MAX_BYTES = 7 * 1024 * 1024
 
 
