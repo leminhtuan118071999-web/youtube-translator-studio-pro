@@ -242,4 +242,4 @@ def continuous_video_forms_text(plan):
         if scene.get("transition_to_next"):
             intro += f" TRANSITION: {scene['transition_to_next']}"
         lines.append(" ".join(intro.splitlines()))
-    return "\n".join(lines)
+    return "\n\n".join(lines)
