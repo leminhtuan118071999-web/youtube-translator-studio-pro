@@ -31,6 +31,7 @@ from browser_session_store import (
     encode_browser_backup, decode_browser_backup,
 )
 from copy_buttons import copy_all_button
+from video_forms_ui import render_video_forms
 from session_name_controls import session_name_control, rename_record
 
 st.set_page_config(page_title="LMT Studio Pro", page_icon="🎬", layout="wide")
@@ -123,7 +124,7 @@ LANGUAGES = [
     "Tiếng Catalan", "Tiếng Basque", "Tiếng Wales", "Tiếng Luxembourg",
     "Tiếng Macedonia", "Tiếng Việt", "Tiếng Nhật", "Tiếng Hàn",
 ]
-FIELDS = ("url", "source", "title", "description", "translated", "prompts", "metadata", "language", "new_title", "new_description", "seo_tags")
+FIELDS = ("url", "source", "title", "description", "translated", "prompts", "metadata", "language", "new_title", "new_description", "seo_tags", "video_forms")
 FORM_FIELDS = ("url", "language")
 
 
@@ -132,7 +133,7 @@ def blank_session(name):
         "name": name, "url": "", "source": "", "title": "", "description": "",
         "translated": "", "prompts": "", "metadata": "", "language": "Tiếng Ba Lan",
         "saved": False, "processed": False, "saved_order": 0,
-        "new_title": "", "new_description": "", "seo_tags": "",
+        "new_title": "", "new_description": "", "seo_tags": "", "video_forms": "",
     }
 
 
@@ -1621,8 +1622,8 @@ if vid:
 # but only target-language results are shown to the user.
 
 with st.container(key="result_tabs"):
-    tab_translate, tab_seo = st.tabs(
-        ["🌍 Bản dịch", "📝 Tiêu đề • Mô tả • SEO"]
+    tab_translate, tab_seo, tab_video = st.tabs(
+        ["🌍 Bản dịch", "📝 Tiêu đề • Mô tả • SEO", "🎬 Form video 8 giây"]
     )
 with tab_translate:
     if st.button("🌍 Dịch lại toàn bộ", key=f"translate_{sid}"):
@@ -1693,6 +1694,14 @@ with tab_seo:
             key=f"copy_all_legacy_seo_{sid}",
         )
         output("📋 Copy nội dung SEO phiên cũ", session["metadata"])
+
+with tab_video:
+    render_video_forms(
+        session, sid, language,
+        ai=ai, api_key=key,
+        mark_processed=mark_session_processed,
+        persist_and_rerun=_persist_and_rerun,
+    )
 
 st.caption("📋 Nút Copy toàn bộ nằm ngay bên ngoài từng mục và sao chép đầy đủ nội dung, kể cả khi khung xem đang thu gọn.")
 
