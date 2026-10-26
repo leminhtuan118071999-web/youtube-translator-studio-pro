@@ -1,10 +1,10 @@
 # 🎬 LMT Studio Pro
 
-Ứng dụng Streamlit xử lý video YouTube: trích xuất phụ đề có sẵn (khi YouTube cho phép), dịch bằng API đa nền tảng, tạo 20 prompt hình ảnh, dịch tiêu đề/mô tả và SEO, tự hiển thị thumbnail gốc và cung cấp nút tải ảnh màu xanh dương.
+Ứng dụng Streamlit xử lý video YouTube: trích xuất phụ đề có sẵn (khi YouTube cho phép), dịch bằng API đa nền tảng, dịch tiêu đề/mô tả và SEO, tự hiển thị thumbnail gốc và cung cấp nút tải ảnh màu xanh dương.
 
 ## ☁️ Tự động lưu toàn bộ dữ liệu và cấu hình API qua lần đăng nhập sau
 
-Để lưu bền vững, admin kết nối một dự án Supabase có xác thực email và RLS. Khi đăng nhập, người dùng sẽ thấy lại mọi phiên đã đồng bộ: bản dịch, prompt ảnh, SEO, phụ đề, link video, tên phiên, trạng thái và cấu hình các nhà cung cấp API. Nhà cung cấp hiện chọn, Base URL, Model ID và API key do người dùng nhập đều được nhớ đến khi thay đổi. Supadata API key cũng được hỗ trợ.
+Để lưu bền vững, admin kết nối một dự án Supabase có xác thực email và RLS. Khi đăng nhập, người dùng sẽ thấy lại mọi phiên đã đồng bộ: bản dịch, dữ liệu prompt cũ (nếu có), SEO, phụ đề, link video, tên phiên, trạng thái và cấu hình các nhà cung cấp API. Nhà cung cấp hiện chọn, Base URL, Model ID và API key do người dùng nhập đều được nhớ đến khi thay đổi. Supadata API key cũng được hỗ trợ.
 
 ### Bật lưu trữ
 
@@ -23,11 +23,11 @@
 
 1. Ở thanh bên trái, chọn nhà cung cấp AI, Base URL, Model ID và nhập API key. **🌍 Ngôn ngữ đích** được chọn ở khu vực chính, ngay trên nút **🚀 BẮT ĐẦU TẠO TOÀN BỘ**.
 2. Dán link YouTube vào ô **🔗 Dán link video YouTube** rồi nhấn **🚀 BẮT ĐẦU TẠO TOÀN BỘ**. Phụ đề gốc sẽ được xử lý nội bộ, không hiển thị ô nhập văn bản gốc.
-3. App tự động: tìm phụ đề thủ công hoặc phụ đề tự động có sẵn trên YouTube → dịch toàn bộ nội dung sang ngôn ngữ đích → tạo **20 prompt hình ảnh bằng ngôn ngữ đích** → tạo **tiêu đề, mô tả, từ khóa SEO bằng ngôn ngữ đích**.
-4. Sau khi chạy, app chỉ hiển thị nội dung theo **ngôn ngữ đích** trong các tab kết quả. **Bản dịch hoàn chỉnh** và **Mô tả đã dịch** được thu gọn mặc định; nhấn tiêu đề để mở xem toàn bộ. Nút **⬇️ Tải nội dung (.txt)** chỉ còn trong phần **Bản dịch hoàn chỉnh**; các phần prompt, tiêu đề, mô tả và SEO không còn nút tải TXT. **Nút 📋 Copy toàn bộ luôn nằm bên ngoài khung**, dùng một lần nhấn để sao chép trọn vẹn từng mục (bản dịch, 20 prompt, tiêu đề, mô tả, từ khóa SEO) kể cả khi bản dịch/mô tả đang thu gọn. Nút sẽ báo đã sao chép khi trình duyệt cho phép; nếu trình duyệt chặn clipboard, vẫn có nút Copy trong khung nội dung khi mở rộng. Không còn danh sách Copy từng cảnh hoặc khối Copy gộp tiêu đề • mô tả • SEO.
+3. App tự động: tìm phụ đề thủ công hoặc phụ đề tự động có sẵn trên YouTube → dịch toàn bộ nội dung sang ngôn ngữ đích → tạo **tiêu đề, mô tả, từ khóa SEO bằng ngôn ngữ đích**. Không còn gọi API tạo 20 prompt hình ảnh.
+4. Sau khi chạy, app chỉ hiển thị nội dung theo **ngôn ngữ đích** trong các tab kết quả. **Bản dịch hoàn chỉnh** và **Mô tả đã dịch** được thu gọn mặc định; nhấn tiêu đề để mở xem toàn bộ. Nút **⬇️ Tải nội dung (.txt)** chỉ còn trong phần **Bản dịch hoàn chỉnh**; các phần tiêu đề, mô tả và SEO không còn nút tải TXT. **Nút 📋 Copy toàn bộ luôn nằm bên ngoài khung**, dùng một lần nhấn để sao chép trọn vẹn từng mục (bản dịch, tiêu đề, mô tả, từ khóa SEO) kể cả khi bản dịch/mô tả đang thu gọn. Nút sẽ báo đã sao chép khi trình duyệt cho phép; nếu trình duyệt chặn clipboard, vẫn có nút Copy trong khung nội dung khi mở rộng. Không còn danh sách Copy từng cảnh hoặc khối Copy gộp tiêu đề • mô tả • SEO.
 5. Thanh tiến trình theo dõi các tác vụ nền đang chạy; có thể chuyển sang phiên mới trong lúc phiên cũ vẫn xử lý. Nếu API lỗi, dữ liệu một phần vẫn được giữ để có thể chạy lại riêng từng mục.
 
-**Giới hạn:** YouTube có thể chặn truy cập phụ đề, hoặc video không có phụ đề, khiến thao tác tự động thất bại; app không tự nhận dạng giọng nói cho video không có phụ đề. Chất lượng dịch/prompt/SEO phụ thuộc model và API key, có thể phát sinh phí.
+**Giới hạn:** YouTube có thể chặn truy cập phụ đề, hoặc video không có phụ đề, khiến thao tác tự động thất bại; app không tự nhận dạng giọng nói cho video không có phụ đề. Chất lượng dịch/SEO phụ thuộc model và API key, có thể phát sinh phí.
 
 ## 📥 Xử lý lỗi YouTube chặn IP Streamlit Cloud
 
@@ -48,7 +48,7 @@ Tài liệu tích hợp Supadata: https://github.com/supadata-ai/skills/blob/mai
 - Nhấn **🚀 BẮT ĐẦU TẠO TOÀN BỘ** để tạo tác vụ chạy nền; ứng dụng **trả lại giao diện ngay** thay vì giữ người dùng ở trang chờ.
 - Trong lúc phiên A đang chạy (⏳ kèm phần trăm), nhấn **➕ Tạo phiên mới** rồi nhập URL cho phiên B và bắt đầu tiếp; công việc của A tiếp tục trên luồng riêng.
 - **📚 Danh sách phiên đã chạy** hiển thị phiên đang chạy (⏳), hoàn thành (✅) và **mọi phiên đã chạy nhưng lỗi (⚠️), kể cả khi chưa lấy được phụ đề hoặc chưa có bản dịch**. Nhấn một lần vào tên để xem kết quả/trạng thái; nhấp đúp vào ô tên để đổi ngay tại chỗ. Nút Xóa đỏ bên cạnh có bước xác nhận.
-- Sau khi API xử lý xong, kết quả của đúng phiên đó sẽ tự được đưa vào dữ liệu phiên và danh sách tự cập nhật. Có thể mở lại để copy bản dịch, 20 prompt, tiêu đề, mô tả, SEO.
+- Sau khi API xử lý xong, kết quả của đúng phiên đó sẽ tự được đưa vào dữ liệu phiên và danh sách tự cập nhật. Có thể mở lại để copy bản dịch, tiêu đề, mô tả, SEO.
 - Tối đa 3 tác vụ đồng thời trong một phiên kết nối; máy chủ chạy tối đa 3 luồng worker. Nút **Xóa tất cả phiên đã lưu** yêu cầu xác nhận, hủy các tác vụ chưa chạy và yêu cầu tác vụ đang chạy ngừng ở bước tiếp theo.
 - Nếu phụ đề hoặc API lỗi ở bất cứ bước nào, phiên vẫn giữ trong danh sách kèm lý do lỗi. Các phần đã xử lý thành công xuất hiện khi bạn mở lại phiên; có thể thử chạy lại. Worker chia sẻ kết quả từng bước với giao diện thay vì chỉ đến cuối mới lưu.
 
@@ -69,7 +69,7 @@ Tài liệu tích hợp Supadata: https://github.com/supadata-ai/skills/blob/mai
 Ngay bên dưới là **📁 Quản lý phiên làm việc**:
 1. Nhấn **➕ Tạo phiên mới**: nếu phiên cũ đang xử lý, app **không dừng tác vụ cũ**; bạn có thể bắt đầu công việc khác. Khi phiên cũ hoàn thành, app tự lưu kết quả vào **📚 Danh sách phiên đã chạy** trong kết nối hiện tại. Phiên chưa chạy sẽ không vào danh sách.
 2. Khi đã nhấn **BẮT ĐẦU TẠO TOÀN BỘ**, phiên xuất hiện ngay là **⏳ đang chạy**. Sau khi hoàn tất hiện **✅**. Nếu lỗi ở bước đầu hoặc giữa quy trình, phiên vẫn hiển thị **⚠️**, đồng thời có thông báo nguyên nhân khi mở phiên. Phiên mới chưa bấm Bắt đầu không xuất hiện.
-3. Trong danh sách, **nhấn trực tiếp vào tên phiên** để xem lại phụ đề, bản dịch, prompt và SEO; **không có nút “Mở”**.
+3. Trong danh sách, **nhấn trực tiếp vào tên phiên** để xem lại phụ đề, bản dịch và SEO; **không có nút “Mở”**.
 4. Để đổi tên, **nhấp đúp trực tiếp vào ô tên phiên**, nhập tên mới ngay tại ô rồi nhấn Enter (hoặc nhấp ra ngoài) để lưu. Có thể nhấn Esc để hủy. **Không còn nút Đổi tên riêng và không có dấu ✓/✅ bên trong tên.**
 5. Với mỗi phiên, nhấn **Xóa (đỏ)** bên cạnh tên rồi **✅ Xác nhận xóa** để xóa riêng phiên đó. App hủy tác vụ của đúng phiên, bỏ bản dịch, prompt, SEO và dữ liệu tạm gắn với phiên, sau đó đồng bộ danh sách đã giảm vào Supabase (nếu có). Nếu dùng bộ nhớ trình duyệt, bản lưu tự được ghi đè và xác nhận cập nhật; khi Supabase đang dùng, app cũng xóa bản lưu trình duyệt cũ để tránh khôi phục nhầm sau này. **🗑️ Xóa tất cả phiên đã lưu** có ô xác nhận riêng và đặt lại về một phiên trống. API key/cấu hình chung không bị xóa. **Giới hạn:** Không thể tự xóa các file JSON đã tải xuống, ảnh/đoạn văn đã sao chép sang nơi khác, dữ liệu lưu của những trình duyệt/thiết bị khác hoặc bản sao lưu riêng của nhà cung cấp. Nếu có nhiều tab đang mở cùng lúc, hãy tải lại chúng để tránh ghi đè dữ liệu cũ.
 
@@ -81,8 +81,8 @@ Dữ liệu mỗi phiên được tách riêng: link YouTube, phụ đề gốc,
 
 ## Các phần khác được giữ nguyên
 
-- Dịch văn bản, tạo prompt và SEO bằng nhiều nhà cung cấp AI; API key và model tùy chọn.
-- Copy bản dịch, prompt, tiêu đề, mô tả và SEO bằng ngôn ngữ đích; **không hiển thị hoặc Copy phụ đề/tiêu đề/mô tả gốc**.
+- Dịch văn bản và tạo SEO bằng nhiều nhà cung cấp AI; API key và model tùy chọn.
+- Copy bản dịch, tiêu đề, mô tả và SEO bằng ngôn ngữ đích; **không hiển thị hoặc Copy phụ đề/tiêu đề/mô tả gốc**.
 - Tự động trích xuất phụ đề từ link YouTube bằng nút **BẮT ĐẦU TẠO TOÀN BỘ**; không hiển thị các ô phụ đề, tiêu đề hoặc mô tả gốc.
 
 ## ⏳ Tự động xử lý Groq HTTP 429 (giới hạn token/phút)
@@ -94,7 +94,7 @@ Nếu Groq báo lỗi `429 Rate limit reached` và có thông báo `Please try a
 Ứng dụng hiện:
 - Đọc `Retry-After` của Groq hoặc thời gian trong thông báo, cộng thời gian đệm, rồi **tự đợi và thử lại** yêu cầu vừa bị 429 (tối đa 6 lần thử lại). Trạng thái chờ xuất hiện trong tiến trình phiên.
 - Chia nhỏ phụ đề thành các đoạn ngắn hơn khi dùng Groq GPT-OSS. Các đoạn đã dịch thành công được giữ lại, không bắt đầu toàn bộ từ đầu khi một đoạn gặp 429.
-- Giảm `max_completion_tokens` của dịch từ 8.192 xuống 2.200 token, giữ 3.600 token khi tạo 20 prompt, và dùng tóm tắt phân tầng cho nội dung dài nhằm giảm đỉnh nhu cầu TPM.
+- Giảm `max_completion_tokens` của dịch từ 8.192 xuống 2.200 token, và dùng tóm tắt phân tầng cho nội dung dài nhằm giảm đỉnh nhu cầu TPM.
 - Nếu vượt quota **theo ngày** (TPD/RPD), app dừng thử lại vô ích và hướng dẫn chờ hạn mức mới hoặc chọn model khác.
 - Nếu 6 lần thử lại vẫn bị giới hạn, phiên hiện ⚠️ cùng thông báo rõ ràng và giữ các kết quả đã xử lý được.
 
@@ -114,7 +114,7 @@ Nếu bấm **🧪 Kiểm tra kết nối API** và nhận `HTTP 502: Upstream s
 
 LMT Studio Pro đã tách riêng các mã 502/503/504 với lỗi 401/403 (xác thực/quyền) và lỗi 429 (quota). Khi nhấn **BẮT ĐẦU TẠO TOÀN BỘ**, mỗi yêu cầu gặp 502/503/504 sẽ được thử lại tối đa 3 lần với khoảng chờ tăng dần và khả năng hủy. Những đoạn đã dịch trước đó không bị dịch lại. Việc thử lại lệnh POST có thể phát sinh chi phí trùng nếu upstream thực tế đã xử lý xong nhưng gateway không gửi được kết quả, nên số lần thử được giới hạn.
 
-Khi kiểm tra kết nối Claude/Gateway bằng yêu cầu ngắn, ứng dụng chỉ yêu cầu tối đa 128 token đầu ra thay vì dự phòng 8.192 token. Những tác vụ dịch, prompt, SEO có ngân sách đầu ra riêng. Đây là biện pháp giảm tải, **không thể sửa gateway đang ngừng hoạt động**.
+Khi kiểm tra kết nối Claude/Gateway bằng yêu cầu ngắn, ứng dụng chỉ yêu cầu tối đa 128 token đầu ra thay vì dự phòng 8.192 token. Những tác vụ dịch và SEO có ngân sách đầu ra riêng. Đây là biện pháp giảm tải, **không thể sửa gateway đang ngừng hoạt động**.
 
 Nếu gateway liên tục trả 502: thử lại khi dịch vụ phục hồi, kiểm tra thông báo trạng thái của nhà cung cấp, hoặc chuyển sang **Claude (Anthropic)** chính thức với API key Anthropic riêng. Không đưa token vào ảnh chụp màn hình hoặc GitHub.
 
@@ -141,7 +141,7 @@ Ví dụ: dịch vụ OpenAI-compatible thường nhập Base URL `https://provi
 
 Bấm **🧪 Kiểm tra kết nối API** để gửi một tin nhắn thử và xem lỗi HTTP nếu có. **🔎 Quét Model từ API** không nhất thiết khả dụng ở gateway bên thứ ba: có thể nhập Model ID bằng tay rồi thử kết nối. Việc điền đủ ba trường không bảo đảm máy chủ cung cấp model đó hay dịch vụ của họ hoạt động (ví dụ HTTP 502).
 
-Cấu hình riêng này được dùng xuyên suốt quá trình tạo bản dịch, prompt và SEO. Khi Supabase được kết nối, URL, model, lựa chọn giao thức/cách xác thực và API key được mã hóa/lưu theo tài khoản tương tự các provider khác; nếu chưa kết nối Supabase thì các thông số chỉ tồn tại trong phiên Streamlit đang mở.
+Cấu hình riêng này được dùng xuyên suốt quá trình tạo bản dịch và SEO. Khi Supabase được kết nối, URL, model, lựa chọn giao thức/cách xác thực và API key được mã hóa/lưu theo tài khoản tương tự các provider khác; nếu chưa kết nối Supabase thì các thông số chỉ tồn tại trong phiên Streamlit đang mở.
 
 **Bảo mật:** Chỉ nhập key từ dịch vụ bạn tin tưởng; app chặn Base URL không phải HTTPS công khai và không theo chuyển hướng. Không gửi key hoặc token vào ảnh chụp, GitHub hay đoạn chat. Token từng xuất hiện công khai cần được thu hồi trước khi dùng tiếp.
 
@@ -184,6 +184,15 @@ Tại thanh bên trái:
 
 **Lưu ý:** Các dịch vụ OpenAI-compatible dùng endpoint chat completions; Anthropic dùng Messages API. Không phải mọi model đều hỗ trợ chức năng/dung lượng giống nhau. Quét model có thể không khả dụng trên một số server, nhưng vẫn có thể nhập thủ công. Base URL tùy chỉnh chỉ chấp nhận HTTPS công khai, chặn địa chỉ nội bộ và không tự theo chuyển hướng HTTP. Chỉ cung cấp API key cho máy chủ bạn tin tưởng vì key sẽ được gửi tới Base URL đã nhập. API có thể tính phí. Nếu app ở chế độ công khai và dùng key trong Secrets, cần bật hạn chế truy cập để tránh người khác sử dụng API của bạn.
 
+## Đã ngừng tạo 20 prompt hình ảnh
+
+Tab **🎨 20 prompt hình ảnh**, nút **Tạo lại 20 prompt** và bước gọi AI sinh
+prompt trong quy trình **BẮT ĐẦU TẠO TOÀN BỘ** đã được loại bỏ. Quy trình
+hiện chỉ cần dịch nội dung và tạo tiêu đề, mô tả, từ khóa SEO nên giảm một
+yêu cầu sinh nội dung lớn mỗi lần chạy (và tránh lỗi tạo prompt làm hỏng
+quy trình SEO). **Các prompt đã lưu trong phiên cũ không bị xóa khỏi dữ
+liệu Supabase/localStorage**, nhưng app không còn tab xem/chỉnh/tạo mới.
+
 ## Thumbnail gốc và hiệu năng
 
 Khi dán link video YouTube hợp lệ, LMT Studio Pro tự tải thumbnail gốc chất
@@ -193,7 +202,7 @@ tải ảnh lặp lại trên mỗi lần giao diện cập nhật; không có t
 khi chưa có link video hợp lệ.
 
 Phần Thumbnail AI tạo/sửa/dịch chữ, quét model ảnh và API key dành riêng cho
-thumbnail đã được loại bỏ. Các chức năng dịch phụ đề, tạo prompt hình ảnh, SEO,
+thumbnail đã được loại bỏ. Các chức năng dịch phụ đề, SEO,
 cấu hình API đa nền tảng và quản lý phiên vẫn giữ nguyên. Không thay đổi lược
 đồ dữ liệu hay tự xóa phiên và khóa API đã cấu hình.
 
