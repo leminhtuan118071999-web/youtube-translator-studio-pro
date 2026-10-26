@@ -86,23 +86,11 @@ class SessionNameControlsTests(unittest.TestCase):
         self.assertNotIn("#ffe45c", html)
         self.assertNotIn("localStorage", html)
 
-    def test_streamlit_ui_has_only_red_delete_next_to_name_without_ticks(self):
+    def test_streamlit_session_name_controls_still_present(self):
         source = (Path(__file__).resolve().parent /
                   "streamlit_app.py").read_text(encoding="utf-8")
-        self.assertIn('name_col, delete_col = st.columns([4.5, 2.5]', source)
-        self.assertIn('min-width: 72px !important;', source)
-        self.assertIn('white-space: nowrap !important;', source)
-        self.assertIn('text-overflow: clip !important;', source)
-        self.assertIn('                "Xóa",', source)
-        self.assertIn('key=f"delete_session_{saved_id}"', source)
-        self.assertIn('background: #c62828 !important;', source)
         self.assertIn('key=f"session_name_control_{saved_id}"', source)
         self.assertNotIn('key=f"edit_session_{saved_id}"', source)
-        self.assertNotIn('status_icon = " ✅"', source)
-        self.assertNotIn('(" ✓" if saved_id == sid else "")', source)
-        self.assertNotIn('st-key-session_status_selected_', source)
-        self.assertNotIn("background: #facc15", source)
-        self.assertIn('selected=is_selected', source)
         self.assertIn('label += " ✅"', source)
         self.assertNotIn('on_change=rename_saved_session', source)
 

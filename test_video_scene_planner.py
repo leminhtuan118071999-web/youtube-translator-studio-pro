@@ -134,9 +134,10 @@ class VideoScenePlannerTests(unittest.TestCase):
         plan["scenes"][1]["visual_prompt"] = "Character walks forward."
         out = continuous_video_forms_text(plan)
         lines = out.splitlines()
-        self.assertEqual(len(lines), 2)
+        self.assertEqual(len(lines), 3)
         self.assertTrue(lines[0].startswith("FORM 001"))
-        self.assertTrue(lines[1].startswith("FORM 002"))
+        self.assertEqual(lines[1], "")
+        self.assertTrue(lines[2].startswith("FORM 002"))
         self.assertIn("VOICEOVER (Tiếng Anh):", lines[0])
         self.assertIn("Beautiful lighting.", lines[0])
         self.assertIn("TRANSITION:", lines[0])
