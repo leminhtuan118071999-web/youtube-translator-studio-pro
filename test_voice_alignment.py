@@ -2,7 +2,7 @@ import unittest
 from unittest.mock import patch
 
 from voice_alignment import (
-    align_target_words, audio_aligned_plan, whisper_word_timestamps,
+    align_target_words, audio_aligned_plan, whisper_word_timestamps,\n    speech_statistics, duration_weighted_plan,
 )
 
 
@@ -21,6 +21,25 @@ class VoiceAlignmentTests(unittest.TestCase):
         self.assertEqual([s["voiceover"] for s in plan["scenes"]],
                          ["One two three four", "five six seven eight"])
         self.assertEqual([s["duration_seconds"] for s in plan["scenes"]], [8, 8])
+
+    def test_auto_scene_count_voice_rate_and_last_scene_padding(self):
+        text = " ".join(["word"] * 100)
+        stats = speech_statistics(text, 25.5)
+        self.assertEqual(stats["form_count"], 4)
+        self.assertEqual(stats["video_duration_seconds"], 32)
+        self.assertEqual(stats["padding_seconds"], 6.5)
+        self.assertAlmostEqual(stats["average_wpm"], 235.3, places=1)
+        plan = duration_weighted_plan(text, "Tiếng Anh", 25.5)
+        self.assertEqual(len(plan["scenes"]), 4)
+        self.assertEqual(plan["speech_stats"]["form_count"], 4)
+        self.assertEqual(plan["alignment_mode"], "duration_weighted_estimate")
+        self.assertEqual(" ".join(x["voiceover"] for x in plan["scenes"]), text)
+
+    def test_silent_audio_windows_still_generate_forms(self):
+        text = "hello world"
+        plan = duration_weighted_plan(text, "Tiếng Anh", 17.0)
+        self.assertEqual(len(plan["scenes"]), 3)
+        self.assertEqual(" ".join(s["voiceover"] for s in plan["scenes"] if s["voiceover"]), text)
 
     def test_reject_different_audio_from_translation(self):
         with self.assertRaisesRegex(ValueError, "khác nhiều"):
