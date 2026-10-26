@@ -30,6 +30,50 @@ class StreamlitSmokeTests(unittest.TestCase):
         self.assertNotEqual(app.session_state["selected_session"], original)
         self.assertEqual(len(app.session_state["workspaces"]), 2)
 
+    def test_session_colors_and_opening_session_priority(self):
+        from pathlib import Path
+        source = Path("streamlit_app.py").read_text(encoding="utf-8")
+        # The new-session and saved-session styles are scoped to the sidebar.
+        for snippet in (
+            ".st-key-create_new_session button",
+            "st-key-session_status_completed_",
+            "st-key-session_status_pending_",
+            "st-key-session_status_selected_",
+            "background: #16803e",
+            "background: #c62828",
+            "background: #facc15",
+            'with st.container(key=f"session_status_{session_tone}_{saved_id}")',
+        ):
+            self.assertIn(snippet, source)
+
+        app = self.app.run()
+        self.assertFalse(app.exception, [str(x.message) for x in app.exception])
+        self.assertTrue(any(b.key == "create_new_session" for b in app.button))
+        first = app.session_state["selected_session"]
+        app.session_state["workspaces"][first].update({
+            "processed": True, "job_state": "completed",
+        })
+        next(b for b in app.button if b.key == "create_new_session").click()
+        app.run()
+        second = app.session_state["selected_session"]
+        app.session_state["workspaces"][second].update({
+            "processed": True, "job_state": "running",
+        })
+        app.run()
+        self.assertFalse(app.exception, [str(x.message) for x in app.exception])
+        self.assertEqual(app.session_state["selected_session"], second)
+        self.assertTrue(any(
+            b.key == f"open_saved_session_{first}" for b in app.button
+        ))
+        next(b for b in app.button
+             if b.key == f"open_saved_session_{first}").click()
+        app.run()
+        self.assertFalse(app.exception, [str(x.message) for x in app.exception])
+        self.assertEqual(app.session_state["selected_session"], first)
+        self.assertEqual(
+            app.session_state["workspaces"][second]["job_state"], "running"
+        )
+
     def test_deleting_one_saved_session_preserves_other_sessions(self):
         app = self.app.run()
         first_id = app.session_state["selected_session"]
