@@ -138,12 +138,31 @@ def speech_statistics(translation, duration, stamped_words=None):
         max(0.0, min(duration, item["end"]) - min(duration, item["start"]))
         for item in heard
     )
+    average_wpm = round(words * 60 / duration, 1)
+    # Compare the translated script's speaking load against the recording.
+    # Form count is anchored to audio; do NOT add scenes merely because the
+    # target language is long (that would make the resulting video too long).
+    if average_wpm > 230:
+        pacing_notice = (
+            "Bản dịch khá dài so với file âm thanh (tốc độ ước tính cao). "
+            "Hãy xác nhận giọng đọc thực sự đọc đủ nội dung."
+        )
+    elif average_wpm < 65:
+        pacing_notice = (
+            "Bản dịch khá ngắn so với file âm thanh (tốc độ ước tính thấp). "
+            "Kiểm tra khoảng ngừng hoặc xem audio có đúng bản dịch không."
+        )
+    else:
+        pacing_notice = ""
     return {
         "form_count": total,
+        "translated_word_count": words,
+        "words_per_8s": round(words / total, 1),
+        "pacing_notice": pacing_notice,
         "voice_duration_seconds": round(duration, 2),
         "video_duration_seconds": total * SECONDS_PER_SCENE,
         "padding_seconds": round(total * SECONDS_PER_SCENE - duration, 2),
-        "average_wpm": round(words * 60 / duration, 1),
+        "average_wpm": average_wpm,
         "speaking_wpm": round(len(heard) * 60 / spoken_seconds, 1) if spoken_seconds else None,
         "silence_seconds": round(max(0.0, duration - spoken_seconds), 2)
             if stamped_words is not None else None,
