@@ -74,9 +74,29 @@ def create_character_png(api_key, name, description, *, style, bible, model=IMAG
         timeout=150,
     )
     if not response.ok:
+        if response.status_code == 401:
+            raise RuntimeError(
+                "HTTP 401: OpenAI không xác thực được API key tạo ảnh. "
+                "Hãy mở '🖼️ API tạo ảnh nhân vật' và nhập API key OpenAI "
+                "hợp lệ từ platform.openai.com/api-keys; không dùng Groq, "
+                "Gemini, OpenRouter hay token ChatGPT ở trường này. "
+                "Nếu key đã đổi, xóa key cũ trong ô, nhập lại rồi "
+                "nhấn Chạy lại riêng — Ảnh nhân vật."
+            )
+        if response.status_code == 403:
+            raise RuntimeError(
+                "HTTP 403: tài khoản hoặc dự án OpenAI chưa được phép sử dụng "
+                "model tạo ảnh; hãy kiểm tra quyền truy cập của dự án."
+            )
+        if response.status_code == 429:
+            raise RuntimeError(
+                "HTTP 429: API ảnh đang giới hạn yêu cầu hoặc quota; "
+                "kiểm tra hạn mức và billing của dự án."
+            )
         raise RuntimeError(
-            f"API tạo ảnh trả lỗi HTTP {response.status_code}; "
-            "kiểm tra tài khoản, quyền tạo ảnh và hạn mức."
+            f"API tạo ảnh trả lỗi HTTP {response.status_code}. "
+            "Kiểm tra model ảnh, tài khoản, quyền hoặc hạn mức; "
+            "không tự động yêu cầu tạo lại ảnh để tránh phát sinh phí."
         )
     try:
         b64 = response.json()["data"][0]["b64_json"]

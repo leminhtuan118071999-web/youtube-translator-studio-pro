@@ -73,6 +73,34 @@ class CharacterImagesTests(unittest.TestCase):
         self.assertEqual(send.call_args.kwargs["json"]["n"], 1)
         self.assertIn("Bearer KEY_SECRET", send.call_args.kwargs["headers"].values())
 
+    def test_401_diagnostic_explains_separate_openai_key(self):
+        class Unauthorized:
+            ok = False
+            status_code = 401
+        with patch("character_images.requests.post", return_value=Unauthorized()):
+            with self.assertRaisesRegex(RuntimeError, "OpenAI.*API key") as err:
+                create_character_png(
+                    "very-private-key", "Ala", "Red clothes",
+                    style="2D", bible="Ala wears red",
+                )
+        self.assertIn("Groq", str(err.exception))
+        self.assertIn("Chạy lại riêng", str(err.exception))
+        self.assertNotIn("very-private-key", str(err.exception))
+
+    def test_403_and_429_are_reported_distinctly(self):
+        class Rejected:
+            ok = False
+            def __init__(self, code):
+                self.status_code = code
+        for code, expected in ((403, "quyền"), (429, "quota")):
+            with patch("character_images.requests.post", return_value=Rejected(code)):
+                with self.assertRaises(RuntimeError) as err:
+                    create_character_png(
+                        "secret", "Ala", "Red clothes",
+                        style="2D", bible="",
+                    )
+            self.assertIn(expected, str(err.exception))
+
     def test_error_avoids_exposing_image_credentials(self):
         class Response:
             ok = False
