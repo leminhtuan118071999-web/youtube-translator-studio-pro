@@ -22,7 +22,8 @@ from persistent_store import (
     backup_state, configured, get_config, sign_in, sign_up,
     load_user, refresh_auth, save_user, settings_from_widgets,
     remember_widget_settings, activate_provider_settings,
-    restore_widget_settings, snapshot_hash, normalize_sessions,
+    activate_shared_api_settings, restore_widget_settings,
+    snapshot_hash, normalize_sessions,
 )
 from browser_session_store import (
     STORAGE_KEY, API_SETTINGS_STORAGE_KEY,
@@ -265,6 +266,9 @@ _restore_cloud_profile()
 # Preserve API key and model values from the former 'Anthropic Claude' label.
 migrate_claude_settings(st.session_state)
 migrate_free_provider_settings(st.session_state)
+# Streamlit may prune widgets from the previous page during navigation.
+# Restore Supadata and selected-provider values before rendering those inputs.
+activate_shared_api_settings(st.session_state)
 
 
 def _save_cloud_state(force=False):
