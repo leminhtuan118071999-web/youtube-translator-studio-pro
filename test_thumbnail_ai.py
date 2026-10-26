@@ -118,7 +118,7 @@ class ThumbnailAITests(unittest.TestCase):
         )
         self.assertEqual(Image.open(io.BytesIO(result)).size, (1280, 720))
         args, kwargs = post.call_args
-        self.assertIn("gemini-2.5-flash-image:generateContent", args[0])
+        self.assertIn(GEMINI_IMAGE_MODELS[0] + ":generateContent", args[0])
         self.assertEqual(
             kwargs["json"]["generationConfig"]["responseModalities"], ["IMAGE"]
         )
