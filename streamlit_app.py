@@ -1610,7 +1610,9 @@ if st.button("🚀 BẮT ĐẦU TẠO TOÀN BỘ", type="primary",
         and not st.session_state.background_jobs[sid]["future"].done()
     ):
         st.info("Phiên này đang chạy nền. Bạn có thể bấm Tạo phiên mới ngay.")
-    elif sum(
+    elif DURABLE_QUEUE_ENABLED and session.get("job_state") == "running" and session.get("job_queue_id"):
+        st.info("Phiên này đã ở hàng đợi bền vững; đang chờ hoặc đang được worker xử lý.")
+    elif not DURABLE_QUEUE_ENABLED and sum(
         not job["future"].done()
         for job in st.session_state.background_jobs.values()
     ) >= 3:
@@ -1649,6 +1651,33 @@ if st.button("🚀 BẮT ĐẦU TẠO TOÀN BỘ", type="primary",
             if provider == "API bên thứ ba (tùy chỉnh)":
                 snapshot["api_format"] = api_format
                 snapshot["auth_mode"] = api_auth_mode
+            if DURABLE_QUEUE_ENABLED:
+                ensure_durable_worker_available()
+                # Save selected session AND current encrypted API settings first.
+                _save_cloud_state(force=True)
+                queue_snapshot = {
+                    item: value for item, value in snapshot.items()
+                    if item not in ("api_key", "supadata_key", "image_api_key")
+                }
+                queued = submit_job(
+                    st.secrets, _refresh_login(), sid, "full", queue_snapshot,
+                    {"api_key": key, "supadata_key": transcript_api_key,
+                     "image_api_key": image_api_key},
+                )
+                session["job_queue_id"] = queued
+                session["job_state"] = "running"
+                session["job_percent"] = 0
+                session["job_stage"] = "Đã giao việc cho worker độc lập"
+                session["job_run_id"] = ""
+                session["job_error"] = ""
+                session["saved"] = True
+                session["processed"] = True
+                st.session_state["_session_flash"] = (
+                    "✅ Phiên đã vào hàng đợi bền vững. "
+                    "Bạn có thể ngủ; worker độc lập sẽ xử lý và tự lưu."
+                )
+                _persist_and_rerun()
+                st.stop()
             # Worker keeps its own authenticated checkpoint configuration.
             # Never persist provider keys inside a session record.
             snapshot["sid"] = sid
