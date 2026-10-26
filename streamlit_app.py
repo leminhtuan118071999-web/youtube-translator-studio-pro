@@ -1060,6 +1060,11 @@ with st.sidebar:
         if not image_api_key:
             st.caption("Chưa có API ảnh: app vẫn tạo bản dịch, SEO và form video; chưa thể tạo PNG.")
         st.caption(f"Model ảnh mặc định: {IMAGE_MODEL}. Tối đa 8 nhân vật/phiên.")
+        st.caption(
+            "🔎 Lỗi HTTP 401 nghĩa là API tạo ảnh không xác thực được key. "
+            "Key ảnh phải là OpenAI API key riêng, không dùng key dịch văn bản."
+        )
+        st.markdown("[🔑 Tạo/kiểm tra OpenAI API key](https://platform.openai.com/api-keys)")
 
     st.divider()
     with st.expander("🔑 Cấu hình API đa nền tảng", expanded=False):
@@ -1774,6 +1779,13 @@ with tab_characters:
         st.info("Phiên này chưa có ảnh; hãy chạy BẮT ĐẦU TẠO TOÀN BỘ.")
     if session.get("character_images_error"):
         st.warning(str(session["character_images_error"]))
+        if "401" in str(session["character_images_error"]):
+            st.info(
+                "Ảnh chưa tạo được vì OpenAI API key bị từ chối. "
+                "Mở mục 🖼️ API tạo ảnh nhân vật ở thanh bên, kiểm tra "
+                "hoặc thay key, rồi bấm 🔄 Chạy lại riêng — Ảnh nhân vật. "
+                "Không cần chạy lại BẮT ĐẦU TẠO TOÀN BỘ."
+            )
 
 st.caption("📋 Nút Copy toàn bộ nằm ngay bên ngoài từng mục và sao chép đầy đủ nội dung, kể cả khi khung xem đang thu gọn.")
 
