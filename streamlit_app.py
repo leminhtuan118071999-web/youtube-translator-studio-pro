@@ -819,12 +819,6 @@ with st.sidebar:
                 ):
                     st.session_state["confirm_delete_session_id"] = None
                     st.rerun()
-    st.caption(
-        f"{len(saved_sessions)} phiên đã chạy hoặc đang xử lý. "
-        "Có thể tạo phiên mới trong khi phiên cũ tiếp tục chạy. "
-        "Nếu máy chủ khởi động lại, tác vụ nền có thể bị gián đoạn."
-    )
-
     # Session content still auto-saves on every rerun via Supabase or
     # local browser storage. Only the optional backup/import UI is removed.
     # Keep cloud logout accessible outside the retired backup section.
@@ -1276,8 +1270,6 @@ if session.get("job_state") == "running":
 elif session.get("job_state") in ("failed", "interrupted"):
     st.error(f"⚠️ Phiên này chưa hoàn tất: {session.get('job_error', 'Không rõ lỗi')}")
     st.caption("Các kết quả đã tạo vẫn được giữ trong phiên. Có thể dùng nút BẮT ĐẦU TẠO TOÀN BỘ để thử lại.")
-elif session.get("job_state") == "completed":
-    st.success("✅ Phiên đã hoàn thành. Có thể Copy các mục trong những tab kết quả.")
 session["url"] = st.text_input(
     "🔗 Dán link video YouTube",
     value=session["url"], key=f"field_{sid}_url",
