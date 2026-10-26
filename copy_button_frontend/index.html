@@ -6,16 +6,46 @@
   <style>
     :root { color-scheme: light dark; }
     * { box-sizing: border-box; }
-    html, body { width: 100%; height: 46px; padding: 0; margin: 0; overflow: hidden; background: transparent; }
+    html, body { width: 100%; height: 56px; padding: 0; margin: 0; overflow: hidden; background: transparent; }
     body { display: flex; align-items: center; justify-content: flex-end; gap: 8px;
            color: var(--text-color, #e6e8ec); font: 500 13px system-ui, sans-serif; }
-    button { cursor: pointer; min-height: 34px; padding: 6px 13px; border-radius: 8px;
-             color: inherit; font: 600 13px system-ui, sans-serif;
-             border: 1px solid var(--border-color, #84909e);
-             background: var(--secondary-background-color, rgba(127,127,127,.12)); }
-    button:hover:enabled { filter: brightness(1.13); }
-    button:focus-visible { outline: 2px solid #4da6ff; outline-offset: 2px; }
-    button:disabled { opacity: .43; cursor: not-allowed; }
+    /* One design for every "Copy toàn bộ" action, in light and dark themes. */
+    button {
+      cursor: pointer;
+      min-height: 40px;
+      max-width: 100%;
+      padding: 8px 16px;
+      border-radius: 9px;
+      border: 1px solid #1352bd;
+      background: linear-gradient(180deg, #3186ff 0%, #1461dc 100%);
+      color: #fff;
+      font: 800 13px/1.3 system-ui, sans-serif;
+      letter-spacing: .1px;
+      text-shadow: 0 1px 1px rgba(8, 33, 95, .65);
+      box-shadow: 0 3px 0 #0b398a, 0 5px 10px rgba(15, 65, 145, .24),
+                  inset 0 1px 0 rgba(255, 255, 255, .35);
+      transition: transform .13s ease, filter .13s ease, box-shadow .13s ease;
+    }
+    button:hover:enabled {
+      filter: brightness(1.1);
+      transform: translateY(-1px);
+      box-shadow: 0 4px 0 #0b398a, 0 7px 14px rgba(15, 65, 145, .32),
+                  inset 0 1px 0 rgba(255, 255, 255, .35);
+    }
+    button:active:enabled {
+      transform: translateY(2px);
+      box-shadow: 0 1px 0 #0b398a, inset 0 1px 3px rgba(0, 0, 0, .15);
+    }
+    button:focus-visible { outline: 3px solid #84c8ff; outline-offset: 3px; }
+    /* No content: retain a readable blue label while preventing copying. */
+    button:disabled {
+      cursor: not-allowed;
+      background: linear-gradient(180deg, #5c9ded 0%, #3674cc 100%);
+      border-color: #3974ba;
+      color: #fff;
+      text-shadow: 0 1px 1px rgba(8, 33, 95, .5);
+      box-shadow: 0 2px 0 #285899, inset 0 1px 0 rgba(255,255,255,.3);
+    }
     #status { font-size: 12px; max-width: 260px; overflow: hidden; text-overflow: ellipsis;
               white-space: nowrap; }
     .ok { color: #20a568; }
@@ -91,10 +121,10 @@
       ]) {
         if (theme[key]) document.documentElement.style.setProperty(property, theme[key]);
       }
-      send("streamlit:setFrameHeight", { height: 46 });
+      send("streamlit:setFrameHeight", { height: 56 });
     });
     send("streamlit:componentReady", { apiVersion: 1 });
-    send("streamlit:setFrameHeight", { height: 46 });
+    send("streamlit:setFrameHeight", { height: 56 });
   })();
   </script>
 </body>
