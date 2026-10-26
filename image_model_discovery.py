@@ -9,6 +9,8 @@ import re
 
 import requests
 
+from api_clients import validate_base_url
+
 GEMINI_EDIT_MODELS = (
     "gemini-3.1-flash-image",
     "gemini-3.1-flash-lite-image",
@@ -53,15 +55,38 @@ def rank_image_models(provider, available):
     return [m for m in preferred if m in usable] + extras
 
 
-def key_fingerprint(provider, token):
+def image_api_base_url(provider, base_url=None):
+    """Use the exact configured API origin; validate user-defined URLs for SSRF.
+
+    None means the existing official endpoint. An explicitly empty or unsafe
+    URL must NOT silently fall back to an official host with a gateway token.
+    """
+    defaults = {
+        "Gemini": "https://generativelanguage.googleapis.com/v1beta",
+        "OpenAI": "https://api.openai.com/v1",
+    }
+    if provider not in defaults:
+        raise ValueError("Nhà cung cấp ảnh không hỗ trợ.")
+    if base_url is None:
+        return defaults[provider]
+    base = validate_base_url(base_url)
+    if provider == "Gemini" and base.lower().endswith("/openai"):
+        base = base[:-7]
+    if re.search(r"/(?:models|images/edits|chat/completions|messages)$", base, re.I):
+        raise ValueError("Base URL ảnh phải trỏ tới thư mục API, không phải endpoint.")
+    return base
+
+
+def key_fingerprint(provider, token, base_url=None):
     """Nonreversible marker so reruns never scan the same provider/key repeatedly."""
     if provider not in ("Gemini", "OpenAI"):
         raise ValueError("Nhà cung cấp ảnh không hỗ trợ.")
     token = token.strip() if isinstance(token, str) else ""
-    return hashlib.sha256((provider + "\0" + token).encode("utf-8")).hexdigest()
+    base = base_url.strip() if isinstance(base_url, str) else ""
+    return hashlib.sha256((provider + "\0" + base + "\0" + token).encode("utf-8")).hexdigest()
 
 
-def discover_image_models(provider, token):
+def discover_image_models(provider, token, *, base_url=None):
     """One GET to official /models, no edit/generation charges initiated here.
 
     Does not infer image support from Gemini 'generateContent' alone because
@@ -72,11 +97,12 @@ def discover_image_models(provider, token):
         raise ValueError("Chỉ hỗ trợ quét model ảnh Gemini và OpenAI.")
     if not isinstance(token, str) or not token.strip():
         raise ValueError("Bạn cần nhập API key trước khi quét model.")
+    base = image_api_base_url(provider, base_url)
     if provider == "Gemini":
-        url = "https://generativelanguage.googleapis.com/v1beta/models?pageSize=1000"
+        url = base + "/models?pageSize=1000"
         headers = {"x-goog-api-key": token.strip()}
     else:
-        url = "https://api.openai.com/v1/models"
+        url = base + "/models"
         headers = {"Authorization": "Bearer " + token.strip()}
     try:
         response = requests.get(
