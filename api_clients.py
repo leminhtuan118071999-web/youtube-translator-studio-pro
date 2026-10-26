@@ -478,8 +478,6 @@ def generate_text(
         # Keep test requests tiny and translation/prompt budgets bounded.
         if len(prompt) <= 80:
             output_tokens = 128
-        elif "ĐÚNG 20 prompt" in prompt:
-            output_tokens = 5200
         elif "Summarize" in prompt or "Condense" in prompt:
             output_tokens = 1100
         elif "Soạn YouTube tiêu đề" in prompt:
@@ -496,8 +494,6 @@ def generate_text(
         # tokens on an upstream proxy for a two-letter response.
         if len(prompt) <= 80:
             max_tokens = 128
-        elif "ĐÚNG 20 prompt" in prompt:
-            max_tokens = 5000
         elif "Summarize" in prompt or "Condense" in prompt:
             max_tokens = 1100
         elif "CHỈ xuất bản dịch" in prompt:
@@ -518,10 +514,8 @@ def generate_text(
         ):
             body["reasoning_effort"] = "low"
             # Smaller reserved completions lower TPM cost and reduce 429s.
-            # Scenes need a larger budget; small translation chunks need less.
-            if "ĐÚNG 20 prompt" in prompt or "CHÍNH XÁC 20" in prompt:
-                body["max_completion_tokens"] = 3600
-            elif "Soạn YouTube tiêu đề" in prompt or "Viết nội dung YouTube" in prompt:
+            # Keep the usual bounded budget for translation and SEO.
+            if "Soạn YouTube tiêu đề" in prompt or "Viết nội dung YouTube" in prompt:
                 body["max_completion_tokens"] = 2200
             elif "Summarize" in prompt:
                 body["max_completion_tokens"] = 1400
