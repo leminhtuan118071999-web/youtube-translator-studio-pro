@@ -148,8 +148,8 @@ def render_video_forms(session, sid, language, *, ai, api_key,
             f"Dự kiến dư {plan['end_padding_seconds']:.1f} giây ở cuối: "
             "cần giữ hình hoặc điều chỉnh nhịp khi ghép audio thật."
         )
-    st.markdown("**📌 Hồ sơ nhân vật/bối cảnh cố định cho mọi form**")
-    st.code(plan.get("character_bible", ""), language=None, wrap_lines=True)
+    with st.expander("📌 Hồ sơ nhân vật/bối cảnh cố định cho mọi form", expanded=False):
+        st.code(plan.get("character_bible", ""), language=None, wrap_lines=True)
     if done < len(scenes) and st.button(
         "▶️ Tạo tiếp 6 form còn thiếu", key=f"continue_video_forms_{sid}"
     ):
@@ -168,22 +168,21 @@ def render_video_forms(session, sid, language, *, ai, api_key,
             except (TypeError, ValueError, RuntimeError, KeyError) as exc:
                 st.error(f"Không thể tạo các form tiếp theo: {exc}")
 
-    st.markdown("**📜 Tất cả form video — liền mạch**")
-    st.caption(
-        "Các form đã viết được nối theo đúng thứ tự: hết một form xuống "
-        "dòng để bắt đầu form tiếp theo. Nút Copy toàn bộ sao chép "
-        "cả lời đọc, prompt và chuyển cảnh, không cần mở từng form."
-    )
     continuous_text = continuous_video_forms_text(plan)
-    copy_all_button(
-        "📋 Copy toàn bộ form",
-        continuous_text,
-        key=f"copy_all_video_forms_{sid}",
-    )
-    st.code(
-        continuous_text if continuous_text else "Chưa có form hoàn thành.",
-        language=None, wrap_lines=True,
-    )
+    with st.expander("📜 Tất cả form video — liền mạch", expanded=False):
+        st.caption(
+            "Các form có một dòng trống ngăn cách. Nút Copy toàn bộ "
+            "sao chép đủ lời đọc, prompt và chuyển cảnh theo thứ tự."
+        )
+        copy_all_button(
+            "📋 Copy toàn bộ form",
+            continuous_text,
+            key=f"copy_all_video_forms_{sid}",
+        )
+        st.code(
+            continuous_text if continuous_text else "Chưa có form hoàn thành.",
+            language=None, wrap_lines=True,
+        )
 
     st.download_button(
         "⬇️ Tải tất cả form (.txt)", plan_export_text(plan),
