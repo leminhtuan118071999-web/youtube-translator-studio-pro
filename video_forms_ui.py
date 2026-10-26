@@ -17,7 +17,8 @@ from video_scene_planner import (
 )
 from copy_buttons import copy_all_button
 from voice_alignment import (whisper_word_timestamps, align_target_words,
-    audio_aligned_plan, duration_weighted_plan, speech_statistics, MAX_AUDIO_BYTES)
+    audio_aligned_plan, duration_weighted_plan, speech_statistics,
+    TransientAudioAPIError, MAX_AUDIO_BYTES)
 
 
 def _audio_duration(file):
@@ -132,19 +133,33 @@ def render_video_forms(session, sid, language, *, ai, api_key,
             try:
                 with st.spinner("Đang đối chiếu giọng đọc và bản dịch, tạo 6 form đầu..."):
                     if alignment_api_key:
-                        stamped = whisper_word_timestamps(
-                            upload.getvalue(), upload.name, alignment_api_key
-                        )
-                        positions, similarity = align_target_words(
-                            translated, stamped, seconds
-                        )
-                        new_plan = audio_aligned_plan(
-                            translated, language, seconds, positions
-                        )
-                        new_plan["voice_match_score"] = similarity
-                        new_plan["speech_stats"] = speech_statistics(
-                            translated, seconds, stamped,
-                        )
+                        try:
+                            stamped = whisper_word_timestamps(
+                                upload.getvalue(), upload.name, alignment_api_key
+                            )
+                        except TransientAudioAPIError as exc:
+                            # A temporary Whisper 502 is not evidence that the
+                            # uploaded narration is invalid. Continue visibly
+                            # in estimated mode rather than losing the whole job.
+                            new_plan = duration_weighted_plan(
+                                translated, language, seconds,
+                            )
+                            new_plan["alignment_warning"] = (
+                                f"{exc} Đã chuyển sang chế độ ƯỚC TÍNH "
+                                "theo độ dài giọng đọc và bản dịch; "
+                                "chưa căn chính xác theo từng từ."
+                            )
+                        else:
+                            positions, similarity = align_target_words(
+                                translated, stamped, seconds
+                            )
+                            new_plan = audio_aligned_plan(
+                                translated, language, seconds, positions
+                            )
+                            new_plan["voice_match_score"] = similarity
+                            new_plan["speech_stats"] = speech_statistics(
+                                translated, seconds, stamped,
+                            )
                     else:
                         new_plan = duration_weighted_plan(
                             translated, language, seconds,
@@ -179,6 +194,8 @@ def render_video_forms(session, sid, language, *, ai, api_key,
 
     if plan is None or stale:
         return
+    if plan.get("alignment_warning"):
+        st.warning(plan["alignment_warning"])
     st.caption(
         "Căn theo từng từ (Whisper, vẫn có sai số)" if plan.get("alignment_mode") == "whisper_word_timestamps"
         else "Căn ước tính theo tổng thời lượng file; chưa có timestamp từng từ."

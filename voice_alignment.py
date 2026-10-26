@@ -7,10 +7,17 @@ approximation warning. The uploaded audio is never retained by this module.
 import difflib
 import math
 import re
+import time
 
 import requests
 
 MAX_AUDIO_BYTES = 25 * 1024 * 1024
+TRANSIENT_AUDIO_STATUSES = {408, 409, 425, 429, 500, 502, 503, 504}
+
+
+class TransientAudioAPIError(RuntimeError):
+    """Temporary transcription availability failure; safe to use marked estimate."""
+
 
 
 def _tokens(text):
@@ -23,20 +30,38 @@ def whisper_word_timestamps(audio_bytes, filename, api_key):
         raise ValueError("File giọng đọc phải dưới 25 MB để phân tích timestamp.")
     if not api_key:
         raise ValueError("Thiếu OpenAI API key để căn lời đọc từng từ.")
-    response = requests.post(
-        "https://api.openai.com/v1/audio/transcriptions",
-        headers={"Authorization": f"Bearer {api_key}"},
-        files={"file": (filename, audio_bytes)},
-        data={
-            "model": "whisper-1", "response_format": "verbose_json",
-            "timestamp_granularities[]": "word",
-        },
-        timeout=240,
-    )
-    if not response.ok:
+    response = None
+    for attempt in range(2):
+        try:
+            response = requests.post(
+                "https://api.openai.com/v1/audio/transcriptions",
+                headers={"Authorization": f"Bearer {api_key}"},
+                files={"file": (filename, audio_bytes)},
+                data={
+                    "model": "whisper-1", "response_format": "verbose_json",
+                    "timestamp_granularities[]": "word",
+                },
+                timeout=(15, 240),
+            )
+        except (requests.Timeout, requests.ConnectionError) as exc:
+            if attempt == 0:
+                time.sleep(1)
+                continue
+            raise TransientAudioAPIError(
+                "API phân tích giọng đọc tạm thời không phản hồi (mạng/timeout)."
+            ) from exc
+        if response.ok:
+            break
+        if response.status_code in TRANSIENT_AUDIO_STATUSES:
+            if attempt == 0:
+                time.sleep(1)
+                continue
+            raise TransientAudioAPIError(
+                f"API phân tích giọng đọc tạm thời gặp HTTP {response.status_code}."
+            )
         raise ValueError(
-            f"Không lấy được mốc lời đọc từ API âm thanh (HTTP {response.status_code}). "
-            "Kiểm tra định dạng âm thanh, quyền API và dung lượng file."
+            f"API giọng đọc trả về HTTP {response.status_code}. "
+            "Vui lòng kiểm tra quyền API, định dạng file hoặc giới hạn tài khoản."
         )
     try:
         data = response.json()

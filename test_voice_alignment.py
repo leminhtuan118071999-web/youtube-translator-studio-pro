@@ -3,7 +3,7 @@ from unittest.mock import patch
 
 from voice_alignment import (
     align_target_words, audio_aligned_plan, whisper_word_timestamps,
-    speech_statistics, duration_weighted_plan,
+    speech_statistics, duration_weighted_plan, TransientAudioAPIError,
 )
 
 
@@ -65,6 +65,46 @@ class VoiceAlignmentTests(unittest.TestCase):
         self.assertEqual(stamps[0]["word"], "Hello")
         self.assertEqual(send.call_args.args[0], "https://api.openai.com/v1/audio/transcriptions")
         self.assertIn("Bearer secret", send.call_args.kwargs["headers"].values())
+
+    def test_whisper_502_retries_once_and_classifies_temporary_failure(self):
+        class BadResponse:
+            ok = False
+            status_code = 502
+        with patch("voice_alignment.requests.post", return_value=BadResponse()) as post, patch(
+            "voice_alignment.time.sleep"
+        ) as sleep:
+            with self.assertRaisesRegex(TransientAudioAPIError, "502"):
+                whisper_word_timestamps(b"audio", "voice.mp3", "secret")
+        self.assertEqual(post.call_count, 2)
+        sleep.assert_called_once()
+
+    def test_whisper_502_then_success_recovers_timestamps(self):
+        class Response:
+            def __init__(self, code, body=None):
+                self.status_code = code
+                self.ok = code == 200
+                self.body = body
+            def json(self):
+                return self.body
+        good = Response(200, {"words": [
+            {"word": "test", "start": 0.0, "end": 0.3},
+        ]})
+        with patch(
+            "voice_alignment.requests.post",
+            side_effect=[Response(502), good],
+        ) as post, patch("voice_alignment.time.sleep"):
+            stamped = whisper_word_timestamps(b"voice", "file.mp3", "secret")
+        self.assertEqual(post.call_count, 2)
+        self.assertEqual(stamped[0]["word"], "test")
+
+    def test_401_is_not_silently_treated_as_transient(self):
+        class Unauthorized:
+            ok = False
+            status_code = 401
+        with patch("voice_alignment.requests.post", return_value=Unauthorized()) as post:
+            with self.assertRaisesRegex(ValueError, "401"):
+                whisper_word_timestamps(b"voice", "file.mp3", "bad")
+        post.assert_called_once()
 
     def test_reject_oversized_or_missing_audio(self):
         with self.assertRaises(ValueError):
