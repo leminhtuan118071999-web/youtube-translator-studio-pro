@@ -27,6 +27,19 @@ def response(payload, status=200):
     return out
 
 
+class SharedImageProviderTests(unittest.TestCase):
+    def test_reuses_only_official_image_capable_main_providers(self):
+        from thumbnail_ui import image_provider_for_main_api
+        self.assertEqual(image_provider_for_main_api("Google Gemini"), "Gemini")
+        self.assertEqual(image_provider_for_main_api("OpenAI"), "OpenAI")
+        for provider in (
+            "Groq", "Claude (Anthropic)", "Claude Gateway (AUTH_TOKEN)",
+            "API bên thứ ba (tùy chỉnh)", "OpenRouter", "DeepSeek", None,
+        ):
+            with self.subTest(provider=provider):
+                self.assertIsNone(image_provider_for_main_api(provider))
+
+
 class ThumbnailAITests(unittest.TestCase):
     def setUp(self):
         self.picture = sample_image()
