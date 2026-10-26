@@ -176,7 +176,7 @@ def fetch_portrait_images(secrets, auth, sid, raw_manifest):
                 headers=_user_headers(anon,auth), timeout=(7,20),
             )
             if (result.ok and len(result.content) <= 6 * 1024 * 1024
-                    and result.content.startswith(b"\\x89PNG\\r\\n\\x1a\\n")):
+                    and result.content.startswith(b"\x89PNG\r\n\x1a\n")):
                 images[name] = result.content
         except requests.RequestException:
             continue
