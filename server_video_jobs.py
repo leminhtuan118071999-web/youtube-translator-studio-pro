@@ -155,3 +155,84 @@ def run_video_forms_job(snapshot, progress):
             except Exception:
                 pass
         return {"ok": False, "fields": fields, "error": message[:300]}
+
+
+
+def save_cloud_full_checkpoint(snapshot, fields, state, error=""):
+    """Persist full-translation stages directly from worker without browser."""
+    cloud = snapshot.get("cloud")
+    if not cloud:
+        return
+    import time
+    from persistent_store import (
+        CONTENT_FIELDS, get_config, _request, _user_headers, save_user,
+    )
+    with _persist_lock:
+        auth, secrets = cloud["auth"], cloud["secrets"]
+        if time.time() >= auth["expires_at"]:
+            raise RuntimeError(
+                "Phiên xác thực lưu trữ hết hạn khi chạy nền. "
+                "Kết quả trong bộ nhớ máy chủ được giữ để tiếp tục."
+            )
+        url, anon, cipher = get_config(secrets)
+        rows = _request(
+            "GET", url + "/rest/v1/youtube_studio_state",
+            _user_headers(anon, auth),
+            params={
+                "select": "payload,encrypted_config",
+                "user_id": "eq." + auth["user_id"], "limit": "1",
+            },
+        )
+        if not rows:
+            raise RuntimeError("Không tìm thấy tài khoản để lưu tiến trình dịch.")
+        row = rows[0]
+        payload = row["payload"]
+        record = payload.get("workspaces", {}).get(snapshot["sid"])
+        if not isinstance(record, dict) or record.get("job_run_id") != snapshot["run_id"]:
+            raise RuntimeError("Phiên dịch đã bị xóa hoặc được thay thế.")
+        record.update({k: v for k, v in fields.items() if k in CONTENT_FIELDS})
+        record["job_state"] = state
+        record["job_error"] = str(error)[:700]
+        record["saved"] = True
+        record["processed"] = True
+        settings = {}
+        if row.get("encrypted_config"):
+            settings = json.loads(cipher.decrypt(
+                row["encrypted_config"].encode("ascii")
+            ).decode("utf-8"))
+        save_user(secrets, auth, payload, settings)
+
+
+class _FullJobProgressProxy:
+    """Publish translation/SEO partials to both process memory and account DB."""
+
+    def __init__(self, snapshot, progress):
+        self.snapshot, self.progress = snapshot, progress
+
+    def publish(self, field, value):
+        self.progress.publish(field, value)
+        save_cloud_full_checkpoint(
+            self.snapshot, self.progress.partial_result(), "running",
+        )
+
+    def __getattr__(self, key):
+        return getattr(self.progress, key)
+
+
+def run_full_job_with_server_saves(snapshot, progress):
+    """Existing full workflow unchanged; independently save each finished stage."""
+    from background_jobs import run_full_job
+    result = run_full_job(snapshot, _FullJobProgressProxy(snapshot, progress))
+    try:
+        save_cloud_full_checkpoint(
+            snapshot, result.get("fields", {}),
+            "completed" if result.get("ok") else "failed",
+            result.get("error", ""),
+        )
+    except Exception as exc:
+        result["ok"] = False
+        result["error"] = (
+            "Máy chủ chưa xác nhận lưu kết quả vào tài khoản: "
+            + str(exc)[:300]
+        )
+    return result
