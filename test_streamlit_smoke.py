@@ -97,6 +97,23 @@ class StreamlitSmokeTests(unittest.TestCase):
         self.assertIn('"🔄 Chạy lại riêng — Form video 8 giây"', forms)
         self.assertIn('key=f"retry_video_forms_{sid}"', forms)
         self.assertIn('if generate_clicked or retry_clicked:', forms)
+        self.assertIn('launch_video_job(', forms)
+        self.assertIn('run_video_forms_job', main)
+
+    def test_server_worker_checkpoints_and_reconnect_are_wired(self):
+        from pathlib import Path
+        main = Path("streamlit_app.py").read_text(encoding="utf-8")
+        worker = Path("server_video_jobs.py").read_text(encoding="utf-8")
+        store = Path("persistent_store.py").read_text(encoding="utf-8")
+        for phrase in (
+            'reattach_video_background_jobs()', 'collect_video_background_jobs()',
+            'get_job_executor().submit(run_video_forms_job, snapshot, progress)',
+            'launch_video_job=launch_video_forms_background',
+        ):
+            self.assertIn(phrase, main)
+        self.assertIn('save_cloud_video_checkpoint(snapshot, encoded, "running")', worker)
+        self.assertIn('"video_job_run_id"', store)
+        self.assertIn('"video_job_percent"', store)
 
     def test_video_form_tab_is_isolated_source_locked_and_editable(self):
         """New 8s prompt tab appears after SEO, without resurrecting old tab."""
@@ -118,9 +135,9 @@ class StreamlitSmokeTests(unittest.TestCase):
         self.assertNotIn('alignment_api_key=image_api_key', source)
         self.assertIn('key=f"create_video_forms_{sid}"', forms)
         self.assertNotIn('key=f"continue_video_forms_{sid}"', forms)
-        self.assertIn('st.progress(ratio, text=label)', forms)
-        self.assertIn('_generate_all_remaining(', forms)
-        self.assertIn('checkpoint=save_checkpoint', forms)
+        self.assertIn('st.progress(min(100, max(0, pct))', forms)
+        self.assertIn('launch_video_job(', forms)
+        self.assertIn('video_job_state', forms)
         self.assertIn('if plan is not None and not stale:', forms)
         self.assertIn('f"📋 Copy toàn bộ ô {group[\'panel\']}"', forms)
         self.assertIn('with st.expander("📌 Hồ sơ nhân vật/bối cảnh cố định cho mọi form", expanded=False):', forms)
@@ -135,7 +152,8 @@ class StreamlitSmokeTests(unittest.TestCase):
         self.assertIn('type=["mp3", "wav", "m4a", "ogg"]', forms)
         self.assertIn('audio_error or upload is None or not translated', forms)
         self.assertIn('disabled=cannot_generate', forms)
-        self.assertIn('working_plan = duration_weighted_plan(', forms)
+        self.assertNotIn('whisper_word_timestamps(', forms)
+        self.assertIn('launch_video_job(', forms)
         self.assertIn('Không phân tích hay gửi nội dung file âm thanh tới Whisper.', forms)
         self.assertNotIn('whisper_word_timestamps(', forms)
         self.assertNotIn('audio_aligned_plan(', forms)
