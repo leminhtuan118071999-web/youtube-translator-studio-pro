@@ -100,6 +100,8 @@ class StreamlitSmokeTests(unittest.TestCase):
         self.assertIn('key=f"create_video_forms_{sid}"', forms)
         self.assertIn('key=f"continue_video_forms_{sid}"', forms)
         self.assertIn('"📋 Copy toàn bộ form"', forms)
+        self.assertIn('with st.expander("📌 Hồ sơ nhân vật/bối cảnh cố định cho mọi form", expanded=False):', forms)
+        self.assertIn('with st.expander("📜 Tất cả form video — liền mạch", expanded=False):', forms)
         self.assertIn('continuous_video_forms_text(plan)', forms)
         self.assertIn('key=f"copy_all_video_forms_{sid}"', forms)
         self.assertIn('source_fingerprint(translated, language)', forms)
