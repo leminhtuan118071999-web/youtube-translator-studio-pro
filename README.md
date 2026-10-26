@@ -56,6 +56,21 @@ lập với queue và lưu kết quả bền vững. Với AI33 cần tích hợ
 - Khi có **Supabase**, tất cả cài đặt trên được mã hóa Fernet và đồng bộ vào dữ liệu tài khoản. Nếu không có Supabase, các cài đặt được mã hóa và lưu **trên trình duyệt hiện tại** như mô tả ở trên.
 - Các giá trị được giữ cho tới khi người dùng thay đổi. Khi xóa nội dung một ô key, giá trị mới được ghi nhận; key dùng chung trong Streamlit Secrets vẫn có thể được chọn làm dự phòng mà không sao chép vào lưu trữ cá nhân.
 
+## ✍️ Tự động tối ưu kịch bản rồi dịch và viết form video
+
+Khi nhấn **🚀 BẮT ĐẦU TẠO TOÀN BỘ**, app lấy phụ đề gốc, viết lại kịch bản
+cô đọng dưới **10.000 ký tự**, giữ nhân vật, dữ kiện chính, trình tự, nguyên
+nhân/kết quả và thông tin quan trọng; sau đó dịch kịch bản sang ngôn ngữ đích.
+App giữ bản phụ đề gốc để đối chiếu và lưu riêng kịch bản đã tối ưu.
+AI có thể bỏ sót chi tiết: cần rà soát khi nội dung gốc rất dài; nếu không thể
+giảm dưới giới hạn mà vẫn giữ ý, app báo lỗi thay vì cắt mất phần cuối.
+
+Sau khi dịch xong, app **tự sinh form video 8 giây** từ bản dịch đó, có hồ
+sơ nhân vật thống nhất và chuyển cảnh theo từng form. Form được tự lưu vào
+đúng phiên; có thể xem/chỉnh sửa/tải tại tab Form video 8 giây. Lỗi tạo form
+không xóa bản dịch và không chặn phần SEO. Tạo form tự động dùng thêm lượt
+API và có thể mất thời gian đối với video dài.
+
 ## 🎬 Form video 8 giây — ngay cạnh Tiêu đề • Mô tả • SEO
 
 Khu vực kết quả của **YouTube Translator** có tab thứ ba
