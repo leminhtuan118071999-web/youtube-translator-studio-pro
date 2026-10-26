@@ -1,0 +1,114 @@
+<!doctype html>
+<html lang="vi">
+<head>
+  <meta charset="utf-8"/>
+  <meta name="viewport" content="width=device-width, initial-scale=1"/>
+  <style>
+    * { box-sizing: border-box; }
+    html, body { margin: 0; padding: 0; width: 100%; height: 44px; overflow: hidden; background: transparent; }
+    body { display: flex; align-items: center; font: 750 13px system-ui, sans-serif; }
+    #name-button, #name-input {
+      display: block; width: 100%; height: 38px; padding: 8px 11px;
+      border-radius: 8px; border: 1px solid transparent;
+      font: inherit; text-align: left;
+    }
+    #name-button {
+      cursor: pointer; white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
+      color: #fff;
+    }
+    #name-button.selected { background: #facc15; color: #272112; border-color: #d4a000; box-shadow: 0 2px 0 #9a7000; }
+    #name-button.selected:hover { background: #ffe45c; }
+    #name-button.completed { background: #16803e; border-color: #166534; }
+    #name-button.completed:hover { background: #1b994e; }
+    #name-button.pending { background: #c62828; border-color: #991b1b; }
+    #name-button.pending:hover { background: #dc3636; }
+    #name-button:focus-visible { outline: 3px solid #60a5fa; outline-offset: -3px; }
+    #name-input { background: #fff; color: #16181c; border: 2px solid #f0b429; font-weight: 700; }
+    #name-input:focus { outline: 1px solid #facc15; }
+    [hidden] { display: none !important; }
+  </style>
+</head>
+<body>
+  <button type="button" id="name-button" class="pending" title="Nhấp để mở; nhấp đúp để đổi tên"></button>
+  <input type="text" id="name-input" aria-label="Đổi tên phiên" maxlength="80" autocomplete="off" hidden/>
+  <script>
+  "use strict";
+  (function () {
+    const button = document.getElementById("name-button");
+    const input = document.getElementById("name-input");
+    let name = "", suffix = "", tone = "pending", clickTimer = null, editing = false;
+    let nonce = 0;
+    const send = (type, fields) => {
+      window.parent.postMessage({isStreamlitMessage: true, type, ...fields}, "*");
+    };
+    const emit = (action, value) => {
+      nonce += 1;
+      send("streamlit:setComponentValue", {
+        value: { action, name: value || "", seq: String(Date.now()) + "-" + String(nonce) },
+        dataType: "json"
+      });
+    };
+    function cancelClickTimer() {
+      if (clickTimer !== null) { clearTimeout(clickTimer); clickTimer = null; }
+    }
+    function exitEditor() {
+      editing = false;
+      input.hidden = true;
+      button.hidden = false;
+    }
+    function beginEditor() {
+      cancelClickTimer();
+      editing = true;
+      input.value = name;
+      button.hidden = true;
+      input.hidden = false;
+      input.focus();
+      input.select();
+    }
+    function saveEditor() {
+      const proposed = input.value.trim();
+      exitEditor();
+      if (proposed && proposed !== name) emit("rename", proposed);
+    }
+    button.addEventListener("click", function () {
+      if (editing) return;
+      cancelClickTimer();
+      // Avoid opening a session on the first click of a double-click.
+      clickTimer = setTimeout(function () {
+        clickTimer = null;
+        emit("open");
+      }, 440);
+    });
+    button.addEventListener("dblclick", function (event) {
+      event.preventDefault();
+      beginEditor();
+    });
+    input.addEventListener("keydown", function (event) {
+      if (event.key === "Enter") { event.preventDefault(); saveEditor(); }
+      if (event.key === "Escape") { event.preventDefault(); exitEditor(); }
+    });
+    input.addEventListener("blur", function () {
+      // Blur also accepts an edited name for mouse-only users.
+      if (editing) saveEditor();
+    });
+    window.addEventListener("message", function (event) {
+      const message = event.data;
+      if (!message || message.type !== "streamlit:render" || !message.args) return;
+      const args = message.args;
+      const newName = typeof args.name === "string" ? args.name : "";
+      // Keep an in-progress edit intact across unrelated Streamlit rerenders.
+      if (editing && newName !== name) exitEditor();
+      name = newName;
+      suffix = typeof args.suffix === "string" ? args.suffix : "";
+      tone = ["selected", "completed", "pending"].includes(args.tone) ? args.tone : "pending";
+      button.textContent = "📄 " + name + suffix;
+      button.className = tone;
+      button.setAttribute("aria-label", name + ". Nhấp để mở, nhấp đúp để đổi tên.");
+      send("streamlit:setFrameHeight", {height: 44});
+    });
+    send("streamlit:componentReady", {apiVersion: 1});
+    send("streamlit:setFrameHeight", {height: 44});
+  })();
+  </script>
+</body>
+</html>
