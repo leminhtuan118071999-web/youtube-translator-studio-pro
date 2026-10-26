@@ -673,14 +673,14 @@ with st.sidebar:
         st.session_state.selected_session = sid
     session = st.session_state.workspaces[sid]
 
-    # External app launcher: open AI33 in a new browser tab without
-    # rerunning LMT Studio Pro or changing any session/API data.
+    # Same-origin multipage navigation. The two app panels share one
+    # Streamlit session without sharing YouTube credentials with AI33.
     st.markdown("**🧭 Ứng dụng**")
     st.caption("🎬 YouTube Translator — đang sử dụng")
-    st.link_button(
-        "🌐 AI33 / OpenSpeaker ↗",
-        "https://ai33.pro/app",
-        type="secondary",
+    st.page_link(
+        "pages/2_AI33_OpenSpeaker.py",
+        label="🎙️ AI33 / OpenSpeaker",
+        icon="🎙️",
         use_container_width=True,
     )
     st.divider()
