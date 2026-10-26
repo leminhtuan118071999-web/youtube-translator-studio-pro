@@ -106,7 +106,8 @@ def speech_statistics(translation, duration, stamped_words=None):
     total = math.ceil(duration / SECONDS_PER_SCENE)
     if total > MAX_SCENES:
         raise ValueError("Giọng đọc quá dài: hơn 240 form 8 giây.")
-    words = len(translation.split())
+    tokens = translation.split()
+    words = len(tokens) if len(tokens) > 1 else len(translation.strip())
     heard = stamped_words or []
     spoken_seconds = sum(
         max(0.0, min(duration, item["end"]) - min(duration, item["start"]))
@@ -134,8 +135,8 @@ def duration_weighted_plan(translation, language, duration):
     plan = narration_plan(translation, language, audio_duration_seconds=duration)
     words = translation.split()
     count = len(plan["scenes"])
-    if not words or len(words) < count:
-        raise ValueError("Bản dịch quá ngắn so với giọng đọc; cần kiểm tra lại file.")
+    if not words:
+        raise ValueError("Bản dịch không có lời đọc.")
     # Longer words and punctuation get slightly more estimated speaking time.
     weights = [
         max(1.0, len(_tokens(w)[0]) / 5 if _tokens(w) else 1.0)
