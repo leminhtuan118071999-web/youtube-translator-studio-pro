@@ -14,9 +14,11 @@ from PIL import Image, ImageOps, UnidentifiedImageError
 import requests
 
 from api_clients import gemini_generate_endpoint
-
-GEMINI_IMAGE_MODELS = ("gemini-2.5-flash-image", "gemini-3.1-flash-image")
-OPENAI_IMAGE_MODELS = ("gpt-image-2.5-flare", "gpt-image-2.5-sunburst")
+from image_model_discovery import (
+    GEMINI_EDIT_MODELS as GEMINI_IMAGE_MODELS,
+    OPENAI_EDIT_MODELS as OPENAI_IMAGE_MODELS,
+    supported_image_model,
+)
 MAX_INPUT_BYTES = 9_000_000
 MAX_OUTPUT_BYTES = 14_000_000
 ALLOWED_LANGUAGES = re.compile(r"^[\w\sÀ-ỹ()\-]{2,75}$", re.UNICODE)
@@ -273,7 +275,7 @@ def edit_thumbnail(source_png, prompt, provider, key, model):
     if not isinstance(prompt, str) or len(prompt) > 12_000:
         raise ValueError("Nội dung chỉnh sửa ảnh không hợp lệ.")
     if provider == "Gemini":
-        if model not in GEMINI_IMAGE_MODELS:
+        if not supported_image_model("Gemini", model):
             raise ValueError("Model Gemini chỉnh ảnh không hợp lệ.")
         url = gemini_generate_endpoint(
             "https://generativelanguage.googleapis.com/v1beta", model
@@ -294,14 +296,22 @@ def edit_thumbnail(source_png, prompt, provider, key, model):
         response = _request_json(url, key, payload, gemini=True, timeout=180)
         image_data = _extract_gemini_image(response)
     elif provider == "OpenAI":
-        if model not in OPENAI_IMAGE_MODELS:
+        if not supported_image_model("OpenAI", model):
             raise ValueError("Model OpenAI chỉnh ảnh không hợp lệ.")
         try:
             response = requests.post(
                 "https://api.openai.com/v1/images/edits",
                 headers={"Authorization": "Bearer " + key},
-                data={"model": model, "prompt": prompt, "size": "1536x864",
-                      "quality": "medium"},
+                data={
+                    "model": model, "prompt": prompt,
+                    # Only 2.5 and 2 accept custom dimensions; legacy
+                    # GPT Image 1.x edits use an official landscape size.
+                    "size": (
+                        "1536x864" if model.startswith(("gpt-image-2.", "gpt-image-2-"))
+                        or model == "gpt-image-2" else "1536x1024"
+                    ),
+                    "quality": "medium",
+                },
                 files={"image": ("thumbnail.png", source_png, "image/png")},
                 timeout=(10, 240), allow_redirects=False,
             )
