@@ -60,8 +60,12 @@ def narration_plan(translation, language, *, words_per_minute=DEFAULT_WPM,
             f"Nội dung cần khoảng {count} form. Giới hạn {MAX_SCENES} "
             "form/lần để tránh tạo quá nhiều tác vụ API; hãy chia nội dung thành phần nhỏ."
         )
-    # Don't create empty narration scenes even for unusually long audio.
-    count = min(count, len(units))
+    # A long audio track with too little narration cannot be aligned.
+    if count > len(units):
+        raise ValueError(
+            "Giọng đọc dài hơn quá nhiều so với bản dịch. Hãy chọn đúng "
+            "file giọng đọc của bản dịch để tạo form khớp thời lượng."
+        )
     base, extra = divmod(len(units), count)
     out, pos = [], 0
     for index in range(count):
@@ -189,7 +193,12 @@ def apply_ai_batch(plan, raw, expected_numbers):
         raise ValueError("AI trả về sai thứ tự form video.")
     for scene in plan["scenes"]:
         if scene["number"] in mapped:
-            scene["visual_prompt"], transition = mapped[scene["number"]]
+            description, transition = mapped[scene["number"]]
+            bible = plan.get("character_bible", "").strip()
+            scene["visual_prompt"] = (
+                description if not bible or bible in description
+                else bible + "\n\n" + description
+            )
             scene["transition_to_next"] = (
                 transition if scene["number"] < len(plan["scenes"]) else ""
             ) or (
