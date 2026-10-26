@@ -221,3 +221,25 @@ def plan_export_text(plan):
             f"Transition: {scene['transition_to_next'] or '(end)'}"
         )
     return "\n".join(pieces)
+
+
+def continuous_video_forms_text(plan):
+    """All finished forms in sequence, one form per line break.
+
+    Copy text is generated from the same current scene data as the editor,
+    including original narration and continuity/transition instructions.
+    """
+    lines = []
+    for scene in plan.get("scenes", []):
+        if not isinstance(scene, dict) or not str(scene.get("visual_prompt", "")).strip():
+            continue
+        n = int(scene["number"])
+        intro = (
+            f"FORM {n:03d} [{scene['start_seconds']}-{scene['end_seconds']}s | 8s] "
+            f"VOICEOVER ({plan.get('language', '')}): {scene.get('voiceover', '')} "
+            f"VIDEO: {scene.get('visual_prompt', '')}"
+        )
+        if scene.get("transition_to_next"):
+            intro += f" TRANSITION: {scene['transition_to_next']}"
+        lines.append(" ".join(intro.splitlines()))
+    return "\n".join(lines)

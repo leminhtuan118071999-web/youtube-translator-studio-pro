@@ -4,7 +4,7 @@ import unittest
 
 from video_scene_planner import (
     narration_plan, source_fingerprint, character_bible_prompt,
-    batch_prompt, apply_ai_batch, plan_export_text,
+    batch_prompt, apply_ai_batch, plan_export_text, continuous_video_forms_text,
 )
 
 
@@ -126,6 +126,22 @@ class VideoScenePlannerTests(unittest.TestCase):
         with self.assertRaises(ValueError):
             apply_ai_batch(plan, bad, expected)
         self.assertTrue(all(s["visual_prompt"] == "" for s in plan["scenes"]))
+
+    def test_copy_all_forms_one_line_each_in_order(self):
+        plan = narration_plan(" ".join(["story"] * 40), "Tiếng Anh")
+        self.assertGreaterEqual(len(plan["scenes"]), 2)
+        plan["scenes"][0]["visual_prompt"] = "A camera zoom.\\nBeautiful lighting."
+        plan["scenes"][1]["visual_prompt"] = "Character walks forward."
+        out = continuous_video_forms_text(plan)
+        lines = out.splitlines()
+        self.assertEqual(len(lines), 2)
+        self.assertTrue(lines[0].startswith("FORM 001"))
+        self.assertTrue(lines[1].startswith("FORM 002"))
+        self.assertIn("VOICEOVER (Tiếng Anh):", lines[0])
+        self.assertIn("Beautiful lighting.", lines[0])
+        self.assertIn("TRANSITION:", lines[0])
+        self.assertNotIn("TRANSITION:", lines[1])
+        self.assertNotIn("not generated", out)
 
     def test_character_bible_prompt_uses_target_translation(self):
         text = "Dzisiaj Ala przyszła do domu."
