@@ -56,10 +56,10 @@ class StreamlitSmokeTests(unittest.TestCase):
             ".st-key-create_new_session button",
             "st-key-session_status_completed_",
             "st-key-session_status_pending_",
-            "st-key-session_status_selected_",
+            'selected=is_selected',
+            'label += " ✅"',
             "background: #16803e",
             "background: #c62828",
-            "background: #facc15",
             'with st.container(key=f"session_status_{session_tone}_{saved_id}")',
         ):
             self.assertIn(snippet, source)
@@ -67,6 +67,8 @@ class StreamlitSmokeTests(unittest.TestCase):
         app = self.app.run()
         self.assertFalse(app.exception, [str(x.message) for x in app.exception])
         self.assertTrue(any(b.key == "create_new_session" for b in app.button))
+        self.assertNotIn("st-key-session_status_selected_", source)
+        self.assertNotIn("background: #facc15", source)
         first = app.session_state["selected_session"]
         app.session_state["workspaces"][first].update({
             "processed": True, "job_state": "completed",
@@ -80,6 +82,15 @@ class StreamlitSmokeTests(unittest.TestCase):
         app.run()
         self.assertFalse(app.exception, [str(x.message) for x in app.exception])
         self.assertEqual(app.session_state["selected_session"], second)
+        viewed = next(
+            b for b in app.button if b.key == f"open_saved_session_{second}"
+        )
+        self.assertTrue(viewed.label.endswith(" ✅"))
+        self.assertFalse(any(
+            b.label.endswith(" ✅")
+            for b in app.button
+            if b.key == f"open_saved_session_{first}"
+        ))
         self.assertTrue(any(
             b.key == f"open_saved_session_{first}" for b in app.button
         ))
@@ -88,6 +99,13 @@ class StreamlitSmokeTests(unittest.TestCase):
         app.run()
         self.assertFalse(app.exception, [str(x.message) for x in app.exception])
         self.assertEqual(app.session_state["selected_session"], first)
+        now_viewed = next(
+            b for b in app.button if b.key == f"open_saved_session_{first}"
+        )
+        self.assertTrue(now_viewed.label.endswith(" ✅"))
+        self.assertFalse(next(
+            b for b in app.button if b.key == f"open_saved_session_{second}"
+        ).label.endswith(" ✅"))
         self.assertEqual(
             app.session_state["workspaces"][second]["job_state"], "running"
         )
