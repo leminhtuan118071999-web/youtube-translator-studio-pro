@@ -190,23 +190,61 @@ def backup_state(workspaces, selected_session, saved_session_order):
     return clean
 
 
+def _valid_api_setting(name, value):
+    return (
+        isinstance(name, str)
+        and (name in API_WIDGET_EXACT or name.startswith(API_WIDGET_PREFIXES))
+        and isinstance(value, str)
+        and len(value) < 10000
+    )
+
+
 def settings_from_widgets(state):
-    out = {}
-    for key in list(state):
-        if key in API_WIDGET_EXACT or key.startswith(API_WIDGET_PREFIXES):
-            value = state.get(key)
-            if isinstance(value, str) and len(value) < 10000:
-                out[key] = value
+    """Merge live widgets with retained values for inactive API providers.
+
+    Streamlit prunes widget keys when a different provider is selected. Keep
+    provider-specific fields in separate non-widget state to avoid losing keys.
+    """
+    retained = state.get("_retained_api_settings", {})
+    out = {
+        name: value for name, value in retained.items()
+        if _valid_api_setting(name, value)
+    } if isinstance(retained, dict) else {}
+    for name in list(state):
+        value = state.get(name)
+        if _valid_api_setting(name, value):
+            out[name] = value
     return out
+
+
+def remember_widget_settings(state):
+    """Update durable in-session settings after each UI render."""
+    settings = settings_from_widgets(state)
+    state["_retained_api_settings"] = settings
+    return settings
+
+
+def activate_provider_settings(state, provider):
+    """Restore saved settings before creating a provider's input widgets."""
+    kept = state.get("_retained_api_settings", {})
+    if not isinstance(kept, dict) or not isinstance(provider, str):
+        return
+    for prefix in API_WIDGET_PREFIXES:
+        name = prefix + provider
+        if name not in state and _valid_api_setting(name, kept.get(name)):
+            state[name] = kept[name]
 
 
 def restore_widget_settings(state, settings):
     if not isinstance(settings, dict):
         return
-    for name, value in settings.items():
-        if (name in API_WIDGET_EXACT or name.startswith(API_WIDGET_PREFIXES)) and isinstance(value, str):
-            if len(value) < 10000:
-                state[name] = value
+    kept = {
+        name: value for name, value in settings.items()
+        if _valid_api_setting(name, value)
+    }
+    state["_retained_api_settings"] = kept
+    for name, value in kept.items():
+        state[name] = value
 
 
 def save_user(secrets, auth, payload, settings):
