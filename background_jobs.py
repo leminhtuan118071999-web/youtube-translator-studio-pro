@@ -380,14 +380,13 @@ def run_full_job(snapshot, progress):
             fields["translated"] = "\n\n".join(translations)
             progress.publish("translated", fields["translated"])
 
-        # Video forms are an optional extension of the full-button workflow,
-        # using the exact completed target-language translation as narration.
-        # They must not change any translated word or block SEO on failure.
-        if snapshot.get("auto_video_forms", False):
+        # Character reference images still auto-generate where configured.
+        # 8-second form generation is a DIFFERENT step requiring an uploaded
+        # voiceover in the Video Forms tab after translation finishes.
+        if snapshot.get("auto_character_images") and snapshot.get("image_api_key"):
             try:
-                progress.update(68, "🎬 Đang tạo form video 8 giây tự động...")
+                progress.update(68, "🖼️ Đang phân tích nhân vật...")
                 style = snapshot.get("video_style", "Điện ảnh chân thực")
-                plan = narration_plan(fields["translated"], language)
                 profile_data = parse_json_object(
                     call(character_bible_prompt(fields["translated"], language, style)),
                     "character_bible",
@@ -395,59 +394,33 @@ def run_full_job(snapshot, progress):
                 bible = profile_data["character_bible"]
                 if not isinstance(bible, str) or not bible.strip():
                     raise ValueError("Không tạo được hồ sơ nhân vật.")
-                plan["character_bible"] = bible.strip()
-                plan["style"] = style
-                # Image generation is opt-in by configuration: only a real
-                # image-capable provider key triggers chargeable API calls.
-                image_key = snapshot.get("image_api_key") or ""
-                if image_key and snapshot.get("auto_character_images", False):
-                    specs = character_specs(profile_data)
-                    for image_name, image_description in specs:
-                        progress.check_cancelled()
-                        progress.update(68, f"🖼️ Đang tạo ảnh nhân vật {image_name}...")
-                        try:
-                            image_bytes = create_character_png(
-                                image_key, image_name, image_description,
-                                style=style, bible=bible,
-                                model=snapshot.get("image_model") or IMAGE_MODEL,
-                            )
-                            IMAGE_STORE.save(
-                                snapshot["image_scope"], snapshot["image_session_id"],
-                                image_name, image_bytes,
-                            )
-                            fields["character_images_count"] = len(
-                                IMAGE_STORE.images(snapshot["image_scope"], snapshot["image_session_id"])
-                            )
-                            progress.publish(
-                                "character_images_count", fields["character_images_count"]
-                            )
-                        except Exception as image_exc:
-                            safe = str(image_exc).replace(image_key, "[IMAGE KEY ĐÃ ẨN]")
-                            fields["character_images_error"] = safe[:250]
-                            progress.publish("character_images_error", fields["character_images_error"])
-                scenes = plan["scenes"]
-                for start in range(0, len(scenes), 6):
+                fields["character_bible"] = bible.strip()
+                progress.publish("character_bible", fields["character_bible"])
+                image_key = snapshot["image_api_key"]
+                for name, description in character_specs(profile_data):
                     progress.check_cancelled()
-                    group = scenes[start:start + 6]
-                    expected = [scene["number"] for scene in group]
-                    apply_ai_batch(plan, call(batch_prompt(plan, group, style=style)), expected)
-                    progress.update(
-                        69 + int(11 * (start + len(group)) / len(scenes)),
-                        f"🎬 Đã tạo {start + len(group)}/{len(scenes)} form video...",
-                    )
-                    encoded = json.dumps(plan, ensure_ascii=False)
-                    if len(encoded) > 390000:
-                        raise ValueError("Form video quá lớn để lưu; hãy chia nội dung.")
-                    fields["video_forms"] = encoded
-                    progress.publish("video_forms", encoded)
+                    progress.update(68, f"🖼️ Đang tạo ảnh nhân vật {name}...")
+                    try:
+                        png = create_character_png(
+                            image_key, name, description,
+                            style=style, bible=bible, model=snapshot.get("image_model") or IMAGE_MODEL,
+                        )
+                        IMAGE_STORE.save(snapshot["image_scope"], snapshot["image_session_id"], name, png)
+                        fields["character_images_count"] = len(
+                            IMAGE_STORE.images(snapshot["image_scope"], snapshot["image_session_id"])
+                        )
+                        progress.publish("character_images_count", fields["character_images_count"])
+                    except Exception as exc:
+                        fields["character_images_error"] = (
+                            "Tạo ảnh chưa hoàn tất: " + str(exc).replace(image_key, "[IMAGE KEY ĐÃ ẨN]")
+                        )[:250]
+                        progress.publish("character_images_error", fields["character_images_error"])
             except Exception as exc:
-                # A video-form error must never discard the complete translation.
                 progress.check_cancelled()
                 message = str(exc).replace(api_key, "[API KEY ĐÃ ẨN]")
-                subtitle_key = snapshot.get("supadata_key") or ""
-                if subtitle_key:
-                    message = message.replace(subtitle_key, "[KEY PHỤ ĐỀ ĐÃ ẨN]")
-                fields["video_forms_error"] = message[:250]
+                message = message.replace(snapshot.get("image_api_key", ""), "[IMAGE KEY ĐÃ ẨN]")
+                fields["character_images_error"] = message[:250]
+                progress.publish("character_images_error", fields["character_images_error"])
 
         # SEO still needs a concise overview for long transcripts, but do
         # not perform any image-prompt generation or publish prompt fields.
