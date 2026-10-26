@@ -611,12 +611,55 @@ with st.sidebar:
         [data-testid="stSidebar"] [class*="st-key-confirm_delete_"] button:hover {
             background-color: rgba(239, 68, 68, .25) !important;
         }
+
+        /* New session: always green. */
+        [data-testid="stSidebar"] .st-key-create_new_session button {
+            color: #ffffff !important;
+            background: #16803e !important;
+            border: 1px solid #166534 !important;
+            font-weight: 800 !important;
+            box-shadow: 0 2px 0 #14532d, 0 3px 7px rgba(0, 0, 0, .15);
+        }
+        [data-testid="stSidebar"] .st-key-create_new_session button:hover {
+            background: #1b994e !important;
+        }
+
+        /* Saved sessions: selected (yellow) takes priority over job status. */
+        [data-testid="stSidebar"] [class*="st-key-session_status_selected_"] button {
+            color: #272112 !important;
+            background: #facc15 !important;
+            border: 1px solid #d4a000 !important;
+            font-weight: 800 !important;
+            box-shadow: 0 2px 0 #9a7000;
+        }
+        [data-testid="stSidebar"] [class*="st-key-session_status_selected_"] button:hover {
+            background: #ffe45c !important;
+        }
+        /* Finished: green. Pending/running/failed/interrupted: red. */
+        [data-testid="stSidebar"] [class*="st-key-session_status_completed_"] button {
+            color: #ffffff !important;
+            background: #16803e !important;
+            border: 1px solid #166534 !important;
+            font-weight: 750 !important;
+        }
+        [data-testid="stSidebar"] [class*="st-key-session_status_completed_"] button:hover {
+            background: #1b994e !important;
+        }
+        [data-testid="stSidebar"] [class*="st-key-session_status_pending_"] button {
+            color: #ffffff !important;
+            background: #c62828 !important;
+            border: 1px solid #991b1b !important;
+            font-weight: 750 !important;
+        }
+        [data-testid="stSidebar"] [class*="st-key-session_status_pending_"] button:hover {
+            background: #dc3636 !important;
+        }
         </style>
         """,
         unsafe_allow_html=True,
     )
 
-    if st.button("➕ Tạo phiên mới", use_container_width=True):
+    if st.button("➕ Tạo phiên mới", key="create_new_session", use_container_width=True):
         old_name = session["name"]
         still_running = (
             sid in st.session_state.background_jobs
@@ -684,7 +727,10 @@ with st.sidebar:
 
     st.divider()
     st.markdown("**📚 Danh sách phiên đã chạy**")
-    st.caption("Nhấn tên để mở phiên; nút Đổi tên (xanh) hoặc Xóa (đỏ) nằm ngay bên cạnh. Phiên lỗi vẫn được giữ để xem lại.")
+    st.caption(
+        "Màu phiên: 🟢 hoàn thành · 🔴 đang chạy/chưa xong/lỗi · "
+        "🟡 đang được mở xem. Nút Đổi tên (xanh) và Xóa (đỏ) giữ nguyên."
+    )
     name_message = st.session_state.pop("session_name_message", None)
     if name_message:
         st.warning(name_message)
@@ -718,16 +764,26 @@ with st.sidebar:
             else:
                 status_icon = ""
             label = f"📄 {saved_record['name']}{status_icon}" + (" ✓" if saved_id == sid else "")
-            if st.button(
-                label,
-                key=f"open_saved_session_{saved_id}",
-                use_container_width=True,
-                type="primary" if saved_id == sid else "secondary",
-            ):
-                if saved_id != sid:
-                    sync_form(sid)
-                    st.session_state["_open_session_next"] = saved_id
-                    _persist_and_rerun()
+            # Priority: viewing (yellow) > completed (green) > all other
+            # unfinished/interrupted/failed states (red).
+            currently_running = bool(job and not job["future"].done())
+            if saved_id == sid:
+                session_tone = "selected"
+            elif saved_record.get("job_state") == "completed" and not currently_running:
+                session_tone = "completed"
+            else:
+                session_tone = "pending"
+            with st.container(key=f"session_status_{session_tone}_{saved_id}"):
+                if st.button(
+                    label,
+                    key=f"open_saved_session_{saved_id}",
+                    use_container_width=True,
+                    type="primary" if saved_id == sid else "secondary",
+                ):
+                    if saved_id != sid:
+                        sync_form(sid)
+                        st.session_state["_open_session_next"] = saved_id
+                        _persist_and_rerun()
         with edit_col:
             if st.button(
                 "Đổi tên",
