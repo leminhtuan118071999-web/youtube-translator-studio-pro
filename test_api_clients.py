@@ -742,7 +742,7 @@ class ApiClientTests(unittest.TestCase):
 
     @patch("api_clients.socket.getaddrinfo", return_value=PUBLIC_ADDR)
     @patch("api_clients._request")
-    def test_groq_prompts_reserve_more_output_than_translation(self, req, _dns):
+    def test_groq_seo_uses_bounded_output_budget(self, req, _dns):
         resp = Mock()
         resp.ok = True
         resp.json.return_value = {
@@ -750,8 +750,8 @@ class ApiClientTests(unittest.TestCase):
         }
         req.return_value = resp
         generate_text("Groq", PROVIDERS["Groq"]["base_url"],
-                      "openai/gpt-oss-120b", "secret", "Hãy viết ĐÚNG 20 prompt")
-        self.assertEqual(req.call_args.kwargs["json"]["max_completion_tokens"], 3600)
+                      "openai/gpt-oss-120b", "secret", "Soạn YouTube tiêu đề")
+        self.assertEqual(req.call_args.kwargs["json"]["max_completion_tokens"], 2200)
 
     @patch("api_clients.socket.getaddrinfo", return_value=PUBLIC_ADDR)
     @patch("api_clients._request")
