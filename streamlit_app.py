@@ -125,7 +125,7 @@ LANGUAGES = [
     "Tiếng Catalan", "Tiếng Basque", "Tiếng Wales", "Tiếng Luxembourg",
     "Tiếng Macedonia", "Tiếng Việt", "Tiếng Nhật", "Tiếng Hàn",
 ]
-FIELDS = ("url", "source", "title", "description", "translated", "prompts", "metadata", "language", "new_title", "new_description", "seo_tags", "video_forms", "optimized_script")
+FIELDS = ("url", "source", "title", "description", "translated", "prompts", "metadata", "language", "new_title", "new_description", "seo_tags", "video_forms", "optimized_script", "character_images_error")
 FORM_FIELDS = ("url", "language")
 
 
@@ -134,7 +134,7 @@ def blank_session(name):
         "name": name, "url": "", "source": "", "title": "", "description": "",
         "translated": "", "prompts": "", "metadata": "", "language": "Tiếng Ba Lan",
         "saved": False, "processed": False, "saved_order": 0,
-        "new_title": "", "new_description": "", "seo_tags": "", "video_forms": "", "optimized_script": "",
+        "new_title": "", "new_description": "", "seo_tags": "", "video_forms": "", "optimized_script": "", "character_images_error": "",
     }
 
 
@@ -665,6 +665,7 @@ def delete_saved_session(session_id):
         return
     old = st.session_state.workspaces[session_id]
     get_job_registry().cancel(old.get("job_run_id"), session_id, _job_scope())
+    IMAGE_STORE.clear(_job_scope(), session_id)
     job = st.session_state.background_jobs.pop(session_id, None)
     if job:
         job["progress"].cancel()
@@ -854,6 +855,7 @@ with st.sidebar:
         st.session_state.saved_session_order = 1
         # Cancel queued jobs; running requests may finish but their results are discarded.
         for old_session_id, old_session in st.session_state.workspaces.items():
+            IMAGE_STORE.clear(_job_scope(), old_session_id)
             get_job_registry().cancel(
                 old_session.get("job_run_id"), old_session_id, _job_scope()
             )
@@ -1008,6 +1010,7 @@ with st.sidebar:
                 st.error(f"Chưa thể lưu trước khi đăng xuất: {exc}")
             else:
                 for old_sid, old_record in st.session_state.workspaces.items():
+                    IMAGE_STORE.clear(_job_scope(), old_sid)
                     get_job_registry().cancel(
                         old_record.get("job_run_id"), old_sid, _job_scope()
                     )
