@@ -35,7 +35,7 @@ class StreamlitSmokeTests(unittest.TestCase):
         self.assertIn("↗ Mở AI33 trực tiếp nếu khung không hoạt động", source)
         self.assertIn("chưa có hàng đợi bền vững", source)
         self.assertIn('st.subheader("🖼️ Thumbnail gốc chất lượng cao")', source)
-        self.assertIn('["🌍 Bản dịch", "📝 Tiêu đề • Mô tả • SEO", "🎬 Form video 8 giây"]', source)
+        self.assertIn('["🌍 Bản dịch", "📝 Tiêu đề • Mô tả • SEO",\n         "🎬 Form video 8 giây", "🖼️ Ảnh nhân vật"]', source)
         self.assertIn('key="api_provider"', source)
 
         app = self.app.run()
@@ -92,6 +92,8 @@ class StreamlitSmokeTests(unittest.TestCase):
         forms = Path("video_forms_ui.py").read_text(encoding="utf-8")
         worker = Path("background_jobs.py").read_text(encoding="utf-8")
         self.assertIn('with tab_video:', source)
+        self.assertIn('with tab_characters:', source)
+        self.assertIn('"⬇️ Tải tất cả ảnh nhân vật của phiên (.ZIP)"', source)
         self.assertIn('render_video_forms(', source)
         self.assertNotIn('create_20_prompts(', source)
         self.assertNotIn('🎨 20 prompt hình ảnh', source)
@@ -192,8 +194,8 @@ class StreamlitSmokeTests(unittest.TestCase):
 
         source = Path("streamlit_app.py").read_text(encoding="utf-8")
         self.assertIn('with st.container(key="result_tabs"):', source)
-        self.assertIn('tab_translate, tab_seo, tab_video = st.tabs(', source)
-        self.assertIn('["🌍 Bản dịch", "📝 Tiêu đề • Mô tả • SEO", "🎬 Form video 8 giây"]', source)
+        self.assertIn('tab_translate, tab_seo, tab_video, tab_characters = st.tabs(', source)
+        self.assertIn('["🌍 Bản dịch", "📝 Tiêu đề • Mô tả • SEO",\n         "🎬 Form video 8 giây", "🖼️ Ảnh nhân vật"]', source)
         self.assertIn('.st-key-result_tabs [data-testid="stTabs"] [role="tablist"]', source)
         self.assertIn('gap: 16px !important;', source)
         self.assertIn('min-height: 54px !important;', source)
@@ -777,7 +779,7 @@ class StreamlitSmokeTests(unittest.TestCase):
         self.assertNotIn("tab_visual", source)
         self.assertNotIn("fields[\"prompts\"]", worker)
         self.assertNotIn('progress.publish("prompts"', worker)
-        self.assertIn('["🌍 Bản dịch", "📝 Tiêu đề • Mô tả • SEO", "🎬 Form video 8 giây"]', source)
+        self.assertIn('["🌍 Bản dịch", "📝 Tiêu đề • Mô tả • SEO",\n         "🎬 Form video 8 giây", "🖼️ Ảnh nhân vật"]', source)
         # Thumbnail original and download button must stay intact.
         self.assertIn('thumbnail = get_thumbnail(vid)', source)
         self.assertIn('⬇️ Tải thumbnail gốc', source)
