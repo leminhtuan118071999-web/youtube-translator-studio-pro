@@ -2,14 +2,26 @@
 
 Ứng dụng Streamlit xử lý video YouTube: trích xuất phụ đề có sẵn (khi YouTube cho phép), dịch bằng API đa nền tảng, dịch tiêu đề/mô tả và SEO, tự hiển thị thumbnail gốc và cung cấp nút tải ảnh màu xanh dương.
 
-## 🧭 Hai ứng dụng trong cùng website LMT Studio Pro
+## 🧭 Hai khu vực riêng trên cùng trang LMT Studio Pro
 
-- **App 1 — 🎬 YouTube Translator:** trang chính như trước, giữ nguyên chức năng dịch phụ đề, SEO, thumbnail, API và các phiên đã lưu.
-- **App 2 — 🎙️ AI33 / OpenSpeaker:** trang riêng qua menu Streamlit trong cùng website; khung `iframe` thử hiển thị `https://ai33.pro/app` ngay bên trong LMT. Có nút mở website riêng nếu trình duyệt/AI33 từ chối nhúng, không đăng nhập được hoặc iframe bị chặn bởi CSP/X-Frame-Options. Không gửi API key, nội dung phiên hoặc tài khoản LMT cho AI33.
+- **🎬 YouTube Translator:** giao diện dịch phụ đề, SEO, thumbnail và quản lý phiên như trước.
+- **🎙️ AI33 / OpenSpeaker:** khung thử nhúng `https://ai33.pro/app` và nút mở website ngoài để dự phòng khi nhà cung cấp chặn iframe.
 
-Chuyển giữa hai trang bằng **menu Streamlit**, không nhập lại địa chỉ và không cần đóng tab. Các tác vụ YouTube Translator đã gửi vào worker trong **cùng phiên Streamlit** tiếp tục chạy khi chuyển sang trang AI33 **miễn là tiến trình máy chủ còn chạy và phiên không bị hủy**; App 2 cho xem tiến độ gần nhất trong sidebar và App 1 sẽ thu thập kết quả khi trở lại. Nhưng việc chuyển trang có thể tải lại iframe AI33, và quyền nhúng do AI33 quản lý.
+Chọn khu vực trong thanh bên bằng nút chọn **Ứng dụng**. Cả hai khu vực được
+hiển thị luân phiên ngay trong cùng `streamlit_app.py` (một Streamlit
+entrypoint duy nhất): **không dùng `st.page_link` tới trang chưa được
+đăng ký**, nên không còn phụ thuộc vào cơ chế nhận diện tệp `pages/`.
+Các bước đang chạy của YouTube Translator được giữ trong cùng phiên Streamlit
+khi chuyển sang AI33 và ngược lại, miễn là máy chủ/phiên đang tồn tại.
+Cửa sổ AI33 vẫn do AI33 quản lý, không nhận API key hoặc dữ liệu phiên LMT.
 
-**Không thể bảo đảm tác vụ cả hai app chạy đến cùng sau khi đóng trình duyệt hoặc reload:** tiến trình ThreadPoolExecutor của YouTube Translator không phải hàng đợi bền vững; Streamlit Cloud có thể ngủ/khởi động lại, và công việc đang chạy sẽ khôi phục dưới trạng thái gián đoạn. Website AI33 hoạt động độc lập; LMT không thể khôi phục tác vụ chưa lưu mã công việc. Để đáp ứng yêu cầu chạy đến hoàn thành kể cả khi offline, cần bổ sung **máy chủ worker chạy thường trực, hàng đợi tác vụ và lưu trạng thái/kết quả bền vững** cho App 1; với App 2 cần tích hợp OpenSpeaker API, lưu `task_id` để tra cứu hoặc nhận webhook của nhà cung cấp. Chỉ nhúng iframe không làm được điều này.
+**Giới hạn quan trọng:** Nhúng website AI33 có thể bị chặn bởi chính sách
+iframe hoặc đăng nhập của AI33, điều chưa được xác thực trên trình duyệt thực.
+Chuyển khu vực có thể tải lại iframe. Việc đóng/tải lại trang, mất kết nối
+phiên hoặc Streamlit Cloud khởi động lại **không đảm bảo** các tác vụ đã chạy
+đến hoàn thành: worker hiện ở bộ nhớ máy chủ, chưa có hàng đợi bền vững.
+Muốn chạy khi offline cần máy chủ worker độc lập và lưu trạng thái/kết quả
+dài hạn; với AI33 cần tích hợp API và task ID hợp lệ.
 
 ## ☁️ Tự động lưu toàn bộ dữ liệu và cấu hình API qua lần đăng nhập sau
 
