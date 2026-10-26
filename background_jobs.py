@@ -16,6 +16,7 @@ from api_clients import RateLimitError, TransientProviderError, generate_text
 from groq_pacing import groq_request_gate
 from transcript_sources import fetch_with_fallback
 from video_scene_planner import (narration_plan, character_bible_prompt, batch_prompt, parse_json_object, apply_ai_batch)
+from character_images import IMAGE_STORE, character_specs, create_character_png, IMAGE_MODEL
 
 
 class JobProgress:
@@ -387,14 +388,43 @@ def run_full_job(snapshot, progress):
                 progress.update(68, "🎬 Đang tạo form video 8 giây tự động...")
                 style = snapshot.get("video_style", "Điện ảnh chân thực")
                 plan = narration_plan(fields["translated"], language)
-                bible = parse_json_object(
+                profile_data = parse_json_object(
                     call(character_bible_prompt(fields["translated"], language, style)),
                     "character_bible",
-                )["character_bible"]
+                )
+                bible = profile_data["character_bible"]
                 if not isinstance(bible, str) or not bible.strip():
                     raise ValueError("Không tạo được hồ sơ nhân vật.")
                 plan["character_bible"] = bible.strip()
                 plan["style"] = style
+                # Image generation is opt-in by configuration: only a real
+                # image-capable provider key triggers chargeable API calls.
+                image_key = snapshot.get("image_api_key") or ""
+                if image_key and snapshot.get("auto_character_images", False):
+                    specs = character_specs(profile_data)
+                    for image_name, image_description in specs:
+                        progress.check_cancelled()
+                        progress.update(68, f"🖼️ Đang tạo ảnh nhân vật {image_name}...")
+                        try:
+                            image_bytes = create_character_png(
+                                image_key, image_name, image_description,
+                                style=style, bible=bible,
+                                model=snapshot.get("image_model") or IMAGE_MODEL,
+                            )
+                            IMAGE_STORE.save(
+                                snapshot["image_scope"], snapshot["image_session_id"],
+                                image_name, image_bytes,
+                            )
+                            fields["character_images_count"] = len(
+                                IMAGE_STORE.images(snapshot["image_scope"], snapshot["image_session_id"])
+                            )
+                            progress.publish(
+                                "character_images_count", fields["character_images_count"]
+                            )
+                        except Exception as image_exc:
+                            safe = str(image_exc).replace(image_key, "[IMAGE KEY ĐÃ ẨN]")
+                            fields["character_images_error"] = safe[:250]
+                            progress.publish("character_images_error", fields["character_images_error"])
                 scenes = plan["scenes"]
                 for start in range(0, len(scenes), 6):
                     progress.check_cancelled()
