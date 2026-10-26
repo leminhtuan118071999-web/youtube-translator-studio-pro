@@ -4,7 +4,10 @@ import unittest
 import uuid
 from unittest.mock import patch
 from background_jobs import JobProgress
-from server_video_jobs import run_video_forms_job, save_cloud_video_checkpoint
+from server_video_jobs import (
+    run_video_forms_job, save_cloud_video_checkpoint,
+    run_full_job_with_server_saves,
+)
 from video_scene_planner import narration_plan
 
 
@@ -95,6 +98,41 @@ class BackgroundVideoTests(unittest.TestCase):
         others = [v for k,v in saved["workspaces"].items() if k != self.sid]
         self.assertEqual(others[0]["translated"], "preserved")
         self.assertEqual(reader.call_args.kwargs["params"]["user_id"], "eq."+uid)
+
+    def test_full_translation_pipeline_persists_each_stage_without_browser(self):
+        self.snapshot["cloud"] = {"secrets": {}, "auth": {}}
+        stages = []
+        def full_job(_snapshot, progress):
+            progress.publish("optimized_script", "Shortened")
+            progress.publish("translated", "Translated")
+            progress.publish("new_title", "SEO title")
+            return {"ok": True, "fields": {
+                "optimized_script": "Shortened",
+                "translated": "Translated", "new_title": "SEO title",
+            }, "error": ""}
+        with patch("background_jobs.run_full_job", side_effect=full_job), patch(
+            "server_video_jobs.save_cloud_full_checkpoint",
+            side_effect=lambda snapshot, fields, state, *args: stages.append(
+                (state, dict(fields))
+            ),
+        ):
+            result = run_full_job_with_server_saves(self.snapshot, JobProgress())
+        self.assertTrue(result["ok"])
+        self.assertEqual([stage for stage, _ in stages],
+                         ["running", "running", "running", "completed"])
+        self.assertEqual(stages[-1][1]["translated"], "Translated")
+
+    def test_full_pipeline_checkpoint_does_not_leak_api_key_into_fields(self):
+        self.snapshot["cloud"] = {"secrets": {}, "auth": {}}
+        def full_job(_snapshot, progress):
+            progress.publish("translated", "Safe text")
+            return {"ok": True, "fields": {"translated": "Safe text"}, "error": ""}
+        with patch("background_jobs.run_full_job", side_effect=full_job), patch(
+            "server_video_jobs.save_cloud_full_checkpoint"
+        ) as saver:
+            run_full_job_with_server_saves(self.snapshot, JobProgress())
+        for call in saver.call_args_list:
+            self.assertNotIn("PRIVATE", json.dumps(call.args[1]))
 
     def test_cloud_checkpoint_rejects_mismatched_run_id(self):
         import time
