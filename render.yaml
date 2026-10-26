@@ -1,0 +1,21 @@
+services:
+  # Background workers do NOT sleep when Streamlit Cloud is idle.
+  # This is a paid compute service. Create it with Render Blueprints.
+  - type: worker
+    name: lmt-studio-overnight-worker
+    runtime: python
+    plan: 0.5c-512mb
+    buildCommand: pip install -r requirements-worker.txt
+    startCommand: python durable_worker.py
+    maxShutdownDelaySeconds: 300
+    envVars:
+      - key: PYTHON_VERSION
+        value: "3.12.8"
+      - key: DATABASE_URL
+        sync: false
+      - key: SESSION_ENCRYPTION_KEY
+        sync: false
+      - key: SUPABASE_URL
+        sync: false
+      - key: SUPABASE_SERVICE_ROLE_KEY
+        sync: false
