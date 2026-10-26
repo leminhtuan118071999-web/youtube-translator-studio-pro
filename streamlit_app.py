@@ -124,7 +124,7 @@ LANGUAGES = [
     "Tiếng Catalan", "Tiếng Basque", "Tiếng Wales", "Tiếng Luxembourg",
     "Tiếng Macedonia", "Tiếng Việt", "Tiếng Nhật", "Tiếng Hàn",
 ]
-FIELDS = ("url", "source", "title", "description", "translated", "prompts", "metadata", "language", "new_title", "new_description", "seo_tags", "video_forms")
+FIELDS = ("url", "source", "title", "description", "translated", "prompts", "metadata", "language", "new_title", "new_description", "seo_tags", "video_forms", "optimized_script")
 FORM_FIELDS = ("url", "language")
 
 
@@ -133,7 +133,7 @@ def blank_session(name):
         "name": name, "url": "", "source": "", "title": "", "description": "",
         "translated": "", "prompts": "", "metadata": "", "language": "Tiếng Ba Lan",
         "saved": False, "processed": False, "saved_order": 0,
-        "new_title": "", "new_description": "", "seo_tags": "", "video_forms": "",
+        "new_title": "", "new_description": "", "seo_tags": "", "video_forms": "", "optimized_script": "",
     }
 
 
@@ -1534,6 +1534,8 @@ if st.button("🚀 BẮT ĐẦU TẠO TOÀN BỘ", type="primary",
                 "base_url": base_url,
                 "model": model,
                 "api_key": key,
+                "auto_video_forms": True,
+                "video_style": "Điện ảnh chân thực",
             }
             if provider == "API bên thứ ba (tùy chỉnh)":
                 snapshot["api_format"] = api_format
@@ -1626,6 +1628,10 @@ with st.container(key="result_tabs"):
         ["🌍 Bản dịch", "📝 Tiêu đề • Mô tả • SEO", "🎬 Form video 8 giây"]
     )
 with tab_translate:
+    if session.get("optimized_script", "").strip():
+        with st.expander("✍️ Kịch bản đã tối ưu (dưới 10.000 ký tự)", expanded=False):
+            st.caption("Tạo từ phụ đề gốc trước khi dịch, giữ nguyên phụ đề để đối chiếu.")
+            st.code(session["optimized_script"], language=None, wrap_lines=True)
     if st.button("🌍 Dịch lại toàn bộ", key=f"translate_{sid}"):
         if not session["source"].strip():
             st.warning("Hãy trích xuất phụ đề hoặc nhập văn bản trước.")
