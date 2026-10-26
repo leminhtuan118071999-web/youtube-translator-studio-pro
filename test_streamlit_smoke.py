@@ -13,6 +13,8 @@ class StreamlitSmokeTests(unittest.TestCase):
         # AppTest has no browser localStorage or JavaScript component runtime.
         # Exercise the codec independently; UI tests begin after hydration.
         self.app.session_state["_browser_sessions_restored"] = True
+        # Streamlit AppTest cannot execute the custom browser crypto component.
+        self.app.session_state["_browser_api_restored"] = True
         self.app.session_state["_session_name_test_fallback"] = True
 
     def test_both_api_sections_autosave_without_touching_workspaces(self):
