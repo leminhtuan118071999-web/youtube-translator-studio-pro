@@ -46,6 +46,23 @@ class CopyButtonsTests(TestCase):
         self.assertIn("✅ Đã copy", frontend)
         self.assertNotIn("localStorage", frontend)
 
+    def test_copy_all_buttons_have_blue_raised_bold_style(self):
+        frontend = (Path(__file__).resolve().parent /
+                    "copy_button_frontend" / "index.html").read_text(encoding="utf-8")
+        # All six copy-all actions share one browser component and therefore
+        # the same visual style, including the disabled empty-result state.
+        self.assertIn("linear-gradient(180deg, #3186ff 0%, #1461dc 100%)", frontend)
+        self.assertIn("color: #fff;", frontend)
+        self.assertIn("font: 800 13px/1.3", frontend)
+        self.assertIn("text-shadow: 0 1px 1px", frontend)
+        self.assertIn("box-shadow: 0 3px 0", frontend)
+        self.assertIn("button:hover:enabled", frontend)
+        self.assertIn("button:active:enabled", frontend)
+        self.assertIn("button:disabled", frontend)
+        self.assertIn("#5c9ded", frontend)
+        self.assertIn("height: 56", frontend)
+        self.assertNotIn("opacity: .43", frontend)
+
     def test_each_result_has_outside_copy_button(self):
         code = (Path(__file__).resolve().parent /
                 "streamlit_app.py").read_text(encoding="utf-8")
