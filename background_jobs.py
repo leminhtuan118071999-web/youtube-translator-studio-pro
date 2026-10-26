@@ -403,14 +403,14 @@ def run_full_job(snapshot, progress):
                 translation = call(
                     f"Dịch chính xác toàn bộ đoạn {idx}/{len(chunks)} sang {language}. "
                     "Viết tự nhiên, không thiếu câu, không thêm tình tiết, giữ tên nhân vật "
-                    "và xuống dòng. CHỈ xuất bản dịch.\\n\\n" + part
+                    "và xuống dòng. CHỈ xuất bản dịch.\n\n" + part
                 )
                 translations.append(translation)
                 fields["translation_parts"] = list(translations)
                 # Persist the index BEFORE publishing visible translation:
                 # after a restart, completed chunks are not charged twice.
                 progress.publish("translation_parts", fields["translation_parts"])
-                fields["translated"] = "\\n\\n".join(translations)
+                fields["translated"] = "\n\n".join(translations)
                 progress.publish("translated", fields["translated"])
             fields["translation_complete"] = True
             progress.publish("translation_complete", True)
