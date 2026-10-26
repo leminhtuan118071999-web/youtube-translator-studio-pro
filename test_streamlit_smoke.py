@@ -15,6 +15,55 @@ class StreamlitSmokeTests(unittest.TestCase):
         self.app.session_state["_browser_sessions_restored"] = True
         self.app.session_state["_session_name_test_fallback"] = True
 
+    def test_both_api_sections_autosave_without_touching_workspaces(self):
+        """Inputs remain interactive; storage and restored provider settings are scoped."""
+        from pathlib import Path
+
+        source = Path("streamlit_app.py").read_text(encoding="utf-8")
+        frontend = Path("browser_sessions_frontend/index.html").read_text(
+            encoding="utf-8"
+        )
+        self.assertIn('key="supadata_api_key_input"', source)
+        self.assertIn('key="api_provider"', source)
+        self.assertIn('activate_provider_settings(st.session_state, provider)', source)
+        self.assertIn('mode="api_read", storageKey=API_SETTINGS_STORAGE_KEY', source)
+        self.assertIn('mode="api_write", storageKey=API_SETTINGS_STORAGE_KEY', source)
+        self.assertIn('_save_browser_api_settings()', source)
+        self.assertIn('_save_cloud_state()', source)
+        self.assertIn('remember_widget_settings(st.session_state)', source)
+        self.assertIn('crypto.subtle.encrypt', frontend)
+        self.assertIn('crypto.subtle.decrypt', frontend)
+        self.assertIn('indexedDB.open(DB_NAME, 1)', frontend)
+        self.assertIn('false, ["encrypt", "decrypt"]', frontend)
+        self.assertNotIn('localStorage.setItem(storageKey, payload)', frontend)
+
+        app = self.app.run()
+        self.assertFalse(app.exception, [str(e.message) for e in app.exception])
+        backup = next(
+            item for item in app.get("text_input")
+            if item.key == "supadata_api_key_input"
+        )
+        backup.set_value("supadata-test-key")
+        app.run()
+        provider = next(x for x in app.selectbox if x.label == "CHỌN NỀN TẢNG AI")
+        provider.set_value("OpenAI")
+        app.run()
+        self.assertFalse(app.exception, [str(e.message) for e in app.exception])
+        openai_key = next(
+            x for x in app.get("text_input") if x.key == "api_key_OpenAI"
+        )
+        openai_key.set_value("openai-test-key")
+        app.run()
+        self.assertEqual(
+            app.session_state["_retained_api_settings"]["supadata_api_key_input"],
+            "supadata-test-key",
+        )
+        self.assertEqual(
+            app.session_state["_retained_api_settings"]["api_key_OpenAI"],
+            "openai-test-key",
+        )
+        self.assertFalse(app.exception, [str(e.message) for e in app.exception])
+
     def test_translation_and_seo_tabs_have_separate_bordered_click_targets(self):
         """Tab-only styling increases spacing without changing results or login UI."""
         from pathlib import Path
