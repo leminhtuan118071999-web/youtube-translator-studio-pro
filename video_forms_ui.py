@@ -151,6 +151,7 @@ def render_video_forms(session, sid, language, *, ai, api_key,
     cannot_generate = (
         audio_error or upload is None or not translated
         or bool(session.get("job_state") == "running")
+        or bool(session.get("video_job_state") == "running")
     )
     generate_clicked = st.button(
         "🎬 Tạo form 8 giây theo giọng đọc",
