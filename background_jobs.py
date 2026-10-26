@@ -294,22 +294,11 @@ def run_full_job(snapshot, progress):
             fields["translated"] = "\n\n".join(translations)
             progress.publish("translated", fields["translated"])
 
-        progress.update(66, "🎨 Đang tạo 20 prompt ảnh...")
+        # SEO still needs a concise overview for long transcripts, but do
+        # not perform any image-prompt generation or publish prompt fields.
+        progress.update(70, "📝 Đang chuẩn bị nội dung SEO...")
         brief = overview(fields["translated"], call, progress)
-        prompts_result = parse_object(call(
-            f"Hãy viết ĐÚNG 20 prompt hình ảnh điện ảnh bằng {language}, "
-            "theo mạch truyện từ đầu đến cuối, các nhân vật thống nhất, không bịa. "
-            'Chỉ trả JSON {"prompts":["..."]} gồm 20 chuỗi.\n\n' + brief
-        ), "prompts")
-        prompts = prompts_result["prompts"]
-        if not isinstance(prompts, list) or len(prompts) != 20:
-            raise ValueError("AI chưa trả đủ 20 prompt. Có thể chạy lại phần prompt.")
-        prompts = [str(p).strip() for p in prompts]
-        if any(not p for p in prompts):
-            raise ValueError("Có prompt ảnh trống; có thể chạy lại phần prompt.")
-        fields["prompts"] = json.dumps(prompts, ensure_ascii=False)
-        progress.publish("prompts", fields["prompts"])
-
+        progress.check_cancelled()
         progress.update(84, "📝 Đang tạo tiêu đề, mô tả và SEO...")
         metadata = parse_object(call(
             f"Soạn YouTube tiêu đề, mô tả và 15 từ khóa SEO bằng {language}. "
