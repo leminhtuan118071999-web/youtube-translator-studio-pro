@@ -46,10 +46,18 @@ class SessionNameControlsTests(unittest.TestCase):
         )
         component.assert_called_once_with(
             name="Phiên A", suffix=" ⏳ 50%", tone="pending",
-            key="session_a", default=None,
+            selected=False, key="session_a", default=None,
         )
         with self.assertRaises(ValueError):
             session_name_control("abc", "", "unknown", key="invalid")
+        with self.assertRaises(ValueError):
+            session_name_control("abc", "", "selected", key="old_yellow")
+        with self.assertRaises(ValueError):
+            session_name_control("abc", "", "pending", selected="yes", key="bad")
+        component.reset_mock()
+        session_name_control("Phiên A", "", "completed", selected=True, key="selected_a")
+        self.assertIs(component.call_args.kwargs["selected"], True)
+        self.assertEqual(component.call_args.kwargs["tone"], "completed")
 
     def test_frontend_doubleclick_inline_enter_and_singleclick(self):
         html = (Path(__file__).resolve().parent /
@@ -65,12 +73,17 @@ class SessionNameControlsTests(unittest.TestCase):
             "clearTimeout(clickTimer)",
             'input.select()',
             "button.className = tone;",
-            "button.textContent =",
+            'nameLabel.textContent =',
+            "selectedCheck.hidden = !selected;",
+            "selected = args.selected === true;",
+            "#selected-check",
             'button.setAttribute("aria-label"',
         ):
             self.assertIn(expected, html)
-        for color in ("#facc15", "#16803e", "#c62828"):
+        for color in ("#128238", "#16803e", "#c62828"):
             self.assertIn(color, html)
+        self.assertNotIn("#facc15", html)
+        self.assertNotIn("#ffe45c", html)
         self.assertNotIn("localStorage", html)
 
     def test_streamlit_ui_has_only_red_delete_next_to_name_without_ticks(self):
@@ -83,6 +96,10 @@ class SessionNameControlsTests(unittest.TestCase):
         self.assertNotIn('key=f"edit_session_{saved_id}"', source)
         self.assertNotIn('status_icon = " ✅"', source)
         self.assertNotIn('(" ✓" if saved_id == sid else "")', source)
+        self.assertNotIn('st-key-session_status_selected_', source)
+        self.assertNotIn("background: #facc15", source)
+        self.assertIn('selected=is_selected', source)
+        self.assertIn('label += " ✅"', source)
         self.assertNotIn('on_change=rename_saved_session', source)
 
 
