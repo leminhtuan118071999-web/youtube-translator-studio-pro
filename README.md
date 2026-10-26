@@ -54,6 +54,13 @@ Tài liệu tích hợp Supadata: https://github.com/supadata-ai/skills/blob/mai
 
 **Giới hạn kỹ thuật:** Xử lý nền vẫn chạy trong bộ nhớ Streamlit, không phải hàng đợi bền vững. Nếu tab bị đóng hoặc máy chủ khởi động lại trong lúc đang chạy, tác vụ có thể dừng. Với Supabase, phần kết quả đã đồng bộ được giữ theo tài khoản; nếu chưa có Supabase thì bản phiên đã lưu trong trình duyệt cùng máy có thể được khôi phục (không bảo đảm khi trình duyệt bị xóa dữ liệu). Muốn đảm bảo tác vụ vẫn hoàn thành sau khi server khởi động lại cần job queue riêng.
 
+## 🎨 Màu nút quản lý phiên
+
+- **➕ Tạo phiên mới:** nút nền xanh lá.
+- Trong **📚 Danh sách phiên đã chạy**, tên phiên **hoàn thành** có nền xanh lá; phiên **đang chạy, chưa xong, lỗi hoặc bị gián đoạn** có nền đỏ.
+- **Phiên đang được chọn để xem** luôn có nền vàng, không phụ thuộc trạng thái xử lý. Khi mở sang phiên khác, ô đang xem chuyển vàng còn ô vừa bỏ chọn trở về xanh/đỏ đúng trạng thái.
+- Hai nút **Đổi tên** (xanh) và **Xóa** (đỏ) cũng như bước xác nhận xóa vẫn giữ nguyên.
+
 ## 📁 Phần quản lý phiên ở góc trái (đã tối giản)
 
 Ô **🌍 Ngôn ngữ đích** nằm ở khu vực chính, ngay trước nút **🚀 BẮT ĐẦU TẠO TOÀN BỘ**, với tiếng Ý, Bồ Đào Nha, Hà Lan, Thụy Điển, Séc, Romania, Hungary, Ukraine và nhiều ngôn ngữ châu Âu khác. Mỗi phiên có ngôn ngữ đích riêng.
