@@ -15,6 +15,41 @@ class StreamlitSmokeTests(unittest.TestCase):
         self.app.session_state["_browser_sessions_restored"] = True
         self.app.session_state["_session_name_test_fallback"] = True
 
+    def test_translation_and_seo_tabs_have_separate_bordered_click_targets(self):
+        """Tab-only styling increases spacing without changing results or login UI."""
+        from pathlib import Path
+
+        source = Path("streamlit_app.py").read_text(encoding="utf-8")
+        self.assertIn('with st.container(key="result_tabs"):', source)
+        self.assertIn('tab_translate, tab_seo = st.tabs(', source)
+        self.assertIn('["🌍 Bản dịch", "📝 Tiêu đề • Mô tả • SEO"]', source)
+        self.assertIn('.st-key-result_tabs [data-testid="stTabs"] [role="tablist"]', source)
+        self.assertIn('gap: 16px !important;', source)
+        self.assertIn('min-height: 54px !important;', source)
+        self.assertIn('border: 2px solid #94a3b8 !important;', source)
+        self.assertIn('[role="tab"][aria-selected="true"]', source)
+        self.assertIn('border-color: #2563eb !important;', source)
+        self.assertIn('[role="tab"]:focus-visible', source)
+        self.assertIn('with tab_translate:', source)
+        self.assertIn('with tab_seo:', source)
+        self.assertIn('with st.container(key="original_thumbnail_download"):', source)
+        # Login tabs still exist and are outside the scoped results container.
+        self.assertIn('sign_in_tab, create_account_tab = st.tabs(', source)
+
+        app = self.app.run()
+        self.assertFalse(app.exception, [str(e.message) for e in app.exception])
+        sid = app.session_state["selected_session"]
+        app.session_state["workspaces"][sid]["translated"] = "Bản dịch giữ nguyên"
+        app.session_state["workspaces"][sid]["new_title"] = "Tiêu đề giữ nguyên"
+        app.run()
+        self.assertFalse(app.exception, [str(e.message) for e in app.exception])
+        self.assertEqual(
+            app.session_state["workspaces"][sid]["translated"], "Bản dịch giữ nguyên"
+        )
+        self.assertEqual(
+            app.session_state["workspaces"][sid]["new_title"], "Tiêu đề giữ nguyên"
+        )
+
     def test_original_thumbnail_is_downloadable_and_uses_blue_button(self):
         """A pasted YouTube URL triggers the original preview, without Thumbnail AI."""
         from io import BytesIO
