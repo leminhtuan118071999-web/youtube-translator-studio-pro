@@ -657,6 +657,40 @@ def _clear_session_widgets(session_id):
             st.session_state.pop(widget_key, None)
 
 
+
+def delete_saved_session(session_id):
+    """Remove one owned session and its job, without touching provider keys."""
+    if session_id not in st.session_state.workspaces:
+        return
+    old = st.session_state.workspaces[session_id]
+    get_job_registry().cancel(old.get("job_run_id"), session_id, _job_scope())
+    job = st.session_state.background_jobs.pop(session_id, None)
+    if job:
+        job["progress"].cancel()
+        job["future"].cancel()
+    del st.session_state.workspaces[session_id]
+    _clear_session_widgets(session_id)
+    st.session_state["_browser_delete_revision"] = uuid.uuid4().hex
+    st.session_state.pop("_browser_delete_confirmed", None)
+    if not st.session_state.workspaces:
+        new_id = uuid.uuid4().hex
+        st.session_state.saved_session_order += 1
+        new_record = blank_session("Phiên mới")
+        new_record["saved_order"] = st.session_state.saved_session_order
+        st.session_state.workspaces[new_id] = new_record
+    if st.session_state.selected_session == session_id:
+        active = max(
+            st.session_state.workspaces,
+            key=lambda k: st.session_state.workspaces[k].get("saved_order", 0),
+        )
+        st.session_state.selected_session = active
+        st.session_state["_open_session_next"] = active
+    st.session_state["confirm_delete_session_id"] = None
+    st.session_state["_session_flash"] = (
+        "Đã xóa phiên cùng kết quả, kịch bản và form video liên quan."
+    )
+
+
 # On a rerun after creating or opening a session, set the active session directly.
 # The saved-session buttons are the only navigation controls; no top dropdown.
 if "_open_session_next" in st.session_state:
