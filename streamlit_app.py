@@ -3,12 +3,15 @@ import re
 import uuid
 import time
 from concurrent.futures import ThreadPoolExecutor
+from io import BytesIO
 from pathlib import Path
 
 import streamlit.components.v1 as components
 from streamlit.runtime import exists as streamlit_runtime_exists
 
+import requests
 import streamlit as st
+from PIL import Image
 from youtube_transcript_api import YouTubeTranscriptApi
 from api_clients import (PROVIDERS, TransientProviderError, generate_text, list_models,
                          validate_base_url, migrate_claude_settings,
@@ -28,7 +31,7 @@ from session_name_controls import session_name_control, rename_record
 
 st.set_page_config(page_title="LMT Studio Pro", page_icon="🎬", layout="wide")
 st.title("🎬 LMT Studio Pro")
-st.caption("Phụ đề YouTube • Dịch đa ngôn ngữ • Prompt hình ảnh • SEO • Quản lý phiên")
+st.caption("Phụ đề YouTube • Dịch đa ngôn ngữ • Prompt hình ảnh • SEO • Thumbnail gốc • Quản lý phiên")
 
 # Disable mouse-hover explanations throughout the app. Labels, click-based
 # controls (including advanced options), and screen-reader accessible names
@@ -41,6 +44,17 @@ st.markdown(
     [data-testid="stTooltipContent"],
     [data-testid="stTooltipHoverTarget"] {
         display: none !important;
+    }
+    /* Scope blue styling ONLY to the original-thumbnail download button. */
+    .st-key-original_thumbnail_download [data-testid="stDownloadButton"] button {
+        background-color: #2563eb !important;
+        border-color: #2563eb !important;
+        color: #fff !important;
+    }
+    .st-key-original_thumbnail_download [data-testid="stDownloadButton"] button:hover {
+        background-color: #1d4ed8 !important;
+        border-color: #1d4ed8 !important;
+        color: #fff !important;
     }
     </style>
     """,
@@ -1375,6 +1389,42 @@ def show_background_job_progress():
 
 
 show_background_job_progress()
+
+
+@st.cache_data(ttl=3600, show_spinner=False, max_entries=100)
+def get_thumbnail(video_id):
+    """Fetch the highest available YouTube thumbnail only once per cached ID."""
+    for quality in ("maxresdefault", "sddefault", "hqdefault", "mqdefault"):
+        try:
+            response = requests.get(
+                f"https://i.ytimg.com/vi/{video_id}/{quality}.jpg",
+                timeout=6,
+                allow_redirects=False,
+            )
+            response.raise_for_status()
+            with Image.open(BytesIO(response.content)) as thumb:
+                if thumb.width >= 300:
+                    return response.content
+        except (requests.RequestException, OSError, ValueError):
+            continue
+    return None
+
+
+# Keep the original preview/download without restoring paid Thumbnail AI editing.
+if vid:
+    st.subheader("🖼️ Thumbnail gốc chất lượng cao")
+    thumbnail = get_thumbnail(vid)
+    if thumbnail:
+        st.image(thumbnail, width=500)
+        with st.container(key="original_thumbnail_download"):
+            st.download_button(
+                "⬇️ Tải thumbnail gốc", thumbnail,
+                file_name=f"thumbnail-{vid}.jpg", mime="image/jpeg",
+                type="primary", key=f"thumb_{sid}_{vid}",
+            )
+    else:
+        st.caption("Không lấy được thumbnail gốc từ YouTube cho video này.")
+
 
 # Original transcript, title and description are retained internally for processing,
 # but only target-language results are shown to the user.
