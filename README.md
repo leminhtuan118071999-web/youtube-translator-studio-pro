@@ -11,17 +11,24 @@ Chọn khu vực trong thanh bên bằng nút chọn **Ứng dụng**. Cả hai 
 hiển thị luân phiên ngay trong cùng `streamlit_app.py` (một Streamlit
 entrypoint duy nhất): **không dùng `st.page_link` tới trang chưa được
 đăng ký**, nên không còn phụ thuộc vào cơ chế nhận diện tệp `pages/`.
-Các bước đang chạy của YouTube Translator được giữ trong cùng phiên Streamlit
-khi chuyển sang AI33 và ngược lại, miễn là máy chủ/phiên đang tồn tại.
+Các bước đang chạy của YouTube Translator được giữ khi chuyển sang
+AI33 và ngược lại. App còn lưu **mã tác vụ ngẫu nhiên** trong dữ liệu phiên
+(không lưu API key vào bản sao lưu); nhờ đó, khi tải lại trang trên cùng
+website/tài khoản và máy chủ Streamlit **chưa khởi động lại**, app có thể
+kết nối lại tác vụ đang chạy, hiển thị tiến độ và nhận kết quả đã xong.
+Tác vụ được phân tách theo mã phiên và tài khoản đăng nhập (nếu có).
 Cửa sổ AI33 vẫn do AI33 quản lý, không nhận API key hoặc dữ liệu phiên LMT.
 
-**Giới hạn quan trọng:** Nhúng website AI33 có thể bị chặn bởi chính sách
-iframe hoặc đăng nhập của AI33, điều chưa được xác thực trên trình duyệt thực.
-Chuyển khu vực có thể tải lại iframe. Việc đóng/tải lại trang, mất kết nối
-phiên hoặc Streamlit Cloud khởi động lại **không đảm bảo** các tác vụ đã chạy
-đến hoàn thành: worker hiện ở bộ nhớ máy chủ, chưa có hàng đợi bền vững.
-Muốn chạy khi offline cần máy chủ worker độc lập và lưu trạng thái/kết quả
-dài hạn; với AI33 cần tích hợp API và task ID hợp lệ.
+**Giới hạn quan trọng:** Cơ chế kết nối lại chỉ tồn tại **trong bộ nhớ
+tiến trình máy chủ** và giữ kết quả hoàn thành chờ người dùng quay lại tối
+đa 24 giờ; đây **không phải** hàng đợi bền vững. Nếu Streamlit Cloud khởi
+động lại, dọn cache, đổi tiến trình hoặc browser không kịp lưu mã tác vụ,
+công việc vẫn có thể gián đoạn. Nếu bạn đóng trang trong lúc đang chạy,
+việc hoàn thành phụ thuộc máy chủ tiếp tục hoạt động. Nhúng AI33 có thể bị
+chặn bởi chính sách iframe; khi chuyển khu vực, iframe có thể tải lại.
+Muốn bảo đảm xử lý ngay cả khi máy chủ ngừng hoạt động cần một worker độc
+lập với queue và lưu kết quả bền vững. Với AI33 cần tích hợp API và
+`task_id` thực của nhà cung cấp.
 
 ## ☁️ Tự động lưu toàn bộ dữ liệu và cấu hình API qua lần đăng nhập sau
 
@@ -82,7 +89,7 @@ Tài liệu tích hợp Supadata: https://github.com/supadata-ai/skills/blob/mai
 - Tối đa 3 tác vụ đồng thời trong một phiên kết nối; máy chủ chạy tối đa 3 luồng worker. Nút **Xóa tất cả phiên đã lưu** yêu cầu xác nhận, hủy các tác vụ chưa chạy và yêu cầu tác vụ đang chạy ngừng ở bước tiếp theo.
 - Nếu phụ đề hoặc API lỗi ở bất cứ bước nào, phiên vẫn giữ trong danh sách kèm lý do lỗi. Các phần đã xử lý thành công xuất hiện khi bạn mở lại phiên; có thể thử chạy lại. Worker chia sẻ kết quả từng bước với giao diện thay vì chỉ đến cuối mới lưu.
 
-**Giới hạn kỹ thuật:** Xử lý nền vẫn chạy trong bộ nhớ Streamlit, không phải hàng đợi bền vững. Nếu tab bị đóng hoặc máy chủ khởi động lại trong lúc đang chạy, tác vụ có thể dừng. Với Supabase, phần kết quả đã đồng bộ được giữ theo tài khoản; nếu chưa có Supabase thì bản phiên đã lưu trong trình duyệt cùng máy có thể được khôi phục (không bảo đảm khi trình duyệt bị xóa dữ liệu). Muốn đảm bảo tác vụ vẫn hoàn thành sau khi server khởi động lại cần job queue riêng.
+**Giới hạn kỹ thuật:** Nếu chỉ **tải lại hoặc đóng tab**, tác vụ có thể tiếp tục chạy trong tiến trình Streamlit còn hoạt động; sau khi quay lại, mã tác vụ đã lưu giúp nối lại Future/tiến độ/kết quả nếu job vẫn còn trong registry (kết quả đã xong được giữ tối đa 24 giờ). Nếu server bị khởi động lại hoặc cache bị dọn, worker sẽ mất; các phiên đã lưu chuyển sang trạng thái gián đoạn. Supabase lưu bản sao theo tài khoản, trình duyệt lưu bản phiên nội bộ, nhưng **không thay thế hàng đợi worker bền vững**. Cần backend luôn chạy và lưu job riêng để bảo đảm chạy đến cùng sau khi máy chủ ngừng.
 
 ## 🎨 Màu nút quản lý phiên
 

@@ -16,8 +16,8 @@ jobs:
       - name: Install dependencies
         run: pip install -r requirements.txt
       - name: Check Python syntax
-        run: python -m py_compile streamlit_app.py browser_session_store.py copy_buttons.py session_name_controls.py api_clients.py background_jobs.py groq_pacing.py transcript_sources.py persistent_store.py test_persistent_store.py test_browser_session_store.py test_copy_buttons.py test_session_name_controls.py test_api_clients.py test_background_jobs.py test_transcript_sources.py test_streamlit_smoke.py
+        run: python -m py_compile streamlit_app.py background_registry.py test_background_registry.py browser_session_store.py copy_buttons.py session_name_controls.py api_clients.py background_jobs.py groq_pacing.py transcript_sources.py persistent_store.py test_persistent_store.py test_browser_session_store.py test_copy_buttons.py test_session_name_controls.py test_api_clients.py test_background_jobs.py test_transcript_sources.py test_streamlit_smoke.py
       - name: Run API provider unit tests
-        run: python -m unittest -v test_api_clients.py test_background_jobs.py test_groq_pacing.py test_transcript_sources.py test_persistent_store.py test_browser_session_store.py test_copy_buttons.py test_session_name_controls.py
+        run: python -m unittest -v test_api_clients.py test_background_jobs.py test_background_registry.py test_groq_pacing.py test_transcript_sources.py test_persistent_store.py test_browser_session_store.py test_copy_buttons.py test_session_name_controls.py
       - name: Run Streamlit UI smoke tests
         run: python -m unittest -v test_streamlit_smoke.py

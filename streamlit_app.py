@@ -17,6 +17,7 @@ from api_clients import (PROVIDERS, TransientProviderError, generate_text, list_
                          validate_base_url, migrate_claude_settings,
                          migrate_free_provider_settings)
 from background_jobs import JobProgress, run_full_job
+from background_registry import JobRegistry
 from transcript_sources import parse_uploaded_subtitles
 from persistent_store import (
     backup_state, configured, get_config, sign_in, sign_up,
@@ -484,8 +485,39 @@ if "background_jobs" not in st.session_state:
 
 @st.cache_resource
 def get_job_executor():
-    # Shared worker pool only; job results stay attached to each Streamlit session.
+    # Shared worker pool, not tied to any one browser connection.
     return ThreadPoolExecutor(max_workers=3, thread_name_prefix="youtube-translation")
+
+
+@st.cache_resource
+def get_job_registry():
+    # Keep active Futures accessible when a browser tab disconnects and returns.
+    # This process-local registry does NOT survive Streamlit server restart.
+    return JobRegistry()
+
+
+def _job_scope():
+    auth = st.session_state.get("cloud_auth") if CLOUD_ENABLED else None
+    if isinstance(auth, dict) and auth.get("user_id"):
+        return "account:" + str(auth["user_id"])
+    return "browser"
+
+
+def reattach_background_jobs():
+    """Reattach worker references from restored workspaces, using opaque run IDs."""
+    jobs = st.session_state.background_jobs
+    scope = _job_scope()
+    for session_id, record in st.session_state.workspaces.items():
+        if session_id in jobs or record.get("job_state") not in ("running", "interrupted"):
+            continue
+        run_id = record.get("job_run_id")
+        if not run_id:
+            continue
+        job = get_job_registry().lookup(run_id, session_id, scope)
+        if job:
+            jobs[session_id] = job
+            record["job_state"] = "running"
+            record["job_error"] = ""
 
 
 # Existing workspaces may come from older versions; only completed work is saved.
@@ -522,12 +554,14 @@ def collect_completed_jobs():
     changed = False
     for session_id, job in list(st.session_state.background_jobs.items()):
         if session_id not in st.session_state.workspaces:
+            get_job_registry().cancel(job["run_id"], session_id, _job_scope())
             job["progress"].cancel()
             del st.session_state.background_jobs[session_id]
             continue
 
         record = st.session_state.workspaces[session_id]
         if record.get("job_run_id") != job["run_id"]:
+            get_job_registry().cancel(job["run_id"], session_id, _job_scope())
             job["progress"].cancel()
             del st.session_state.background_jobs[session_id]
             continue
@@ -574,6 +608,8 @@ def collect_completed_jobs():
                 f"⚠️ Phiên '{record['name']}' gặp lỗi. "
                 "Nhấn tên phiên để xem lý do và chạy lại."
             )
+        record["job_run_id"] = ""
+        get_job_registry().discard(job["run_id"], session_id, _job_scope())
         changed = True
     return changed
 
@@ -628,7 +664,9 @@ def delete_saved_session(session_id):
     """
     if session_id not in st.session_state.workspaces:
         return
-    removed_name = st.session_state.workspaces[session_id].get("name", "Phiên")
+    removed = st.session_state.workspaces[session_id]
+    removed_name = removed.get("name", "Phiên")
+    get_job_registry().cancel(removed.get("job_run_id"), session_id, _job_scope())
     job = st.session_state.background_jobs.pop(session_id, None)
     if job:
         job["progress"].cancel()
@@ -667,7 +705,9 @@ def delete_saved_session(session_id):
 if "_open_session_next" in st.session_state:
     st.session_state.selected_session = st.session_state.pop("_open_session_next")
 
-# Always collect finished work even while the AI33 view is on screen.
+# Reconnect to a still-running Future after Streamlit creates a fresh session
+# for a reloaded browser tab, then collect any finished work.
+reattach_background_jobs()
 collect_completed_jobs()
 
 # Use two independent views inside ONE Streamlit entrypoint. Unlike page_link,
@@ -846,6 +886,10 @@ with st.sidebar:
         new_session["saved_order"] = 1
         st.session_state.saved_session_order = 1
         # Cancel queued jobs; running requests may finish but their results are discarded.
+        for old_session_id, old_session in st.session_state.workspaces.items():
+            get_job_registry().cancel(
+                old_session.get("job_run_id"), old_session_id, _job_scope()
+            )
         for job in st.session_state.background_jobs.values():
             job["progress"].cancel()
             job["future"].cancel()
@@ -1007,6 +1051,10 @@ with st.sidebar:
             except Exception as exc:
                 st.error(f"Chưa thể lưu trước khi đăng xuất: {exc}")
             else:
+                for old_sid, old_record in st.session_state.workspaces.items():
+                    get_job_registry().cancel(
+                        old_record.get("job_run_id"), old_sid, _job_scope()
+                    )
                 for job in st.session_state.background_jobs.values():
                     job["progress"].cancel()
                     job["future"].cancel()
@@ -1504,6 +1552,9 @@ if st.button("🚀 BẮT ĐẦU TẠO TOÀN BỘ", type="primary",
                 "progress": progress,
                 "run_id": run_id,
             }
+            get_job_registry().register(
+                run_id, sid, _job_scope(), job_future, progress
+            )
             st.session_state["_session_flash"] = (
                 f"⏳ Phiên '{session['name']}' đã chạy nền. "
                 "Bạn có thể nhấn Tạo phiên mới, phiên này vẫn tiếp tục."
