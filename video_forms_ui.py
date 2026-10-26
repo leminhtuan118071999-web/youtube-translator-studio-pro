@@ -161,7 +161,13 @@ def render_video_forms(session, sid, language, *, ai, api_key,
     retry_clicked = st.button(
         "🔄 Chạy lại riêng — Form video 8 giây",
         key=f"retry_video_forms_{sid}",
-        disabled=cannot_generate or plan is None,
+        # A saved plan already contains the total voice duration and words.
+        # Let recovery after a server restart work without re-uploading MP3.
+        disabled=(
+            not translated or plan is None or stale
+            or session.get("job_state") == "running"
+            or session.get("video_job_state") == "running"
+        ),
     )
     if generate_clicked or retry_clicked:
         if not api_key.strip():
@@ -172,11 +178,14 @@ def render_video_forms(session, sid, language, *, ai, api_key,
             try:
                 # Sending duration and translated text is sufficient. Do not
                 # upload audio or call a speech transcription API.
+                saved_plan = plan if retry_clicked and plan is not None and not stale else None
                 launch_video_job(
-                    seconds, audio_hash, upload.name, translated, language,
-                    style, (session.get("character_bible", "") or ""),
-                    json.dumps(plan, ensure_ascii=False)
-                    if retry_clicked and plan is not None and not stale else None,
+                    (saved_plan.get("audio_duration_seconds") if saved_plan else seconds),
+                    (saved_plan.get("audio_sha256") if saved_plan else audio_hash),
+                    (saved_plan.get("audio_filename", "") if saved_plan else upload.name),
+                    translated, language, style,
+                    (session.get("character_bible", "") or ""),
+                    json.dumps(saved_plan, ensure_ascii=False) if saved_plan else None,
                 )
             except (TypeError, ValueError, RuntimeError, KeyError) as exc:
                 st.error(f"Không thể khởi động tạo form nền: {exc}")
