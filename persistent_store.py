@@ -18,7 +18,7 @@ CONTENT_FIELDS = (
     "name", "url", "source", "title", "description", "translated",
     "prompts", "metadata", "language", "new_title", "new_description",
     "seo_tags", "saved_order", "saved", "processed", "job_state",
-    "job_error", "job_percent", "job_stage", "job_run_id",
+    "job_error", "job_percent", "job_stage", "job_run_id", "video_forms",
 )
 API_WIDGET_PREFIXES = ("api_key_", "api_base_", "api_model_id_", "api_format_", "api_auth_mode_")
 API_WIDGET_EXACT = ("api_provider", "supadata_api_key_input")

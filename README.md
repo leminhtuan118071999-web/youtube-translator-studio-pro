@@ -56,6 +56,37 @@ lập với queue và lưu kết quả bền vững. Với AI33 cần tích hợ
 - Khi có **Supabase**, tất cả cài đặt trên được mã hóa Fernet và đồng bộ vào dữ liệu tài khoản. Nếu không có Supabase, các cài đặt được mã hóa và lưu **trên trình duyệt hiện tại** như mô tả ở trên.
 - Các giá trị được giữ cho tới khi người dùng thay đổi. Khi xóa nội dung một ô key, giá trị mới được ghi nhận; key dùng chung trong Streamlit Secrets vẫn có thể được chọn làm dự phòng mà không sao chép vào lưu trữ cá nhân.
 
+## 🎬 Form video 8 giây — ngay cạnh Tiêu đề • Mô tả • SEO
+
+Khu vực kết quả của **YouTube Translator** có tab thứ ba
+**🎬 Form video 8 giây**, đặt ngay sau **📝 Tiêu đề • Mô tả • SEO**.
+Đây là **công cụ viết prompt/form cho video generator**, **không trực tiếp
+xuất MP4**; người dùng tự chọn chức năng tạo và không làm tăng lượt gọi API
+trong quy trình **🚀 BẮT ĐẦU TẠO TOÀN BỘ**.
+
+- **Đúng bản dịch/ngôn ngữ:** Lời đọc trong mỗi form lấy nguyên từ bản dịch
+  đích của đúng phiên, chia theo thứ tự không bỏ sót từ. AI chỉ viết mô tả
+  hình ảnh, không được đổi lời đọc hay dịch lại.
+- **8 giây/form:** Form chứa số thứ tự, timecode từ 0–8s, 8–16s... và lời
+  đọc tương ứng. Khi ghép các clip 8 giây, chuyển cảnh nằm trong 0,4 giây
+  cuối của clip, không cộng thêm thời lượng.
+- **Nhân vật thống nhất:** Một hồ sơ nhân vật/bối cảnh cố định được sinh
+  từ nội dung bản dịch và nhắc lại trong từng prompt để giữ đặc điểm ngoại
+  hình, trang phục, bối cảnh và phong cách giữa các cảnh.
+- **Kiểm tra giọng đọc:** Nếu chưa có audio, app ước tính số form qua
+  tốc độ đọc do người dùng chọn. Có thể tải MP3/WAV/M4A/OGG giọng đọc để
+  lấy tổng thời lượng rồi tính số form chính xác hơn. **Không thể bảo đảm
+  đồng bộ từng từ với âm thanh chỉ dựa trên tổng thời lượng**; cần
+  timestamp/forced alignment và chỉnh nhịp ở phần mềm dựng phim.
+- **Tạo theo lô 6 form:** Tránh gọi API quá nhiều cùng lúc. Có thể tạo tiếp
+  các form còn thiếu, chỉnh sửa prompt hoặc hiệu ứng chuyển cảnh từng form,
+  sao chép và tải tất cả form dạng TXT/JSON. Các form lưu riêng trong đúng
+  phiên dịch; khi bản dịch/ngôn ngữ thay đổi, app cảnh báo form đã cũ.
+- **Giới hạn:** 240 form cho một lần lập kế hoạch, tương đương 32 phút.
+  Nếu cần dài hơn, chia nội dung thành các phần nhỏ. Prompt không cam kết
+  video generator sẽ chấp nhận mọi chỉ dẫn như tốc độ chuyển cảnh,
+  độ dài clip hoặc đồng nhất nhân vật tuyệt đối.
+
 ## 🚀 Tạo toàn bộ bằng một nút
 
 1. Ở thanh bên trái, chọn nhà cung cấp AI, Base URL, Model ID và nhập API key. **🌍 Ngôn ngữ đích** được chọn ở khu vực chính, ngay trên nút **🚀 BẮT ĐẦU TẠO TOÀN BỘ**.
