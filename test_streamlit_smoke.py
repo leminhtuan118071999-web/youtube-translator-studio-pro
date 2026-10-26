@@ -137,7 +137,7 @@ class StreamlitSmokeTests(unittest.TestCase):
         self.assertIn('disabled=cannot_generate', forms)
         self.assertIn('whisper_word_timestamps(', forms)
         self.assertIn('except TransientAudioAPIError as exc:', forms)
-        self.assertIn('new_plan["alignment_warning"]', forms)
+        self.assertIn('working_plan["alignment_warning"]', forms)
         self.assertIn('if plan.get("alignment_warning"):', forms)
         self.assertIn('audio_aligned_plan(', forms)
         self.assertIn('"🎬 Tạo form 8 giây theo giọng đọc"', forms)
