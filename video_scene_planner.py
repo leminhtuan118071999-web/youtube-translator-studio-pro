@@ -246,3 +246,37 @@ def continuous_video_forms_text(plan):
             block += f"\nNext: {transition}"
         blocks.append(block)
     return "\n\n".join(blocks)
+
+
+VIDEO_FORMS_PER_PANEL = 99
+
+
+def grouped_video_forms(plan, group_size=VIDEO_FORMS_PER_PANEL):
+    """Return nonempty 99-slot ranges, preserving original scene numbers.
+
+    Boundaries are based on the scene's sequence position, NOT the number of
+    completed prompts: scenes 1-99 belong in panel 1, 100-198 in panel 2.
+    Incomplete slots are omitted from the copied text, without shifting a
+    later scene into an earlier panel.
+    """
+    if not isinstance(group_size, int) or group_size <= 0:
+        raise ValueError("Mỗi ô phải chứa số lượng form dương.")
+    scenes = plan.get("scenes", [])
+    if not isinstance(scenes, list):
+        raise ValueError("Danh sách form không hợp lệ.")
+    result = []
+    for start in range(0, len(scenes), group_size):
+        chunk = scenes[start:start + group_size]
+        filled = [scene for scene in chunk if isinstance(scene, dict)
+                  and str(scene.get("visual_prompt", "")).strip()]
+        if not filled:
+            continue
+        content = continuous_video_forms_text({"scenes": filled})
+        result.append({
+            "panel": start // group_size + 1,
+            "first": start + 1,
+            "last": min(start + group_size, len(scenes)),
+            "completed": len(filled),
+            "content": content,
+        })
+    return result
