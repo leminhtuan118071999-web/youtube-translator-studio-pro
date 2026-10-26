@@ -47,7 +47,7 @@ Tài liệu tích hợp Supadata: https://github.com/supadata-ai/skills/blob/mai
 
 - Nhấn **🚀 BẮT ĐẦU TẠO TOÀN BỘ** để tạo tác vụ chạy nền; ứng dụng **trả lại giao diện ngay** thay vì giữ người dùng ở trang chờ.
 - Trong lúc phiên A đang chạy (⏳ kèm phần trăm), nhấn **➕ Tạo phiên mới** rồi nhập URL cho phiên B và bắt đầu tiếp; công việc của A tiếp tục trên luồng riêng.
-- **📚 Danh sách phiên đã chạy** hiển thị phiên đang chạy (⏳), hoàn thành (✅) và **mọi phiên đã chạy nhưng lỗi (⚠️), kể cả khi chưa lấy được phụ đề hoặc chưa có bản dịch**. Nhấn tên để xem kết quả và thông báo lỗi; nhấn ✏️ để đổi tên hoặc 🗑️ để xóa riêng phiên đó, có bước xác nhận.
+- **📚 Danh sách phiên đã chạy** hiển thị phiên đang chạy (⏳), hoàn thành (✅) và **mọi phiên đã chạy nhưng lỗi (⚠️), kể cả khi chưa lấy được phụ đề hoặc chưa có bản dịch**. Nhấn một lần vào tên để xem kết quả/trạng thái; nhấp đúp vào ô tên để đổi ngay tại chỗ. Nút Xóa đỏ bên cạnh có bước xác nhận.
 - Sau khi API xử lý xong, kết quả của đúng phiên đó sẽ tự được đưa vào dữ liệu phiên và danh sách tự cập nhật. Có thể mở lại để copy bản dịch, 20 prompt, tiêu đề, mô tả, SEO.
 - Tối đa 3 tác vụ đồng thời trong một phiên kết nối; máy chủ chạy tối đa 3 luồng worker. Nút **Xóa tất cả phiên đã lưu** yêu cầu xác nhận, hủy các tác vụ chưa chạy và yêu cầu tác vụ đang chạy ngừng ở bước tiếp theo.
 - Nếu phụ đề hoặc API lỗi ở bất cứ bước nào, phiên vẫn giữ trong danh sách kèm lý do lỗi. Các phần đã xử lý thành công xuất hiện khi bạn mở lại phiên; có thể thử chạy lại. Worker chia sẻ kết quả từng bước với giao diện thay vì chỉ đến cuối mới lưu.
@@ -59,7 +59,8 @@ Tài liệu tích hợp Supadata: https://github.com/supadata-ai/skills/blob/mai
 - **➕ Tạo phiên mới:** nút nền xanh lá.
 - Trong **📚 Danh sách phiên đã chạy**, tên phiên **hoàn thành** có nền xanh lá; phiên **đang chạy, chưa xong, lỗi hoặc bị gián đoạn** có nền đỏ.
 - **Phiên đang được chọn để xem** luôn có nền vàng, không phụ thuộc trạng thái xử lý. Khi mở sang phiên khác, ô đang xem chuyển vàng còn ô vừa bỏ chọn trở về xanh/đỏ đúng trạng thái.
-- Hai nút **Đổi tên** (xanh) và **Xóa** (đỏ) cũng như bước xác nhận xóa vẫn giữ nguyên.
+- **Nhấp một lần vào ô tên** để mở phiên; **nhấp đúp vào chính ô đó** để chỉnh sửa tên tại chỗ, nhấn **Enter** hoặc nhấp ra ngoài để lưu; nhấn **Esc** để hủy sửa. Nút Đổi tên riêng đã được bỏ.
+- Chỉ còn nút **Xóa** nền đỏ bên phải ô tên; vẫn cần xác nhận trước khi xóa. Ô tên không còn biểu tượng dấu tích xanh (✅ hoặc ✓), vì màu nền đã biểu thị trạng thái.
 
 ## 📁 Phần quản lý phiên ở góc trái (đã tối giản)
 
@@ -69,7 +70,7 @@ Ngay bên dưới là **📁 Quản lý phiên làm việc**:
 1. Nhấn **➕ Tạo phiên mới**: nếu phiên cũ đang xử lý, app **không dừng tác vụ cũ**; bạn có thể bắt đầu công việc khác. Khi phiên cũ hoàn thành, app tự lưu kết quả vào **📚 Danh sách phiên đã chạy** trong kết nối hiện tại. Phiên chưa chạy sẽ không vào danh sách.
 2. Khi đã nhấn **BẮT ĐẦU TẠO TOÀN BỘ**, phiên xuất hiện ngay là **⏳ đang chạy**. Sau khi hoàn tất hiện **✅**. Nếu lỗi ở bước đầu hoặc giữa quy trình, phiên vẫn hiển thị **⚠️**, đồng thời có thông báo nguyên nhân khi mở phiên. Phiên mới chưa bấm Bắt đầu không xuất hiện.
 3. Trong danh sách, **nhấn trực tiếp vào tên phiên** để xem lại phụ đề, bản dịch, prompt và SEO; **không có nút “Mở”**.
-4. Để đổi tên, nhấn **✏️** cạnh tên, nhập tên mới rồi nhấn Enter. Phiên đang hoạt động có dấu ✓.
+4. Để đổi tên, **nhấp đúp trực tiếp vào ô tên phiên**, nhập tên mới ngay tại ô rồi nhấn Enter (hoặc nhấp ra ngoài) để lưu. Có thể nhấn Esc để hủy. **Không còn nút Đổi tên riêng và không có dấu ✓/✅ bên trong tên.**
 5. Với mỗi phiên, nhấn **Xóa (đỏ)** bên cạnh tên rồi **✅ Xác nhận xóa** để xóa riêng phiên đó. App hủy tác vụ của đúng phiên, bỏ bản dịch, prompt, SEO và dữ liệu tạm gắn với phiên, sau đó đồng bộ danh sách đã giảm vào Supabase (nếu có). Nếu dùng bộ nhớ trình duyệt, bản lưu tự được ghi đè và xác nhận cập nhật; khi Supabase đang dùng, app cũng xóa bản lưu trình duyệt cũ để tránh khôi phục nhầm sau này. **🗑️ Xóa tất cả phiên đã lưu** có ô xác nhận riêng và đặt lại về một phiên trống. API key/cấu hình chung không bị xóa. **Giới hạn:** Không thể tự xóa các file JSON đã tải xuống, ảnh/đoạn văn đã sao chép sang nơi khác, dữ liệu lưu của những trình duyệt/thiết bị khác hoặc bản sao lưu riêng của nhà cung cấp. Nếu có nhiều tab đang mở cùng lúc, hãy tải lại chúng để tránh ghi đè dữ liệu cũ.
 
 **Giới hạn:** Chưa cấu hình Supabase, danh sách phiên được tự lưu trong trình duyệt này (không lưu API key) và sẽ khôi phục khi mở lại cùng địa chỉ. Dữ liệu có thể mất nếu xóa site data hoặc vượt dung lượng; hiện giao diện không còn nút tải/khôi phục JSON thủ công. Khi Supabase được bật, dữ liệu đồng bộ theo tài khoản. Công việc đang chạy vẫn có thể gián đoạn khi máy chủ khởi động lại.
