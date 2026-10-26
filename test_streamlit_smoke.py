@@ -15,6 +15,49 @@ class StreamlitSmokeTests(unittest.TestCase):
         self.app.session_state["_browser_sessions_restored"] = True
         self.app.session_state["_session_name_test_fallback"] = True
 
+    def test_thumbnail_key_autodetects_model_once_and_manual_rescan(self):
+        from unittest.mock import patch
+
+        app = self.app.run()
+        self.assertFalse(app.exception, [str(x.message) for x in app.exception])
+        field = next(
+            item for item in app.get("text_input")
+            if item.key and item.key.endswith("_image_key_Gemini")
+        )
+        sid = app.session_state["selected_session"]
+        with patch(
+            "thumbnail_ui.discover_image_models",
+            return_value=["gemini-3.1-flash-image", "gemini-2.5-flash-image"],
+        ) as scanner:
+            field.set_value("test-private-key-123")
+            app.run()
+            self.assertFalse(app.exception, [str(x.message) for x in app.exception])
+            scanner.assert_called_once_with("Gemini", "test-private-key-123")
+            self.assertEqual(
+                app.session_state[f"thumb_{sid}_image_model_Gemini"],
+                "gemini-3.1-flash-image",
+            )
+            entry = app.session_state[f"thumb_{sid}_image_discovery_Gemini"]
+            self.assertNotIn("test-private-key-123", str(entry))
+            app.run()
+            self.assertEqual(scanner.call_count, 1)
+            next(
+                btn for btn in app.button
+                if btn.key == f"thumb_{sid}_image_rescan_Gemini"
+            ).click()
+            app.run()
+            self.assertEqual(scanner.call_count, 2)
+            next(
+                item for item in app.get("text_input")
+                if item.key == f"thumb_{sid}_image_key_Gemini"
+            ).set_value("another-private-key-456")
+            app.run()
+            self.assertEqual(scanner.call_count, 3)
+            self.assertNotIn(
+                "another-private-key-456",
+                str(app.session_state[f"thumb_{sid}_image_discovery_Gemini"]),
+            )
+
     def test_thumbnail_ai_reuses_main_gemini_api_key(self):
         app = self.app.run()
         provider = next(
