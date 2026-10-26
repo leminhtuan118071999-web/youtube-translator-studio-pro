@@ -1,3 +1,15 @@
+## Ước tính form theo thời lượng và bản dịch — không phân tích giọng đọc
+
+Sau khi tải file MP3/WAV/M4A/OGG, ứng dụng chỉ đọc **độ dài audio**,
+kết hợp **bản dịch ngôn ngữ đích** để ước tính tốc độ đọc và phân bổ
+nguyên văn lời vào các khung 8 giây. Số form tự động =
+**làm tròn lên (thời lượng audio ÷ 8)**, tối đa 240 form.
+Không gửi file âm thanh đến Whisper hoặc dịch vụ nhận dạng giọng nói,
+không phát sinh API phân tích audio. Sau khi nhấn **Tạo form 8 giây
+theo giọng đọc**, hệ thống tự viết đủ số form với thanh tiến trình.
+Đây là **ước tính**, không thể đảm bảo khớp chính xác lúc người đọc
+dừng/ngắt câu; cần đối chiếu trong phần mềm dựng phim.
+
 ## 🔄 Chạy lại riêng từng mục khi một bước bị lỗi
 
 **Bước đầu tiên vẫn là 🚀 BẮT ĐẦU TẠO TOÀN BỘ** để tự chạy
