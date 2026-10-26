@@ -1,6 +1,6 @@
 # 🎬 LMT Studio Pro
 
-Ứng dụng Streamlit xử lý video YouTube: trích xuất phụ đề có sẵn (khi YouTube cho phép), dịch bằng API đa nền tảng, tạo 20 prompt hình ảnh, dịch tiêu đề/mô tả và SEO.
+Ứng dụng Streamlit xử lý video YouTube: trích xuất phụ đề có sẵn (khi YouTube cho phép), dịch bằng API đa nền tảng, tạo 20 prompt hình ảnh, dịch tiêu đề/mô tả và SEO, tự hiển thị thumbnail gốc và cung cấp nút tải ảnh màu xanh dương.
 
 ## ☁️ Tự động lưu toàn bộ dữ liệu và cấu hình API qua lần đăng nhập sau
 
@@ -184,13 +184,18 @@ Tại thanh bên trái:
 
 **Lưu ý:** Các dịch vụ OpenAI-compatible dùng endpoint chat completions; Anthropic dùng Messages API. Không phải mọi model đều hỗ trợ chức năng/dung lượng giống nhau. Quét model có thể không khả dụng trên một số server, nhưng vẫn có thể nhập thủ công. Base URL tùy chỉnh chỉ chấp nhận HTTPS công khai, chặn địa chỉ nội bộ và không tự theo chuyển hướng HTTP. Chỉ cung cấp API key cho máy chủ bạn tin tưởng vì key sẽ được gửi tới Base URL đã nhập. API có thể tính phí. Nếu app ở chế độ công khai và dùng key trong Secrets, cần bật hạn chế truy cập để tránh người khác sử dụng API của bạn.
 
-## Hiệu năng giao diện
+## Thumbnail gốc và hiệu năng
 
-LMT Studio Pro không tự tải thumbnail YouTube và không còn bảng Thumbnail AI.
-Điều này loại bỏ các lần tải ảnh tự động khi mở/chuyển phiên và các lần quét
-model ảnh không cần thiết. Các chức năng dịch phụ đề, tạo prompt hình ảnh,
-SEO, cấu hình API đa nền tảng và quản lý phiên vẫn giữ nguyên.
-Không thay đổi lược đồ dữ liệu hay tự xóa phiên và khóa API đã cấu hình.
+Khi dán link video YouTube hợp lệ, LMT Studio Pro tự tải thumbnail gốc chất
+lượng cao nhất có sẵn, hiển thị ảnh xem trước và nút **⬇️ Tải thumbnail gốc**
+màu xanh dương (JPG). Tính năng dùng bộ nhớ đệm 1 giờ theo mã video để tránh
+tải ảnh lặp lại trên mỗi lần giao diện cập nhật; không có truy vấn thumbnail
+khi chưa có link video hợp lệ.
+
+Phần Thumbnail AI tạo/sửa/dịch chữ, quét model ảnh và API key dành riêng cho
+thumbnail đã được loại bỏ. Các chức năng dịch phụ đề, tạo prompt hình ảnh, SEO,
+cấu hình API đa nền tảng và quản lý phiên vẫn giữ nguyên. Không thay đổi lược
+đồ dữ liệu hay tự xóa phiên và khóa API đã cấu hình.
 
 ## Triển khai
 
