@@ -127,22 +127,37 @@ class VideoScenePlannerTests(unittest.TestCase):
             apply_ai_batch(plan, bad, expected)
         self.assertTrue(all(s["visual_prompt"] == "" for s in plan["scenes"]))
 
-    def test_copy_all_forms_one_line_each_in_order(self):
+    def test_copy_all_forms_compact_preserves_content_in_order(self):
         plan = narration_plan(" ".join(["story"] * 40), "Tiếng Anh")
         self.assertGreaterEqual(len(plan["scenes"]), 2)
-        plan["scenes"][0]["visual_prompt"] = "A camera zoom.\\nBeautiful lighting."
-        plan["scenes"][1]["visual_prompt"] = "Character walks forward."
+        plan["scenes"][0]["visual_prompt"] = (
+            "Ala in her red coat.\nCamera zoom, dramatic lighting and SFX."
+        )
+        plan["scenes"][1]["visual_prompt"] = (
+            "Ala in her red coat walks forward. Ambient music."
+        )
         out = continuous_video_forms_text(plan)
-        lines = out.splitlines()
-        self.assertEqual(len(lines), 3)
-        self.assertTrue(lines[0].startswith("FORM 001"))
-        self.assertEqual(lines[1], "")
-        self.assertTrue(lines[2].startswith("FORM 002"))
-        self.assertIn("VOICEOVER (Tiếng Anh):", lines[0])
-        self.assertIn("Beautiful lighting.", lines[0])
-        self.assertIn("TRANSITION:", lines[0])
-        self.assertNotIn("TRANSITION:", lines[1])
-        self.assertNotIn("not generated", out)
+        blocks = out.split("\n\n")
+        self.assertEqual(len(blocks), 2)
+        self.assertTrue(blocks[0].startswith("01 | 8s\n"))
+        self.assertTrue(blocks[1].startswith("02 | 8s\n"))
+        self.assertIn("Ala in her red coat.", blocks[0])
+        self.assertIn("Camera zoom, dramatic lighting and SFX.", blocks[0])
+        self.assertIn("Voice: " + plan["scenes"][0]["voiceover"], blocks[0])
+        self.assertIn("Next: crossfade 0.4s", blocks[0])
+        self.assertNotIn("Next:", blocks[1])
+        self.assertNotIn("FORM 001", out)
+        self.assertNotIn("VOICEOVER (", out)
+        self.assertNotIn("VIDEO:", out)
+        self.assertNotIn("TRANSITION:", out)
+        self.assertEqual(out.count("Voice:"), 2)
+
+    def test_copy_all_skips_unfinished_scenes(self):
+        plan = narration_plan(" ".join(["word"] * 80), "Tiếng Anh")
+        plan["scenes"][0]["visual_prompt"] = "A complete visual scene."
+        result = continuous_video_forms_text(plan)
+        self.assertEqual(result.count("Voice:"), 1)
+        self.assertEqual(result.count("01 | 8s"), 1)
 
     def test_character_bible_prompt_uses_target_translation(self):
         text = "Dzisiaj Ala przyszła do domu."
