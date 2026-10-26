@@ -56,6 +56,52 @@ st.markdown(
         border-color: #1d4ed8 !important;
         color: #fff !important;
     }
+    /* Only the two result tabs: distinct outlined tap targets with a gap. */
+    .st-key-result_tabs [data-testid="stTabs"] [role="tablist"] {
+        gap: 16px !important;
+        padding: 6px 2px 12px !important;
+        border-bottom: 0 !important;
+    }
+    .st-key-result_tabs [data-testid="stTabs"] [role="tab"] {
+        min-height: 54px !important;
+        padding: 12px 20px !important;
+        border: 2px solid #94a3b8 !important;
+        border-radius: 12px !important;
+        background-color: #f8fafc !important;
+        color: #1e293b !important;
+        font-weight: 700 !important;
+        white-space: normal !important;
+        text-align: center !important;
+        box-shadow: 0 1px 3px rgba(15, 23, 42, 0.08) !important;
+    }
+    .st-key-result_tabs [data-testid="stTabs"] [role="tab"][aria-selected="true"] {
+        border-color: #2563eb !important;
+        background-color: #eff6ff !important;
+        color: #1d4ed8 !important;
+        box-shadow: 0 0 0 1px #2563eb !important;
+    }
+    .st-key-result_tabs [data-testid="stTabs"] [role="tab"][aria-selected="false"]:hover {
+        border-color: #64748b !important;
+        background-color: #e2e8f0 !important;
+    }
+    .st-key-result_tabs [data-testid="stTabs"] [role="tab"]:focus-visible {
+        outline: 3px solid #60a5fa !important;
+        outline-offset: 3px !important;
+    }
+    /* Replace the thin default active underline with the full button border. */
+    .st-key-result_tabs [data-testid="stTabs"] [data-baseweb="tab-highlight"],
+    .st-key-result_tabs [data-testid="stTabs"] [data-baseweb="tab-border"] {
+        display: none !important;
+    }
+    @media (max-width: 640px) {
+        .st-key-result_tabs [data-testid="stTabs"] [role="tablist"] {
+            gap: 12px !important;
+        }
+        .st-key-result_tabs [data-testid="stTabs"] [role="tab"] {
+            padding: 12px 14px !important;
+            min-height: 56px !important;
+        }
+    }
     </style>
     """,
     unsafe_allow_html=True,
@@ -1394,9 +1440,10 @@ if vid:
 # Original transcript, title and description are retained internally for processing,
 # but only target-language results are shown to the user.
 
-tab_translate, tab_seo = st.tabs(
-    ["🌍 Bản dịch", "📝 Tiêu đề • Mô tả • SEO"]
-)
+with st.container(key="result_tabs"):
+    tab_translate, tab_seo = st.tabs(
+        ["🌍 Bản dịch", "📝 Tiêu đề • Mô tả • SEO"]
+    )
 with tab_translate:
     if st.button("🌍 Dịch lại toàn bộ", key=f"translate_{sid}"):
         if not session["source"].strip():
