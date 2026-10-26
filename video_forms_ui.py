@@ -11,6 +11,7 @@ import streamlit as st
 from video_scene_planner import (
     narration_plan, character_bible_prompt, batch_prompt,
     parse_json_object, apply_ai_batch, source_fingerprint, plan_export_text,
+    continuous_video_forms_text,
 )
 from copy_buttons import copy_all_button
 
@@ -166,6 +167,23 @@ def render_video_forms(session, sid, language, *, ai, api_key,
                     persist_and_rerun()
             except (TypeError, ValueError, RuntimeError, KeyError) as exc:
                 st.error(f"Không thể tạo các form tiếp theo: {exc}")
+
+    st.markdown("**📜 Tất cả form video — liền mạch**")
+    st.caption(
+        "Các form đã viết được nối theo đúng thứ tự: hết một form xuống "
+        "dòng để bắt đầu form tiếp theo. Nút Copy toàn bộ sao chép "
+        "cả lời đọc, prompt và chuyển cảnh, không cần mở từng form."
+    )
+    continuous_text = continuous_video_forms_text(plan)
+    copy_all_button(
+        "📋 Copy toàn bộ form",
+        continuous_text,
+        key=f"copy_all_video_forms_{sid}",
+    )
+    st.code(
+        continuous_text if continuous_text else "Chưa có form hoàn thành.",
+        language=None, wrap_lines=True,
+    )
 
     st.download_button(
         "⬇️ Tải tất cả form (.txt)", plan_export_text(plan),
