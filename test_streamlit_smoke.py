@@ -549,12 +549,52 @@ class StreamlitSmokeTests(unittest.TestCase):
         ]
         self.assertEqual(len(opted_in), 1)
         self.assertEqual(opted_in[0].args[0].value, "📋 Copy toàn bộ bản dịch")
-        # Existing copy actions for prompt/title/description/SEO remain available.
+        # Only translation and SEO copy controls remain.
+        self.assertNotIn("📋 Copy toàn bộ 20 prompt", source)
         for label in (
-            "📋 Copy toàn bộ 20 prompt", "📋 Copy toàn bộ tiêu đề",
-            "📋 Copy toàn bộ mô tả", "📋 Copy toàn bộ từ khóa SEO",
+            "📋 Copy toàn bộ tiêu đề", "📋 Copy toàn bộ mô tả",
+            "📋 Copy toàn bộ từ khóa SEO",
         ):
             self.assertIn(label, source)
+
+    def test_image_prompt_tab_and_generation_removed_but_old_data_preserved(self):
+        """Retain legacy saved prompt content without rendering or regenerating it."""
+        from pathlib import Path
+        from persistent_store import backup_state
+
+        source = Path("streamlit_app.py").read_text(encoding="utf-8")
+        worker = Path("background_jobs.py").read_text(encoding="utf-8")
+        self.assertNotIn("🎨 20 prompt hình ảnh", source)
+        self.assertNotIn("create_20_prompts(", source)
+        self.assertNotIn("parse_saved_prompts(", source)
+        self.assertNotIn("tab_visual", source)
+        self.assertNotIn("fields[\"prompts\"]", worker)
+        self.assertNotIn('progress.publish("prompts"', worker)
+        self.assertIn('["🌍 Bản dịch", "📝 Tiêu đề • Mô tả • SEO"]', source)
+        # Thumbnail original and download button must stay intact.
+        self.assertIn('thumbnail = get_thumbnail(vid)', source)
+        self.assertIn('⬇️ Tải thumbnail gốc', source)
+        self.assertIn('background-color: #2563eb !important', source)
+
+        app = self.app.run()
+        self.assertFalse(app.exception, [str(e.message) for e in app.exception])
+        sid = app.session_state["selected_session"]
+        app.session_state["workspaces"][sid]["prompts"] = "OLD-SAVED-IMAGE-PROMPTS"
+        app.run()
+        self.assertFalse(app.exception, [str(e.message) for e in app.exception])
+        self.assertEqual(
+            app.session_state["workspaces"][sid]["prompts"],
+            "OLD-SAVED-IMAGE-PROMPTS",
+        )
+        snapshot = backup_state(
+            app.session_state["workspaces"], sid,
+            app.session_state["saved_session_order"],
+        )
+        self.assertIn("OLD-SAVED-IMAGE-PROMPTS", repr(snapshot))
+        self.assertFalse(any(
+            button.key and button.key.startswith(("prompts_", "copy_all_prompts_"))
+            for button in app.button
+        ))
 
     def test_translation_and_description_are_collapsed_but_keep_full_text(self):
         app = self.app.run()
