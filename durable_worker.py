@@ -69,6 +69,23 @@ def claim_one(worker_name):
             return cur.fetchone()
 
 
+def fail_exhausted_leases():
+    """Never strand jobs forever after worker crashes on their final attempt."""
+    with connect() as conn:
+        conn.execute("""
+        update public.lmt_durable_jobs
+        set status='failed',
+            error='Đã hết số lần thử lại; hãy kiểm tra API và chạy lại từ phiên.',
+            stage='⚠️ Đã hết số lần thử lại',
+            encrypted_keys=null,lease_owner=null,lease_token=null,
+            lease_expires_at=null,finished_at=now(),updated_at=now()
+        where attempts >= max_attempts and (
+            (status='running' and lease_expires_at < now())
+            or (status='retry_wait' and retry_after < now())
+        )
+        """)
+
+
 def heartbeat_worker(worker_name):
     with connect() as conn:
         conn.execute("""
@@ -285,7 +302,15 @@ def complete_job(job, progress, result, credentials):
 
 
 def process_one(job):
-    snapshot, credentials = build_snapshot(job)
+    try:
+        snapshot, credentials = build_snapshot(job)
+    except Exception as exc:
+        # Invalid or expired encryption must finish visibly, not leave
+        # a 'running' job stuck until every lease retry is exhausted.
+        progress = LeaseProgress(job, {})
+        complete_job(job, progress,
+                     {"ok":False,"error":str(exc),"fields":{}}, {})
+        return
     progress = LeaseProgress(job, credentials)
     waiter = threading.Event()
     heartbeat = threading.Thread(
@@ -324,6 +349,7 @@ def run_forever():
             if time.monotonic() - last_health >= HEARTBEAT_SECONDS:
                 heartbeat_worker(worker_name)
                 last_health = time.monotonic()
+            fail_exhausted_leases()
             job = claim_one(worker_name)
             if job:
                 LOG.info("Accepted job %s (%s)",job["id"],job["kind"])
