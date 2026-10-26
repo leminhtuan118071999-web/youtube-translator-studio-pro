@@ -687,6 +687,17 @@ with st.sidebar:
             background: #c62828 !important;
             font-weight: 800 !important;
         }
+        /* Give each Xóa label enough space instead of truncating it to X... */
+        [data-testid="stSidebar"] [class*="st-key-delete_session_"] button {
+            min-width: 72px !important;
+            padding-inline: 10px !important;
+            white-space: nowrap !important;
+        }
+        [data-testid="stSidebar"] [class*="st-key-delete_session_"] button p {
+            white-space: nowrap !important;
+            text-overflow: clip !important;
+            overflow: visible !important;
+        }
         [data-testid="stSidebar"] [class*="st-key-delete_session_"] button:hover,
         [data-testid="stSidebar"] .st-key-delete_all_sessions button:hover,
         [data-testid="stSidebar"] [class*="st-key-confirm_delete_"] button:hover {
@@ -821,7 +832,8 @@ with st.sidebar:
     if not saved_sessions:
         st.caption("Chưa có phiên nào được bắt đầu. Bấm BẮT ĐẦU TẠO TOÀN BỘ trước khi tạo phiên mới.")
     for saved_id, saved_record in saved_sessions:
-        name_col, delete_col = st.columns([5.5, 1.5], gap="small")
+        # Reserve enough sidebar width to show "Xóa" without ellipsis.
+        name_col, delete_col = st.columns([4.5, 2.5], gap="small")
         with name_col:
             job = st.session_state.background_jobs.get(saved_id)
             currently_running = bool(job and not job["future"].done())
