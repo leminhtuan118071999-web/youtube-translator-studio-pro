@@ -35,7 +35,7 @@ class StreamlitSmokeTests(unittest.TestCase):
         self.assertIn("↗ Mở AI33 trực tiếp nếu khung không hoạt động", source)
         self.assertIn("chưa có hàng đợi bền vững", source)
         self.assertIn('st.subheader("🖼️ Thumbnail gốc chất lượng cao")', source)
-        self.assertIn('["🌍 Bản dịch", "📝 Tiêu đề • Mô tả • SEO"]', source)
+        self.assertIn('["🌍 Bản dịch", "📝 Tiêu đề • Mô tả • SEO", "🎬 Form video 8 giây"]', source)
         self.assertIn('key="api_provider"', source)
 
         app = self.app.run()
@@ -82,6 +82,53 @@ class StreamlitSmokeTests(unittest.TestCase):
             "Giữ nguyên bản dịch",
         )
         self.assertIs(app.session_state["background_jobs"][sid]["future"], job_future)
+
+    def test_video_form_tab_is_isolated_source_locked_and_editable(self):
+        """New 8s prompt tab appears after SEO, without resurrecting old tab."""
+        from pathlib import Path
+        from persistent_store import backup_state
+
+        source = Path("streamlit_app.py").read_text(encoding="utf-8")
+        forms = Path("video_forms_ui.py").read_text(encoding="utf-8")
+        worker = Path("background_jobs.py").read_text(encoding="utf-8")
+        self.assertIn('with tab_video:', source)
+        self.assertIn('render_video_forms(', source)
+        self.assertNotIn('create_20_prompts(', source)
+        self.assertNotIn('🎨 20 prompt hình ảnh', source)
+        self.assertNotIn('video_forms', worker)  # No extra automatic API calls.
+        self.assertIn('key=f"create_video_forms_{sid}"', forms)
+        self.assertIn('key=f"continue_video_forms_{sid}"', forms)
+        self.assertIn('source_fingerprint(translated, language)', forms)
+        self.assertIn('key=f"video_prompt_{sid}_{n}"', forms)
+        self.assertIn('key=f"video_transition_{sid}_{n}"', forms)
+        self.assertIn('type=["mp3", "wav", "m4a", "ogg"]', forms)
+
+        app = self.app.run()
+        self.assertFalse(app.exception, [str(x.message) for x in app.exception])
+        sid = app.session_state["selected_session"]
+        app.session_state["workspaces"][sid]["translated"] = (
+            "Alicja idzie do ogrodu. Ola macha do niej."
+        )
+        app.run()
+        self.assertFalse(app.exception, [str(x.message) for x in app.exception])
+        self.assertTrue(any(
+            b.key == f"create_video_forms_{sid}" for b in app.button
+        ))
+        self.assertTrue(any(
+            slider.key == f"video_wpm_{sid}" for slider in app.slider
+        ))
+        app.session_state["workspaces"][sid]["video_forms"] = (
+            '{"version":1,"language":"Tiếng Ba Lan","scenes":[]}'
+        )
+        state = backup_state(
+            app.session_state["workspaces"], sid,
+            app.session_state["saved_session_order"],
+        )
+        self.assertIn("video_forms", state["workspaces"][sid])
+        self.assertEqual(
+            state["workspaces"][sid]["video_forms"],
+            '{"version":1,"language":"Tiếng Ba Lan","scenes":[]}',
+        )
 
     def test_both_api_sections_autosave_without_touching_workspaces(self):
         """Inputs remain interactive; storage and restored provider settings are scoped."""
@@ -138,8 +185,8 @@ class StreamlitSmokeTests(unittest.TestCase):
 
         source = Path("streamlit_app.py").read_text(encoding="utf-8")
         self.assertIn('with st.container(key="result_tabs"):', source)
-        self.assertIn('tab_translate, tab_seo = st.tabs(', source)
-        self.assertIn('["🌍 Bản dịch", "📝 Tiêu đề • Mô tả • SEO"]', source)
+        self.assertIn('tab_translate, tab_seo, tab_video = st.tabs(', source)
+        self.assertIn('["🌍 Bản dịch", "📝 Tiêu đề • Mô tả • SEO", "🎬 Form video 8 giây"]', source)
         self.assertIn('.st-key-result_tabs [data-testid="stTabs"] [role="tablist"]', source)
         self.assertIn('gap: 16px !important;', source)
         self.assertIn('min-height: 54px !important;', source)
@@ -149,6 +196,7 @@ class StreamlitSmokeTests(unittest.TestCase):
         self.assertIn('[role="tab"]:focus-visible', source)
         self.assertIn('with tab_translate:', source)
         self.assertIn('with tab_seo:', source)
+        self.assertIn('with tab_video:', source)
         self.assertIn('with st.container(key="original_thumbnail_download"):', source)
         # Login tabs still exist and are outside the scoped results container.
         self.assertIn('sign_in_tab, create_account_tab = st.tabs(', source)
@@ -722,7 +770,7 @@ class StreamlitSmokeTests(unittest.TestCase):
         self.assertNotIn("tab_visual", source)
         self.assertNotIn("fields[\"prompts\"]", worker)
         self.assertNotIn('progress.publish("prompts"', worker)
-        self.assertIn('["🌍 Bản dịch", "📝 Tiêu đề • Mô tả • SEO"]', source)
+        self.assertIn('["🌍 Bản dịch", "📝 Tiêu đề • Mô tả • SEO", "🎬 Form video 8 giây"]', source)
         # Thumbnail original and download button must stay intact.
         self.assertIn('thumbnail = get_thumbnail(vid)', source)
         self.assertIn('⬇️ Tải thumbnail gốc', source)
