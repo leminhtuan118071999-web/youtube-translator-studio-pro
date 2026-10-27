@@ -45,6 +45,7 @@ from video_scene_planner import character_bible_prompt, parse_json_object
 from section_retries import rerun_seo, portrait_retry_specs, rerun_target_rewrite
 from character_images import (IMAGE_STORE, IMAGE_MODEL, session_images_zip, create_character_png,
     detailed_character_profiles, character_reference_description, character_profile_text, CHARACTER_PROFILE_FIELDS)
+from translation_language import saved_translation_language
 from session_name_controls import session_name_control, rename_record
 from durable_queue import (queue_available, worker_healthy, submit_job,
     get_owned_jobs, apply_owned_job_results, fetch_portrait_images)
@@ -1943,7 +1944,8 @@ def launch_video_forms_background(duration, audio_hash, audio_name,
                 "translated": translated, "language": target_language,
                 "duration_seconds": duration, "audio_hash": audio_hash,
                 "audio_name": audio_name, "style": style,
-                "character_bible": bible, "existing_plan": existing_plan, "verify_form_language": True,
+                "character_bible": bible, "existing_plan": existing_plan, "verify_form_language": True, "auto_form_language": True,
+                "known_translation_language": saved_translation_language(session),
                 "provider": provider, "base_url": base_url, "model": model,
                 "api_format": api_format, "auth_mode": api_auth_mode,
             },
@@ -1966,7 +1968,8 @@ def launch_video_forms_background(duration, audio_hash, audio_name,
         "translated": translated, "language": target_language,
         "duration_seconds": duration, "audio_hash": audio_hash,
         "audio_name": audio_name, "style": style,
-        "character_bible": bible, "existing_plan": existing_plan, "verify_form_language": True,
+        "character_bible": bible, "existing_plan": existing_plan, "verify_form_language": True, "auto_form_language": True,
+                "known_translation_language": saved_translation_language(session),
         "provider": provider, "base_url": base_url,
         "model": model, "api_key": key,
         "api_format": api_format, "auth_mode": api_auth_mode,

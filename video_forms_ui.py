@@ -9,6 +9,7 @@ import math
 from io import BytesIO
 
 import streamlit as st
+from translation_language import saved_translation_language
 from api_clients import ProviderReadTimeout
 
 from video_scene_planner import (
@@ -88,6 +89,7 @@ def _generate_all_remaining(plan, ai, *, progress=None, checkpoint=None):
 def render_video_forms(session, sid, language, *, ai, api_key,
                        mark_processed, persist_and_rerun, launch_video_job=None):
     """Independent voice-first prompt generation after translation."""
+    language = saved_translation_language(session) or language
     st.subheader(f"🎬 Form video 8 giây — {language}")
     st.caption(
         "Mỗi form là PROMPT tạo clip 8 giây, chưa xuất MP4. "
@@ -193,13 +195,14 @@ def render_video_forms(session, sid, language, *, ai, api_key,
         # A saved plan already contains the total voice duration and words.
         # Let recovery after a server restart work without re-uploading MP3.
         disabled=(
-            not translated or plan is None or stale
+            not translated or plan is None
+            or (stale and (not plan.get("audio_duration_seconds") or (audio_hash is not None and plan.get("audio_sha256") != audio_hash)))
             or session.get("job_state") == "running"
             or session.get("video_job_state") == "running"
         ),
     )
     rewrite_clicked = st.button(
-        f"🌐 Viết lại toàn bộ form bằng {language}", key=f"rewrite_video_language_{sid}",
+        "🌐 Tự nhận diện và viết lại ngôn ngữ form", key=f"rewrite_video_language_{sid}",
         disabled=(plan is None or not translated or not plan.get("audio_duration_seconds")
                   or session.get("job_state") == "running" or session.get("video_job_state") == "running"),
     )
@@ -212,7 +215,7 @@ def render_video_forms(session, sid, language, *, ai, api_key,
             try:
                 # Sending duration and translated text is sufficient. Do not
                 # upload audio or call a speech transcription API.
-                saved_plan = plan if retry_clicked and plan is not None and not stale else None
+                saved_plan = plan if retry_clicked and plan is not None else None
                 if rewrite_clicked:
                     seconds = plan["audio_duration_seconds"]
                     audio_hash = plan.get("audio_sha256", "")
