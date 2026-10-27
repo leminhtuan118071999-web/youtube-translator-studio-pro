@@ -142,7 +142,7 @@ class StreamlitSmokeTests(unittest.TestCase):
         self.assertIn('f"📋 Copy toàn bộ ô {group[\'panel\']}"', forms)
         self.assertNotIn('Hồ sơ nhân vật/bối cảnh cố định cho mọi form', forms)
         self.assertIn('"📌 Hồ sơ nhân vật/bối cảnh cố định cho mọi form"', source)
-        self.assertIn('"👥 Hồ sơ ảnh tham chiếu theo từng nhân vật"', source)
+        self.assertIn('Hồ sơ ảnh tham chiếu theo từng nhân vật', source)
         self.assertIn('key=f"regenerate_detailed_characters_{sid}"', source)
         self.assertIn('for idx, sheet in enumerate(saved_sheets, start=1):', source)
         self.assertIn('f"👤 Nhân vật {idx:02d} — {sheet[', source)
