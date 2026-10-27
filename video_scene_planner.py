@@ -201,6 +201,33 @@ def batch_prompt(plan, scenes, *, style):
     return instructions
 
 
+def normalize_speech_segments(scene, segments):
+    """Normalize role labels only; never infer an identity or alter spoken words."""
+    if not isinstance(segments, list):
+        raise ValueError("Form thiếu phần phân vai lời dẫn/lời thoại.")
+    narrators = {"narrator", "narration", "voiceover", "voice-over", "người kể", "người kể chuyện", "lời dẫn", "lời kể", "dẫn chuyện", "narracja", "lektor"}
+    characters = {"character", "dialogue", "dialog", "dialogue character", "nhân vật", "lời thoại", "thoại"}
+    unknown = {"", "unknown", "character", "nhân vật", "không rõ", "không xác định", "speaker", "n/a", "none", "null"}
+    result = []
+    for item in segments:
+        if not isinstance(item, dict):
+            raise ValueError("Đoạn lời nói không hợp lệ.")
+        kind = str(item.get("kind") or "").strip().casefold()
+        speaker = item.get("speaker")
+        speaker = speaker.strip() if isinstance(speaker, str) else ""
+        if kind in narrators:
+            result.append({**item, "kind":"narrator", "speaker":"narrator"})
+        elif kind in characters:
+            if speaker.casefold() in unknown or speaker.casefold() in narrators:
+                result.append({**item, "kind":"narrator", "speaker":"narrator", "speaker_uncertain":True})
+            else:
+                result.append({**item, "kind":"character", "speaker":speaker})
+        else:
+            raise ValueError("Loại lời nói phải là narrator hoặc character.")
+    validate_speech_segments(scene, result)
+    return result
+
+
 def validate_speech_segments(scene, segments):
     if not isinstance(segments, list):
         raise ValueError("Form thiếu phần phân vai lời dẫn/lời thoại.")

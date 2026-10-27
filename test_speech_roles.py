@@ -1,6 +1,6 @@
 import json
 import unittest
-from video_scene_planner import narration_plan, apply_ai_batch, continuous_video_forms_text
+from video_scene_planner import narration_plan, apply_ai_batch, continuous_video_forms_text, normalize_speech_segments
 
 class SpeechRolesTests(unittest.TestCase):
     def plan(self):
@@ -9,6 +9,23 @@ class SpeechRolesTests(unittest.TestCase):
         return p
     def rows(self,segments):
         return json.dumps({'scenes':[dict(number=1,visual_prompt='Bà ôm cháu.',transition_to_next='',speech_segments=segments)]})
+    def test_localized_narrator_and_uncertain_character_are_normalized(self):
+        scene={'voiceover':'Bà Thu nói: “Cảm ơn cháu.”'}
+        segments=[dict(kind='lời dẫn',speaker='Người kể chuyện',text='Bà Thu nói:'),
+                  dict(kind='lời thoại',speaker='không rõ',text='“Cảm ơn cháu.”')]
+        result=normalize_speech_segments(scene,segments)
+        self.assertEqual([x['speaker'] for x in result],['narrator','narrator'])
+        self.assertTrue(result[1]['speaker_uncertain'])
+        self.assertEqual([x['text'] for x in result],[x['text'] for x in segments])
+        self.assertEqual(segments[0]['kind'],'lời dẫn')
+
+    def test_normalization_preserves_known_character_and_rejects_missing_words(self):
+        scene={'voiceover':'“Cảm ơn cháu.”'}
+        result=normalize_speech_segments(scene,[dict(kind='dialogue',speaker='Bà Thu',text=scene['voiceover'])])
+        self.assertEqual(result[0]['speaker'],'Bà Thu')
+        self.assertEqual(result[0]['kind'],'character')
+        with self.assertRaises(ValueError):normalize_speech_segments(scene,[dict(kind='narration',speaker='',text='Changed')])
+
     def test_voice_speaker_subtitle_are_separate_and_exact(self):
         p=self.plan()
         segments=[dict(kind='narrator',speaker='narrator',text='Bà Thu nói:'),dict(kind='character',speaker='Bà Thu',text='“Cảm ơn cháu.”'),dict(kind='narrator',speaker='narrator',text='Quỳnh Anh ôm bà.')]

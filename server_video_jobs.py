@@ -10,7 +10,7 @@ import threading
 import time
 
 from faithful_summary import source_hash
-from video_scene_planner import source_fingerprint, validate_speech_segments
+from video_scene_planner import source_fingerprint, validate_speech_segments, normalize_speech_segments
 from api_clients import generate_text
 from provider_retries import retry_transient_provider
 from groq_pacing import groq_request_gate
@@ -216,6 +216,16 @@ def run_video_forms_job(snapshot, progress):
             errors = ""
             for attempt in range(2):
                 progress.check_cancelled()
+                try:
+                    normalized = parse_json_object(raw, "scenes")
+                    for row in normalized["scenes"]:
+                        original_scene = next((s for s in plan["scenes"] if s["number"] == row.get("number")), None)
+                        if original_scene is None:
+                            raise ValueError("Sai số thứ tự form.")
+                        row["speech_segments"] = normalize_speech_segments(original_scene, row.get("speech_segments"))
+                    raw = json.dumps(normalized, ensure_ascii=False)
+                except (ValueError, TypeError, AttributeError):
+                    pass  # Let the bounded correction below repair the actual response.
                 verdict = parse_json_object(call_with_retry(
                     f"FORM_LANGUAGE_CHECK. Check that ALL scene visual_prompt text is in {snapshot['language']}. "
                     "Also verify speech_segments against the original scene voiceover/context: narrator clauses versus explicit "
@@ -242,7 +252,10 @@ def run_video_forms_job(snapshot, progress):
                     raw = call_with_retry(
                         f"Correct the visual_prompt language into {snapshot['language']} and fix speech attribution using original input. "
                         "Preserve all scene numbers, events, identities, physical features and numeric meanings. "
-                        "Preserve verbatim voiceover words in speech_segments, order, and transition_to_next values. Return ONLY JSON. "
+                        "Preserve verbatim voiceover words in speech_segments, order, and transition_to_next values. "
+                        'Each speech_segments item MUST be {"kind":"narrator","speaker":"narrator","text":"exact words"} '
+                        'or {"kind":"character","speaker":"exact known name","text":"exact words"}. '
+                        "For an unknown speaker use narrator, never guess a name. Return ONLY JSON. "
                         "Issues: " + errors + "\nDATA:\n" + raw + "\nORIGINAL INPUT:\n" + prompt)
             raise ValueError("Form chưa đạt ngôn ngữ/phân vai lời nói sau khi tự sửa: " + errors)
 
