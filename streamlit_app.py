@@ -1635,7 +1635,6 @@ language = st.selectbox(
 )
 session["language"] = language
 
-st.caption("Bắt đầu: dịch đầy đủ văn bản gốc sang ngôn ngữ đích dưới dạng lời đọc, tự kiểm tra và sửa lỗi nhẹ; giữ sát nội dung gốc, không giới hạn 9.000 ký tự.")
 if st.button("🚀 BẮT ĐẦU TẠO TOÀN BỘ", type="primary",
              use_container_width=True, key=f"run_all_{sid}"):
     sync_form(sid)
