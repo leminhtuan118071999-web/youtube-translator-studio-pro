@@ -11,7 +11,10 @@ import streamlit.components.v1 as components
 from streamlit.runtime import exists as streamlit_runtime_exists
 
 import requests
-from character_profiles import build_character_profiles, MAX_DETAILED_CHARACTERS
+from character_profiles import MAX_DETAILED_CHARACTERS
+from server_character_jobs import (
+    profile_job, start_character_job, collect_character_jobs,
+)
 import streamlit as st
 from PIL import Image
 from youtube_transcript_api import YouTubeTranscriptApi
@@ -20,6 +23,7 @@ from api_clients import (PROVIDERS, TransientProviderError, generate_text, list_
                          migrate_free_provider_settings)
 from background_jobs import JobProgress, run_full_job
 from server_video_jobs import run_video_forms_job, run_full_job_with_server_saves
+from server_video_jobs import _persist_lock
 from background_registry import JobRegistry
 from transcript_sources import parse_uploaded_subtitles
 from persistent_store import (
@@ -287,7 +291,7 @@ migrate_free_provider_settings(st.session_state)
 activate_shared_api_settings(st.session_state)
 
 
-def _save_cloud_state(force=False):
+def _save_cloud_state_unlocked(force=False):
     """Save results plus encrypted per-provider API settings for this user."""
     if not CLOUD_ENABLED or not st.session_state.get("cloud_auth"):
         return
@@ -311,6 +315,16 @@ def _save_cloud_state(force=False):
         st.session_state["_cloud_save_error"] = str(exc)[:350]
         if force:
             raise
+
+
+def _save_cloud_state(force=False):
+    # Serialize browser saves with server checkpoints. Collect the latest
+    # character result before writing the user's complete workspace payload.
+    with _persist_lock:
+        if "collect_profile_background_jobs" in globals():
+            if collect_profile_background_jobs():
+                st.session_state["_profile_ui_refresh_pending"] = True
+        _save_cloud_state_unlocked(force=force)
 
 
 def _persist_and_rerun():
@@ -498,6 +512,8 @@ if "background_jobs" not in st.session_state:
     st.session_state.background_jobs = {}
 if "video_background_jobs" not in st.session_state:
     st.session_state.video_background_jobs = {}
+if "profile_background_jobs" not in st.session_state:
+    st.session_state.profile_background_jobs = {}
 
 
 
@@ -523,6 +539,13 @@ def _job_scope():
 
 def _video_job_scope():
     return "video:" + _job_scope()
+
+
+def collect_profile_background_jobs():
+    return collect_character_jobs(
+        st.session_state.workspaces, st.session_state.profile_background_jobs,
+        get_job_registry(), "characters:" + _job_scope(),
+    )
 
 
 def sync_durable_queue():
@@ -774,6 +797,10 @@ def delete_saved_session(session_id):
     old = st.session_state.workspaces[session_id]
     get_job_registry().cancel(old.get("job_run_id"), session_id, _job_scope())
     get_job_registry().cancel(old.get("video_job_run_id"), session_id, _video_job_scope())
+    get_job_registry().cancel(
+        profile_job(old).get("run_id"), session_id, "characters:" + _job_scope(),
+    )
+    st.session_state.profile_background_jobs.pop(session_id, None)
     video_job = st.session_state.video_background_jobs.pop(session_id, None)
     if video_job:
         video_job["progress"].cancel()
@@ -817,6 +844,7 @@ reattach_background_jobs()
 collect_completed_jobs()
 reattach_video_background_jobs()
 collect_video_background_jobs()
+collect_profile_background_jobs()
 sync_durable_queue()
 
 # Use two independent views inside ONE Streamlit entrypoint. Unlike page_link,
@@ -863,9 +891,8 @@ if selected_app == "🎙️ AI33 / OpenSpeaker":
         use_container_width=True,
     )
     st.caption(
-        "Chuyển giữa hai khu vực sẽ giữ phiên dịch đang xử lý nếu máy chủ còn "
-        "hoạt động. Đóng/tải lại trang hoặc máy chủ khởi động lại có thể gián "
-        "đoạn tác vụ; chưa có hàng đợi bền vững đảm bảo chạy đến hoàn thành. "
+        "Tác vụ hồ sơ nhân vật tiếp tục khi chuyển mục hoặc tải lại trang, "
+        "miễn là máy chủ vẫn hoạt động. "
         "Tác vụ của AI33 do AI33 quản lý riêng."
     )
     _save_cloud_state()
@@ -973,6 +1000,10 @@ with st.sidebar:
         for old_session_id, old_session in st.session_state.workspaces.items():
             IMAGE_STORE.clear(_job_scope(), old_session_id)
             get_job_registry().cancel(
+                profile_job(old_session).get("run_id"), old_session_id,
+                "characters:" + _job_scope(),
+            )
+            get_job_registry().cancel(
                 old_session.get("job_run_id"), old_session_id, _job_scope()
             )
         for job in st.session_state.background_jobs.values():
@@ -981,6 +1012,7 @@ with st.sidebar:
         for old_session_id in list(st.session_state.workspaces):
             _clear_session_widgets(old_session_id)
         st.session_state.background_jobs = {}
+        st.session_state.profile_background_jobs = {}
         st.session_state.workspaces = {new_id: new_session}
         st.session_state["_browser_delete_revision"] = uuid.uuid4().hex
         st.session_state.pop("_browser_delete_confirmed", None)
@@ -1730,8 +1762,10 @@ def show_background_job_progress():
     """Poll in the Streamlit thread; worker threads never call st.*."""
     main_changed = collect_completed_jobs()
     video_changed = collect_video_background_jobs()
+    profile_changed = collect_profile_background_jobs()
+    profile_changed = st.session_state.pop("_profile_ui_refresh_pending", False) or profile_changed
     durable_changed = sync_durable_queue()
-    if main_changed or video_changed or durable_changed:
+    if main_changed or video_changed or profile_changed or durable_changed:
         _persist_and_rerun()
     for session_id, job in list(st.session_state.background_jobs.items()):
         if session_id not in st.session_state.workspaces:
@@ -1748,7 +1782,13 @@ def show_background_job_progress():
     ]
     for name, pct, stage in active_queue:
         st.progress(int(pct or 0), text=f"{name}: {stage}")
-    if not st.session_state.background_jobs and not active_queue:
+    for session_id, job in list(st.session_state.profile_background_jobs.items()):
+        if session_id in st.session_state.workspaces:
+            pct, stage = job["progress"].snapshot()
+            name = st.session_state.workspaces[session_id]["name"]
+            st.progress(pct, text=f"👥 {name}: {stage}")
+    if (not st.session_state.background_jobs and not active_queue
+            and not st.session_state.profile_background_jobs):
         st.caption("Không có phiên nào đang chạy nền.")
     if st.session_state.get("_durable_queue_error"):
         st.warning("Không đọc được hàng đợi: "
@@ -1958,6 +1998,37 @@ def launch_video_forms_background(duration, audio_hash, audio_name,
     _persist_and_rerun()
 
 
+def launch_character_profile_background():
+    if not key.strip() or not model.strip():
+        raise ValueError("Cần API văn bản và model hợp lệ để tạo hồ sơ nhân vật.")
+    sync_form(sid)
+    snapshot = {
+        "translated": session["translated"], "language": language,
+        "style": st.session_state.get(f"video_style_{sid}", "Điện ảnh chân thực"),
+        "provider": provider, "base_url": base_url, "model": model,
+        "api_key": key, "api_format": api_format, "auth_mode": api_auth_mode,
+        "cloud": None,
+    }
+    if CLOUD_ENABLED:
+        snapshot["cloud"] = {
+            "auth": dict(_refresh_login()),
+            "secrets": {name: str(st.secrets[name]) for name in (
+                "SUPABASE_URL", "SUPABASE_ANON_KEY", "SESSION_ENCRYPTION_KEY",
+            )},
+        }
+    with _persist_lock:
+        collect_profile_background_jobs()
+        start_character_job(
+            session, sid, snapshot, get_job_executor(), get_job_registry(),
+            st.session_state.profile_background_jobs, "characters:" + _job_scope(),
+            lambda: _save_cloud_state_unlocked(force=True),
+        )
+    st.session_state["_session_flash"] = (
+        "👥 Đã chạy nền tác vụ hồ sơ nhân vật. Bạn có thể chuyển mục hoặc tải lại trang."
+    )
+    _persist_and_rerun()
+
+
 with tab_video:
     render_video_forms(
         session, sid, language,
@@ -2039,63 +2110,37 @@ with tab_characters:
         f"Tạo tối đa {MAX_DETAILED_CHARACTERS} hồ sơ nhân vật; ưu tiên nhân vật "
         "chính và nhân vật xuất hiện nhiều trong bản dịch."
     )
+    current_profile_job = profile_job(session)
+    profile_running = current_profile_job.get("state") == "running"
+    st.caption(
+        "Tác vụ chạy nền trên máy chủ, tự lưu tiến độ và tiếp tục khi bạn "
+        "chuyển mục hoặc tải lại trang."
+    )
+    if profile_running:
+        active_profile_job = st.session_state.profile_background_jobs.get(sid)
+        if active_profile_job:
+            percent, stage = active_profile_job["progress"].snapshot()
+        else:
+            percent = current_profile_job.get("percent", 0)
+            stage = current_profile_job.get("stage", "Đang chạy nền")
+        st.progress(int(percent), text=stage)
+    elif current_profile_job.get("state") == "completed":
+        st.success("Đã hoàn thành và lưu hồ sơ nhân vật.")
+    elif current_profile_job.get("state") in ("failed", "interrupted"):
+        st.error("Tác vụ hồ sơ chưa hoàn thành: " + current_profile_job.get("error", ""))
+        st.caption("Nhấn tạo/cập nhật để tiếp tục từ phần đã lưu. Kiểm tra API nếu lỗi vẫn xảy ra.")
+    if current_profile_job.get("save_error"):
+        st.warning(current_profile_job["save_error"])
     if st.button(
         "🔄 Tạo/cập nhật hồ sơ chi tiết từng nhân vật",
         key=f"regenerate_detailed_characters_{sid}",
         disabled=not bool(session.get("translated", "").strip())
-                 or session.get("job_state") == "running",
+                 or session.get("job_state") == "running" or profile_running,
     ):
-        if not key.strip():
-            st.error("Cần API văn bản để tạo hồ sơ nhân vật theo bản dịch.")
-        else:
-            try:
-                with st.spinner("Đang xây dựng hồ sơ từng nhân vật từ bản dịch đích..."):
-                    requested_style = st.session_state.get(
-                        f"video_style_{sid}", "Điện ảnh chân thực"
-                    )
-                    progress_label = st.empty()
-                    try:
-                        previous = json.loads(session.get("character_profile_json") or "{}")
-                    except (ValueError, TypeError):
-                        previous = {}
-                    if not isinstance(previous, dict):
-                        previous = {}
-
-                    def save_profile_progress(build_state):
-                        previous["_profile_build"] = build_state
-                        session["character_profile_json"] = json.dumps(
-                            previous, ensure_ascii=False,
-                        )
-                        _save_cloud_state()
-
-                    updated_profile = build_character_profiles(
-                        session["translated"], language, requested_style, ai,
-                        state=previous.get("_profile_build"),
-                        checkpoint=save_profile_progress,
-                        report=progress_label.info,
-                    )
-                    fresh = detailed_character_profiles(updated_profile)
-                    if not fresh:
-                        raise ValueError("AI chưa nhận diện được nhân vật có tên.")
-                    session["character_profile_json"] = json.dumps(
-                        updated_profile, ensure_ascii=False,
-                    )
-                    session["character_bible"] = str(
-                        updated_profile["character_bible"]
-                    ).strip()
-                    session["character_bible_stale"] = False
-                    mark_session_processed(session)
-                    _persist_and_rerun()
-            except Exception as exc:
-                st.error("Chưa thể lập lại hồ sơ: " + str(exc)[:300])
-                st.info(
-                    f"Đang dùng API văn bản: {provider} · Model: {model}. "
-                    "Mở thanh bên → Cấu hình API → Kiểm tra kết nối API. "
-                    "Nếu kiểm tra thành công nhưng tạo hồ sơ vẫn quá thời gian chờ, "
-                    "hãy thử model phản hồi nhanh hơn. Nhấn lại nút tạo hồ sơ để "
-                    "tiếp tục phần chưa xong; các phần đã xử lý được giữ lại "
-                    "khi bản dịch, ngôn ngữ và phong cách không thay đổi."
-                )
+        try:
+            launch_character_profile_background()
+        except Exception as exc:
+            st.error("Chưa thể khởi động tác vụ hồ sơ: " + str(exc)[:300])
 
     st.markdown("**👥 Hồ sơ ảnh tham chiếu theo từng nhân vật**")
     if saved_sheets:
@@ -2142,7 +2187,7 @@ with tab_characters:
                     )
                     save_profile = st.form_submit_button(
                         "💾 Lưu hồ sơ nhân vật",
-                        disabled=session.get("job_state") == "running",
+                        disabled=session.get("job_state") == "running" or profile_running,
                     )
                 if save_profile:
                     saved_sheets[idx - 1] = edited

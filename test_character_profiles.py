@@ -144,6 +144,7 @@ class CharacterProfileTests(unittest.TestCase):
         self.assertEqual(saved, [])
 
     def test_streamlit_timeout_retains_old_profiles_and_resumes(self):
+        import threading
         from unittest.mock import patch
         from streamlit.testing.v1 import AppTest
         app = AppTest.from_file("streamlit_app.py", default_timeout=20)
@@ -163,8 +164,27 @@ class CharacterProfileTests(unittest.TestCase):
         app.run()
         def click():
             next(x for x in app.button if x.key == f"regenerate_detailed_characters_{sid}").click().run()
-        with patch("api_clients.generate_text", side_effect=[scan("Tấm", "Cám"), sheet("Tấm"), RuntimeError("timeout")]) as api:
+        release = threading.Event()
+        self.addCleanup(release.set)
+        replies = iter([scan("Tấm", "Cám"), sheet("Tấm")])
+        def first_run(*_):
+            if not release.wait(15):
+                raise RuntimeError("Test worker was not released")
+            try:
+                return next(replies)
+            except StopIteration:
+                raise RuntimeError("timeout")
+        with patch("server_character_jobs._provider_call", side_effect=first_run) as api:
             click()
+            future = app.session_state["profile_background_jobs"][sid]["future"]
+            next(x for x in app.radio if x.key == "_lmt_selected_app").set_value("🎙️ AI33 / OpenSpeaker").run()
+            self.assertFalse(app.exception)
+            self.assertIs(app.session_state["profile_background_jobs"][sid]["future"], future)
+            self.assertFalse(future.done())
+            release.set()
+            future.result(timeout=10)
+            next(x for x in app.radio if x.key == "_lmt_selected_app").set_value("🎬 YouTube Translator").run()
+            app.run()
             self.assertEqual(api.call_count, 3)
         self.assertFalse(app.exception)
         saved = json.loads(app.session_state["workspaces"][sid]["character_profile_json"])
@@ -173,8 +193,17 @@ class CharacterProfileTests(unittest.TestCase):
         self.assertTrue(any("timeout" in x.value for x in app.error))
         # An unrelated rerender must not discard the checkpoint.
         app.run()
-        with patch("api_clients.generate_text", return_value=sheet("Cám")) as api:
+        release.clear()
+        def second_run(*_):
+            if not release.wait(15):
+                raise RuntimeError("Test worker was not released")
+            return sheet("Cám")
+        with patch("server_character_jobs._provider_call", side_effect=second_run) as api:
             click()
+            future = app.session_state["profile_background_jobs"][sid]["future"]
+            release.set()
+            future.result(timeout=10)
+            app.run()
             self.assertEqual(api.call_count, 1)
         self.assertFalse(app.exception)
         final = json.loads(app.session_state["workspaces"][sid]["character_profile_json"])

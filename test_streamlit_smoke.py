@@ -58,7 +58,7 @@ class StreamlitSmokeTests(unittest.TestCase):
             source,
         )
         self.assertIn("↗ Mở AI33 trực tiếp nếu khung không hoạt động", source)
-        self.assertIn("chưa có hàng đợi bền vững", source)
+        self.assertIn("miễn là máy chủ vẫn hoạt động", source)
         self.assertIn('st.subheader("🖼️ Thumbnail gốc chất lượng cao")', source)
         self.assertIn('["🌍 Bản dịch", "📝 Tiêu đề • Mô tả • SEO",\n         "🎬 Form video 8 giây", "🖼️ Ảnh nhân vật"]', source)
         self.assertIn('key="api_provider"', source)
