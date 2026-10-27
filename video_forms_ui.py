@@ -158,11 +158,6 @@ def render_video_forms(session, sid, language, *, ai, api_key,
             audio_error = True
     else:
         pass
-    st.caption(
-        "📏 Hệ thống chỉ dùng thời lượng file giọng đọc và độ dài bản dịch "
-        "để ƯỚC TÍNH tốc độ đọc và phân chia lời đọc cho từng form. "
-        "Không phân tích hay gửi nội dung file âm thanh tới Whisper."
-    )
     plan = None
     if session.get("video_forms"):
         try:
