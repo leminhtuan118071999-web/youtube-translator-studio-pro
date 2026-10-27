@@ -100,6 +100,23 @@ def render_video_forms(session, sid, language, *, ai, api_key,
         type=["mp3", "wav", "m4a", "ogg"],
         key=f"video_audio_{sid}",
     )
+    character_bible = str(session.get("character_bible") or "").strip()
+    raw_plan = session.get("video_forms", "")
+    if not character_bible and isinstance(raw_plan, str) and raw_plan:
+        try:
+            saved_plan = json.loads(raw_plan)
+            if isinstance(saved_plan, dict):
+                character_bible = str(saved_plan.get("character_bible") or "").strip()
+        except (ValueError, TypeError):
+            pass
+    if character_bible:
+        copy_all_button("📋 Copy hồ sơ nhân vật/bối cảnh cố định", character_bible,
+                        key=f"copy_character_bible_{sid}")
+    with st.expander("📌 Hồ sơ nhân vật/bối cảnh cố định cho mọi form", expanded=False):
+        if character_bible:
+            st.code(character_bible, language=None, wrap_lines=True)
+        else:
+            st.info("Chưa có hồ sơ nhân vật/bối cảnh cố định.")
     seconds = None
     audio_error = False
     audio_hash = None
@@ -184,7 +201,7 @@ def render_video_forms(session, sid, language, *, ai, api_key,
                     (saved_plan.get("audio_sha256") if saved_plan else audio_hash),
                     (saved_plan.get("audio_filename", "") if saved_plan else upload.name),
                     translated, language, style,
-                    (session.get("character_bible", "") or ""),
+                    character_bible,
                     json.dumps(saved_plan, ensure_ascii=False) if saved_plan else None,
                 )
             except (TypeError, ValueError, RuntimeError, KeyError) as exc:

@@ -2073,22 +2073,6 @@ with tab_characters:
                 )
         except (ValueError, TypeError):
             pass
-    if character_bible:
-        copy_all_button(
-            "📋 Copy hồ sơ nhân vật/bối cảnh cố định", character_bible,
-            key=f"copy_character_bible_{sid}",
-        )
-    with st.expander(
-        "📌 Hồ sơ nhân vật/bối cảnh cố định cho mọi form", expanded=False
-    ):
-        if character_bible:
-            st.code(character_bible, language=None, wrap_lines=True)
-        else:
-            st.info(
-                "Chưa có hồ sơ nhân vật. Hãy chạy BẮT ĐẦU TẠO TOÀN BỘ "
-                "hoặc tạo form video 8 giây để hệ thống lập hồ sơ."
-            )
-
     # Profiles are generated from the TARGET translation, not from raw
     # subtitles or images. Older saved sessions can request an upgrade.
     profile_json = session.get("character_profile_json", "")
