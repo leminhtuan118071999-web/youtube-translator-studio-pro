@@ -118,7 +118,7 @@ def character_bible_prompt(translation, language, style):
         translation[:11500] + "\n[...]\n" + translation[-5500:]
     )
     return (
-        f"Write all character descriptions in {language}. Extract EVERY named "
+        f"Write all character descriptions in {language}. CHARACTER/WORLD REFERENCE. Extract EVERY named "
         "character appearing in the following target-language story, including "
         "recurring humans and named animals, without inventing new character names. "
         "Make a production-ready, CONSISTENT visual reference sheet for EACH. "
