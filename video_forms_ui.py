@@ -221,14 +221,15 @@ def render_video_forms(session, sid, language, *, ai, api_key,
 
     if session.get("video_job_state") == "running":
         pct = int(session.get("video_job_percent", 0) or 0)
-        st.progress(min(100, max(0, pct)), text=(
-            f"⏳ Máy chủ đang viết form: {session.get('video_job_stage', 'Đang xử lý')}"
-        ))
-        st.caption(
-            "Bạn có thể để máy tính ngủ hoặc đóng trình duyệt. "
-            "Tác vụ vẫn chạy khi máy chủ còn hoạt động; nếu máy chủ "
-            "khởi động lại thì cần tiếp tục từ kết quả đã lưu."
-        )
+        with st.expander(f"⏳ Đang tạo form · {min(100, max(0, pct))}%", expanded=False):
+            st.progress(min(100, max(0, pct)), text=(
+                f"⏳ Máy chủ đang viết form: {session.get('video_job_stage', 'Đang xử lý')}"
+            ))
+            st.caption(
+                "Bạn có thể để máy tính ngủ hoặc đóng trình duyệt. "
+                "Tác vụ vẫn chạy khi máy chủ còn hoạt động; nếu máy chủ "
+                "khởi động lại thì cần tiếp tục từ kết quả đã lưu."
+            )
     elif session.get("video_job_state") == "failed":
         st.warning(
             "Tác vụ tạo form bị gián đoạn: "
