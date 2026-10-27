@@ -226,6 +226,14 @@ def apply_ai_batch(plan, raw, expected_numbers):
     return plan
 
 
+def add_scene_subtitles(plan):
+    """Use the locked target-language narration as each scene's subtitle."""
+    for scene in plan.get("scenes", []):
+        if isinstance(scene, dict):
+            scene["subtitle"] = str(scene.get("voiceover", "") or "")
+    return plan
+
+
 def plan_export_text(plan):
     pieces = [f"Video scene forms | {plan['language']} | 8s per scene",
               f"Character continuity: {plan['character_bible']}"]
@@ -235,6 +243,7 @@ def plan_export_text(plan):
             f"{scene['start_seconds']:02d}-{scene['end_seconds']:02d}s "
             "(8s)\n"
             f"Voiceover: {scene['voiceover']}\n"
+            f"Subtitle: {scene['voiceover']}\n"
             f"Visual prompt: {scene['visual_prompt'] or '(not generated)'}\n"
             f"Transition: {scene['transition_to_next'] or '(end)'}"
         )
@@ -258,6 +267,8 @@ def continuous_video_forms_text(plan):
         voice = " ".join(str(scene.get("voiceover", "")).split())
         transition = " ".join(str(scene.get("transition_to_next", "")).split())
         block = f"{number:02d} | 8s | {visual} | Voice: {voice}"
+        if voice:
+            block += f" | Subtitle (on screen, target language): {voice}"
         if transition:
             block += f" | Next: {transition}"
         blocks.append(block)

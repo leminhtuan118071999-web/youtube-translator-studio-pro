@@ -12,7 +12,7 @@ import time
 from api_clients import generate_text
 from provider_retries import retry_transient_provider
 from groq_pacing import groq_request_gate
-from video_scene_planner import character_bible_prompt, parse_json_object
+from video_scene_planner import character_bible_prompt, parse_json_object, add_scene_subtitles
 from voice_alignment import duration_weighted_plan
 from video_forms_ui import _generate_all_remaining, _completed_count
 
@@ -147,6 +147,7 @@ def run_video_forms_job(snapshot, progress):
 
         def checkpoint(current):
             progress.check_cancelled()
+            add_scene_subtitles(current)
             encoded = json.dumps(current, ensure_ascii=False)
             if len(encoded) > 390000:
                 raise ValueError("Form video quá lớn để lưu trong phiên.")

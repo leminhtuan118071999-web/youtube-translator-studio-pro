@@ -13,7 +13,7 @@ import streamlit as st
 from video_scene_planner import (
     narration_plan, character_bible_prompt, batch_prompt,
     parse_json_object, apply_ai_batch, source_fingerprint, plan_export_text,
-    continuous_video_forms_text, grouped_video_forms,
+    continuous_video_forms_text, grouped_video_forms, add_scene_subtitles,
 )
 from copy_buttons import copy_all_button
 from voice_alignment import duration_weighted_plan, speech_statistics, MAX_AUDIO_BYTES
@@ -154,7 +154,7 @@ def render_video_forms(session, sid, language, *, ai, api_key,
         try:
             candidate = json.loads(session["video_forms"])
             if isinstance(candidate, dict) and isinstance(candidate.get("scenes"), list):
-                plan = candidate
+                plan = add_scene_subtitles(candidate)
         except (ValueError, TypeError):
             pass
     source_hash = source_fingerprint(translated, language)
@@ -263,6 +263,7 @@ def render_video_forms(session, sid, language, *, ai, api_key,
             "để hệ thống tự tạo tiếp toàn bộ từ vị trí chưa xong."
         )
 
+    st.caption("Phụ đề lấy từ lời đọc của từng form; thời điểm theo giọng đọc chỉ là ước tính.")
     continuous_text = continuous_video_forms_text(plan)
     st.markdown("**📜 Tất cả form video — liền mạch**")
     st.caption(
@@ -291,7 +292,7 @@ def render_video_forms(session, sid, language, *, ai, api_key,
         mime="text/plain", key=f"download_video_forms_text_{sid}",
     )
     st.download_button(
-        "⬇️ Tải JSON form video", session["video_forms"],
+        "⬇️ Tải JSON form video", json.dumps(plan, ensure_ascii=False),
         file_name=f"video-forms-{sid[:8]}.json",
         mime="application/json", key=f"download_video_forms_json_{sid}",
     )
