@@ -132,6 +132,30 @@ def render_video_forms(session, sid, language, *, ai, api_key,
             st.code(character_bible, language=None, wrap_lines=True)
         else:
             st.info("Chưa có hồ sơ nhân vật/bối cảnh cố định.")
+    with st.expander("🔒 Khóa trang phục nhân vật", expanded=False):
+        wardrobe_enabled = st.checkbox(
+            "Giữ nguyên trang phục từ đầu đến cuối video",
+            value=bool(session.get("wardrobe_lock_enabled", True)),
+            key=f"wardrobe_enabled_{sid}", disabled=session.get("video_job_state") == "running",
+        )
+        wardrobe_notes = st.text_area(
+            "Trang phục từng nhân vật (để trống để lấy từ hồ sơ)",
+            value=str(session.get("wardrobe_lock_notes") or ""),
+            placeholder="Quỳnh Anh: áo trắng, khăn quàng đỏ, váy xanh navy, giày đen.\nBà Thu: áo bà ba nâu, quần đen.",
+            key=f"wardrobe_notes_{sid}", disabled=session.get("video_job_state") == "running",
+        )
+        if (session.get("wardrobe_lock_enabled", True) != wardrobe_enabled
+                or session.get("wardrobe_lock_notes", "") != wardrobe_notes):
+            session["wardrobe_lock_enabled"] = wardrobe_enabled
+            session["wardrobe_lock_notes"] = wardrobe_notes
+            persist_and_rerun()
+        if raw_plan:
+            try:
+                locked = json.loads(raw_plan).get("wardrobe_reference", "")
+                if locked:
+                    st.code(locked, language=None, wrap_lines=True)
+            except (ValueError, TypeError, AttributeError):
+                pass
     seconds = None
     audio_error = False
     audio_hash = None

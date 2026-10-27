@@ -213,7 +213,8 @@ def batch_prompt(plan, scenes, *, style):
         f"{plan['character_bible']}\nInput scenes:\n"
         + json.dumps(basic, ensure_ascii=False)
     )
-    return instructions
+    from wardrobe_lock import wardrobe_instruction
+    return instructions + wardrobe_instruction(plan)
 
 
 def normalize_speech_segments(scene, segments):
@@ -338,7 +339,7 @@ def apply_ai_batch(plan, raw, expected_numbers):
                 scene["speech_segments"] = segments
             bible = plan.get("character_bible", "").strip()
             scene["visual_prompt"] = (
-                description if not bible or bible in description
+                description if plan.get("wardrobe_reference") or not bible or bible in description
                 else bible + "\n\n" + description
             )
             # Always enforce a 1-second boundary within each 8s clip.

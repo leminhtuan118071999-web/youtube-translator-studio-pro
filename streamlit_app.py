@@ -140,7 +140,7 @@ LANGUAGES = [
     "Tiếng Catalan", "Tiếng Basque", "Tiếng Wales", "Tiếng Luxembourg",
     "Tiếng Macedonia", "Tiếng Việt", "Tiếng Nhật", "Tiếng Hàn",
 ]
-FIELDS = ("url", "source", "pasted_source", "title", "description", "translated", "prompts", "metadata", "language", "new_title", "new_description", "seo_tags", "video_forms", "optimized_script", "optimization_review_json", "optimization_work_json", "character_images_error", "character_bible", "character_images_manifest", "character_profile_json", "seo_stale", "character_bible_stale")
+FIELDS = ("wardrobe_lock_enabled", "wardrobe_lock_notes", "url", "source", "pasted_source", "title", "description", "translated", "prompts", "metadata", "language", "new_title", "new_description", "seo_tags", "video_forms", "optimized_script", "optimization_review_json", "optimization_work_json", "character_images_error", "character_bible", "character_images_manifest", "character_profile_json", "seo_stale", "character_bible_stale")
 FORM_FIELDS = ("url", "language", "pasted_source")
 
 
@@ -149,7 +149,7 @@ def blank_session(name):
         "name": name, "url": "", "source": "", "pasted_source": "", "title": "", "description": "",
         "translated": "", "prompts": "", "metadata": "", "language": "Tiếng Ba Lan",
         "saved": False, "processed": False, "saved_order": 0,
-        "new_title": "", "new_description": "", "seo_tags": "", "video_forms": "", "optimized_script": "", "optimization_review_json": "", "optimization_work_json": "", "character_images_error": "", "character_bible": "", "character_images_manifest": "", "character_profile_json": "", "seo_stale": False, "character_bible_stale": False,
+        "wardrobe_lock_enabled": True, "wardrobe_lock_notes": "", "new_title": "", "new_description": "", "seo_tags": "", "video_forms": "", "optimized_script": "", "optimization_review_json": "", "optimization_work_json": "", "character_images_error": "", "character_bible": "", "character_images_manifest": "", "character_profile_json": "", "seo_stale": False, "character_bible_stale": False,
     }
 
 
@@ -1947,6 +1947,8 @@ def launch_video_forms_background(duration, audio_hash, audio_name,
                 "duration_seconds": duration, "audio_hash": audio_hash,
                 "audio_name": audio_name, "style": style,
                 "character_bible": bible, "existing_plan": existing_plan, "verify_form_language": True, "auto_form_language": True,
+                "wardrobe_lock_enabled": session.get("wardrobe_lock_enabled", True),
+                "wardrobe_lock_notes": session.get("wardrobe_lock_notes", ""),
                 "known_translation_language": saved_translation_language(session),
                 "provider": provider, "base_url": base_url, "model": model,
                 "api_format": api_format, "auth_mode": api_auth_mode,
@@ -1971,6 +1973,8 @@ def launch_video_forms_background(duration, audio_hash, audio_name,
         "duration_seconds": duration, "audio_hash": audio_hash,
         "audio_name": audio_name, "style": style,
         "character_bible": bible, "existing_plan": existing_plan, "verify_form_language": True, "auto_form_language": True,
+                "wardrobe_lock_enabled": session.get("wardrobe_lock_enabled", True),
+                "wardrobe_lock_notes": session.get("wardrobe_lock_notes", ""),
                 "known_translation_language": saved_translation_language(session),
         "provider": provider, "base_url": base_url,
         "model": model, "api_key": key,

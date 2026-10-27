@@ -15,6 +15,7 @@ from cryptography.fernet import Fernet, InvalidToken
 
 
 CONTENT_FIELDS = (
+    "wardrobe_lock_enabled", "wardrobe_lock_notes",
     "name", "url", "source", "pasted_source", "title", "description", "translated",
     "prompts", "metadata", "language", "new_title", "new_description",
     "seo_tags", "saved_order", "saved", "processed", "job_state",
@@ -156,6 +157,8 @@ def normalize_sessions(raw):
             val = record.get(field)
             if field in ("saved_order", "job_percent", "video_job_percent"):
                 copy[field] = int(val) if isinstance(val, int) and 0 <= val < 10**7 else 0
+            elif field == "wardrobe_lock_enabled":
+                copy[field] = val if isinstance(val, bool) else True
             elif field in ("saved", "processed"):
                 copy[field] = bool(val)
             elif isinstance(val, str):

@@ -5,6 +5,7 @@ Signed-in Supabase users have a checkpoint after each validated batch, even
 if their laptop sleeps. App servers can still be reclaimed: no guarantee
 of uninterrupted processing after a Streamlit Cloud worker restart.
 """
+from wardrobe_lock import apply_wardrobe_lock
 import json
 import threading
 import time
@@ -192,6 +193,8 @@ def run_video_forms_job(snapshot, progress):
             plan["speech_roles_required"] = True
             plan["paired_prompts_required"] = True
 
+        apply_wardrobe_lock(plan, snapshot, call_with_retry)
+
         def checkpoint(current):
             progress.check_cancelled()
             add_scene_subtitles(current)
@@ -214,7 +217,7 @@ def run_video_forms_job(snapshot, progress):
             if not isinstance(parsed["scenes"], list):
                 raise ValueError("Danh sách form không hợp lệ.")
             for row in parsed["scenes"]:
-                if isinstance(row, dict) and isinstance(row.get("visual_prompt"), str):
+                if not plan.get("wardrobe_reference") and isinstance(row, dict) and isinstance(row.get("visual_prompt"), str):
                     row["visual_prompt"] = plan["character_bible"] + "\n\n" + row["visual_prompt"]
             raw = json.dumps(parsed, ensure_ascii=False)
             errors = ""
