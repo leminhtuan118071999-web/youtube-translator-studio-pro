@@ -228,6 +228,49 @@ def normalize_speech_segments(scene, segments):
     return result
 
 
+def repair_speech_segments(scene, segments, call, *, before="", after=""):
+    """Repair role metadata with source offsets; never ask AI to rewrite speech."""
+    try:
+        return normalize_speech_segments(scene, segments)
+    except ValueError as exc:
+        error = str(exc)
+    voice = scene.get("voiceover", "")
+    if not voice.strip():
+        return []
+    for attempt in range(2):
+        try:
+            response = parse_json_object(call(
+                "REPAIR_SPEECH_ROLES. Assign roles to the EXACT source string using zero-based "
+                "Python character offsets (Unicode code points). End offsets are exclusive. "
+                "Cover every character once, contiguously, from 0 to length; never write replacement words. "
+                "Narrator handles descriptions, reported speech, attribution clauses and uncertain identities. "
+                "Use character ONLY for explicit direct speech with a named speaker established by original/context. "
+                "A quoted fragment may start in the previous scene; use adjacent context to keep the speaker. "
+                'Return ONLY JSON {"segments":[{"start":0,"end":10,"kind":"narrator","speaker":"narrator"}]}. '
+                "For character use kind=character and the exact name. No guessed names. "
+                "Previous error: " + error + "\nSOURCE DATA:\n" + json.dumps(
+                    dict(source=voice, length=len(voice), before=before, after=after), ensure_ascii=False)
+            ), "segments")
+            spans = response["segments"]
+            if not isinstance(spans, list) or not spans:
+                raise ValueError("Thiếu các đoạn phân vai.")
+            result, position = [], 0
+            for span in spans:
+                if (not isinstance(span, dict) or type(span.get("start")) is not int
+                        or type(span.get("end")) is not int or span["start"] != position
+                        or not position < span["end"] <= len(voice)):
+                    raise ValueError("Mốc phân vai phải liền mạch, đúng phạm vi câu gốc.")
+                result.append(dict(kind=span.get("kind"), speaker=span.get("speaker"),
+                                   text=voice[position:span["end"]]))
+                position = span["end"]
+            if position != len(voice):
+                raise ValueError("Phân vai chưa phủ hết câu gốc.")
+            return normalize_speech_segments(scene, result)
+        except ValueError as exc:
+            error = str(exc)
+    raise ValueError("Chưa sửa được phân vai của form " + str(scene.get("number", "")) + ": " + error)
+
+
 def validate_speech_segments(scene, segments):
     if not isinstance(segments, list):
         raise ValueError("Form thiếu phần phân vai lời dẫn/lời thoại.")

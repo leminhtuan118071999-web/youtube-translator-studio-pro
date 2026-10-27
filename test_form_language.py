@@ -38,7 +38,7 @@ class FormLanguageTests(unittest.TestCase):
         checks=[]
         def provider(snapshot,prompt):
             if prompt.startswith('Translate this fixed'): return '{"character_bible":"Bà Thu và Quỳnh Anh."}'
-            if prompt.startswith('Write ONLY'): return '{"scenes":[{"number":1,"visual_prompt":"Polski opis.","transition_to_next":""}]}'
+            if prompt.startswith('Write ONLY'): return '{"scenes":[{"number":1,"visual_prompt":"Polski opis.","transition_to_next":"","speech_segments":[{"kind":"narrator","speaker":"narrator","text":"Bà Thu ôm Quỳnh Anh."}]}]}'
             if prompt.startswith('FORM_LANGUAGE_CHECK'):
                 checks.append(prompt)
                 if 'Polski opis' in prompt:return '{"ok":false,"issues":["Polish instead of Vietnamese"]}'

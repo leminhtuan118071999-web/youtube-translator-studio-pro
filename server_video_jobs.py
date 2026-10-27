@@ -10,7 +10,7 @@ import threading
 import time
 
 from faithful_summary import source_hash
-from video_scene_planner import source_fingerprint, validate_speech_segments, normalize_speech_segments
+from video_scene_planner import source_fingerprint, validate_speech_segments, normalize_speech_segments, repair_speech_segments
 from api_clients import generate_text
 from provider_retries import retry_transient_provider
 from groq_pacing import groq_request_gate
@@ -222,7 +222,11 @@ def run_video_forms_job(snapshot, progress):
                         original_scene = next((s for s in plan["scenes"] if s["number"] == row.get("number")), None)
                         if original_scene is None:
                             raise ValueError("Sai số thứ tự form.")
-                        row["speech_segments"] = normalize_speech_segments(original_scene, row.get("speech_segments"))
+                        row["speech_segments"] = repair_speech_segments(
+                            original_scene, row.get("speech_segments"), call_with_retry,
+                            before=next((s["voiceover"] for s in plan["scenes"] if s["number"] == original_scene["number"]-1), ""),
+                            after=next((s["voiceover"] for s in plan["scenes"] if s["number"] == original_scene["number"]+1), ""),
+                        )
                     raw = json.dumps(normalized, ensure_ascii=False)
                 except (ValueError, TypeError, AttributeError):
                     pass  # Let the bounded correction below repair the actual response.

@@ -62,7 +62,7 @@ def _generate_all_remaining(plan, ai, *, progress=None, checkpoint=None):
     Checkpoints happen only after an entire AI batch validates successfully.
     On provider errors, previously generated prompts remain intact.
     """
-    batch_size = 6
+    batch_size = 3 if plan.get("speech_roles_required") else 6
     while _completed_count(plan) < len(plan["scenes"]):
         if progress:
             progress(plan, "🎬 Đang viết form video")
