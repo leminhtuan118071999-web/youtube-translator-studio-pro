@@ -2001,6 +2001,104 @@ with tab_characters:
                 "Chưa có hồ sơ nhân vật. Hãy chạy BẮT ĐẦU TẠO TOÀN BỘ "
                 "hoặc tạo form video 8 giây để hệ thống lập hồ sơ."
             )
+
+    # Profiles are generated from the TARGET translation, not from raw
+    # subtitles or images. Older saved sessions can request an upgrade.
+    profile_json = session.get("character_profile_json", "")
+    saved_sheets = []
+    if isinstance(profile_json, str) and profile_json.strip():
+        try:
+            parsed_profile = json.loads(profile_json)
+            saved_sheets = detailed_character_profiles(parsed_profile)
+        except (ValueError, TypeError):
+            saved_sheets = []
+    if not saved_sheets and isinstance(raw_video_plan, str) and raw_video_plan:
+        try:
+            existing_plan = json.loads(raw_video_plan)
+            if isinstance(existing_plan, dict):
+                saved_sheets = detailed_character_profiles({
+                    "characters": existing_plan.get("character_profiles", []),
+                    "character_bible": character_bible,
+                })
+        except (ValueError, TypeError):
+            pass
+    if not saved_sheets and character_bible:
+        saved_sheets = detailed_character_profiles({
+            "character_bible": character_bible,
+        })
+
+    if st.button(
+        "🔄 Tạo/cập nhật hồ sơ chi tiết từng nhân vật",
+        key=f"regenerate_detailed_characters_{sid}",
+        disabled=not bool(session.get("translated", "").strip())
+                 or session.get("job_state") == "running",
+    ):
+        if not key.strip():
+            st.error("Cần API văn bản để tạo hồ sơ nhân vật theo bản dịch.")
+        else:
+            try:
+                with st.spinner("Đang xây dựng hồ sơ từng nhân vật từ bản dịch đích..."):
+                    requested_style = st.session_state.get(
+                        f"video_style_{sid}", "Điện ảnh chân thực"
+                    )
+                    updated_profile = parse_json_object(
+                        ai(character_bible_prompt(
+                            session["translated"], language, requested_style,
+                        )), "character_bible",
+                    )
+                    fresh = detailed_character_profiles(updated_profile)
+                    if not fresh:
+                        raise ValueError("AI chưa nhận diện được nhân vật có tên.")
+                    session["character_profile_json"] = json.dumps(
+                        updated_profile, ensure_ascii=False,
+                    )
+                    session["character_bible"] = str(
+                        updated_profile["character_bible"]
+                    ).strip()
+                    session["character_bible_stale"] = False
+                    mark_session_processed(session)
+                    _persist_and_rerun()
+            except Exception as exc:
+                st.error("Chưa thể lập lại hồ sơ: " + str(exc)[:300])
+
+    st.markdown("**👥 Hồ sơ ảnh tham chiếu theo từng nhân vật**")
+    if saved_sheets:
+        st.caption(
+            f"Đã nhận diện {len(saved_sheets)} nhân vật. "
+            "Mỗi hồ sơ mở/thu gọn riêng, phục vụ tạo ảnh tham chiếu "
+            "giữ nguyên diện mạo trong tất cả các cảnh."
+        )
+        for idx, sheet in enumerate(saved_sheets, start=1):
+            with st.expander(
+                f"👤 Nhân vật {idx:02d} — {sheet['name']}",
+                expanded=False,
+            ):
+                if sheet.get("description"):
+                    st.markdown("**Nhận diện tổng quan**")
+                    st.write(sheet["description"])
+                for field, field_label in CHARACTER_PROFILE_FIELDS:
+                    value = sheet.get(field, "")
+                    if value:
+                        st.markdown(f"**{field_label}:** {value}")
+                    else:
+                        st.caption(f"{field_label}: Chưa được xác định")
+                st.caption(
+                    "Phân biệt chi tiết có trong nguyên tác với các yếu tố "
+                    "đề xuất tạo hình tại mục 'Chi tiết gốc và đề xuất tạo hình'."
+                )
+                reference_text = character_reference_description(sheet)
+                if reference_text:
+                    copy_all_button(
+                        f"📋 Copy mô tả ảnh tham chiếu — {sheet['name']}",
+                        reference_text,
+                        key=f"copy_character_reference_{sid}_{idx}",
+                    )
+    else:
+        st.info(
+            "Chưa có hồ sơ chi tiết. Nhấn 'Tạo/cập nhật hồ sơ chi tiết "
+            "từng nhân vật' để trích xuất từ bản dịch đích."
+        )
+
     st.caption(
         "Ảnh được tự tạo sau Hồ sơ nhân vật nếu đã nhập OpenAI Images API key. "
         "Chỉ chứa nhân vật thuộc phiên hiện tại, không lẫn phiên khác."
@@ -2019,6 +2117,11 @@ with tab_characters:
                 with st.spinner("Đang phân tích lại hồ sơ và tạo ảnh nhân vật..."):
                     style = st.session_state.get(f"video_style_{sid}", "Điện ảnh chân thực")
                     bible, specs, changed = portrait_retry_specs(session, language, style, ai)
+                    if saved_sheets and not session.get("character_bible_stale"):
+                        specs = [
+                            (sheet["name"], character_reference_description(sheet))
+                            for sheet in saved_sheets[:8]
+                        ]
                     if not specs:
                         raise ValueError("Hồ sơ không có nhân vật được nhận diện.")
                     failures = []
