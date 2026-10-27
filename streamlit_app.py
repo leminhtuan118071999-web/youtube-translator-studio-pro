@@ -11,6 +11,7 @@ import streamlit.components.v1 as components
 from streamlit.runtime import exists as streamlit_runtime_exists
 
 import requests
+from character_profiles import build_character_profiles
 import streamlit as st
 from PIL import Image
 from youtube_transcript_api import YouTubeTranscriptApi
@@ -2048,10 +2049,26 @@ with tab_characters:
                     requested_style = st.session_state.get(
                         f"video_style_{sid}", "Điện ảnh chân thực"
                     )
-                    updated_profile = parse_json_object(
-                        ai(character_bible_prompt(
-                            session["translated"], language, requested_style,
-                        )), "character_bible",
+                    progress_label = st.empty()
+                    try:
+                        previous = json.loads(session.get("character_profile_json") or "{}")
+                    except (ValueError, TypeError):
+                        previous = {}
+                    if not isinstance(previous, dict):
+                        previous = {}
+
+                    def save_profile_progress(build_state):
+                        previous["_profile_build"] = build_state
+                        session["character_profile_json"] = json.dumps(
+                            previous, ensure_ascii=False,
+                        )
+                        _save_cloud_state()
+
+                    updated_profile = build_character_profiles(
+                        session["translated"], language, requested_style, ai,
+                        state=previous.get("_profile_build"),
+                        checkpoint=save_profile_progress,
+                        report=progress_label.info,
                     )
                     fresh = detailed_character_profiles(updated_profile)
                     if not fresh:
@@ -2071,7 +2088,9 @@ with tab_characters:
                     f"Đang dùng API văn bản: {provider} · Model: {model}. "
                     "Mở thanh bên → Cấu hình API → Kiểm tra kết nối API. "
                     "Nếu kiểm tra thành công nhưng tạo hồ sơ vẫn quá thời gian chờ, "
-                    "hãy thử model phản hồi nhanh hơn. Hồ sơ đã lưu được giữ lại."
+                    "hãy thử model phản hồi nhanh hơn. Nhấn lại nút tạo hồ sơ để "
+                    "tiếp tục phần chưa xong; các phần đã xử lý được giữ lại "
+                    "khi bản dịch, ngôn ngữ và phong cách không thay đổi."
                 )
 
     st.markdown("**👥 Hồ sơ ảnh tham chiếu theo từng nhân vật**")
