@@ -239,8 +239,6 @@ def render_video_forms(session, sid, language, *, ai, api_key,
             f"Dự kiến dư {plan['end_padding_seconds']:.1f} giây ở cuối: "
             "cần giữ hình hoặc điều chỉnh nhịp khi ghép audio thật."
         )
-    with st.expander("📌 Hồ sơ nhân vật/bối cảnh cố định cho mọi form", expanded=False):
-        st.code(plan.get("character_bible", ""), language=None, wrap_lines=True)
     if done < len(scenes):
         st.info(
             f"Còn {len(scenes) - done} form chưa hoàn thành. "
