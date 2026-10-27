@@ -12,6 +12,7 @@ from streamlit.runtime import exists as streamlit_runtime_exists
 
 import requests
 from faithful_summary import translate_part_faithfully, OPTIMIZATION_VERSION, source_hash
+from provider_retries import retry_transient_provider
 from character_profiles import MAX_DETAILED_CHARACTERS
 from server_character_jobs import (
     profile_job, start_character_job, collect_character_jobs,
@@ -1434,13 +1435,26 @@ with st.sidebar:
 
 
 def ai(prompt):
-    """Dispatch translation and SEO requests using the selected provider."""
+    """Use the selected provider and recover from temporary gateway failures."""
+    options = {}
     if provider == "API bên thứ ba (tùy chỉnh)":
-        return generate_text(
+        options = {"api_format": api_format, "auth_mode": api_auth_mode}
+    retry_notice = None
+
+    def report_retry(message):
+        nonlocal retry_notice
+        if retry_notice is None:
+            retry_notice = st.empty()
+        retry_notice.info(message)
+
+    try:
+        return retry_transient_provider(lambda: generate_text(
             provider, base_url, model, key, prompt,
-            api_format=api_format, auth_mode=api_auth_mode,
-        )
-    return generate_text(provider, base_url, model, key, prompt)
+            **options,
+        ), report=report_retry)
+    finally:
+        if retry_notice is not None:
+            retry_notice.empty()
 
 
 def fetch_best_transcript(video_id):
