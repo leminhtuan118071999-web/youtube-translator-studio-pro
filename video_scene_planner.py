@@ -156,6 +156,8 @@ def batch_prompt(plan, scenes, *, style):
         "number": scene["number"],
         "voiceover": scene["voiceover"],
         "time": f"{scene['start_seconds']}-{scene['end_seconds']}s",
+        "preceding_voiceover": next((s["voiceover"] for s in plan["scenes"] if s["number"] == scene["number"]-1), ""),
+        "following_voiceover": next((s["voiceover"] for s in plan["scenes"] if s["number"] == scene["number"]+1), ""),
     } for scene in scenes]
     instructions = (
         f"Write ONLY in {plan['language']}. Create exactly {len(scenes)} "
@@ -179,6 +181,16 @@ def batch_prompt(plan, scenes, *, style):
         "8-second clip, not added as extra runtime. For the very last scene, "
         "return an empty transition_to_next. Return ONLY JSON: "
         '{"scenes":[{"number":1,"visual_prompt":"...","transition_to_next":"..."}]}. '
+        "Also return speech_segments for each scene: an ordered array of "
+        "{kind: narrator|character, speaker: exact character name or narrator, text: verbatim core words}. "
+        "Concatenating segment texts in order must reproduce the FULL voiceover exactly, including punctuation. "
+        "Narrative descriptions and dialogue attribution clauses belong to narrator. ONLY explicit direct speech "
+        "may be assigned to a named character when source/neighbor context establishes who speaks. "
+        "Do not turn reported speech into dialogue. If attribution is uncertain, keep narrator; never guess. "
+        "Empty voiceover needs an empty array. Preserve quoted text and its quotation marks. "
+        "Do not put spoken dialogue inside visual_prompt: use speech_segments exclusively for audio. "
+        "Specify silent reactions/lip movement only for the active speaker; narrator is off screen. "
+        "Subtitles are ON-SCREEN TEXT ONLY and must never be spoken a second time. "
         "Do not return or modify voiceover text. The number must match "
         "each requested number exactly. Every visual_prompt and nonempty "
         "transition_to_next must be written in the TARGET language. "
@@ -187,6 +199,22 @@ def batch_prompt(plan, scenes, *, style):
         + json.dumps(basic, ensure_ascii=False)
     )
     return instructions
+
+
+def validate_speech_segments(scene, segments):
+    if not isinstance(segments, list):
+        raise ValueError("Form thiếu phần phân vai lời dẫn/lời thoại.")
+    for item in segments:
+        if (not isinstance(item, dict) or item.get("kind") not in ("narrator", "character")
+                or not isinstance(item.get("speaker"), str) or not item["speaker"].strip()
+                or not isinstance(item.get("text"), str) or not item["text"].strip()
+                or item["kind"] == "narrator" and item["speaker"] != "narrator"
+                or item["kind"] == "character" and item["speaker"].lower() in ("narrator", "unknown", "character")):
+            raise ValueError("Lời thoại phải có tên người nói; lời dẫn thuộc người kể.")
+    normalize = lambda text: " ".join(text.split())
+    if normalize(" ".join(item["text"] for item in segments)) != normalize(scene.get("voiceover", "")):
+        raise ValueError("Phân vai làm thay đổi, lặp hoặc bỏ sót lời đọc gốc.")
+    return segments
 
 
 def apply_ai_batch(plan, raw, expected_numbers):
@@ -206,12 +234,18 @@ def apply_ai_batch(plan, raw, expected_numbers):
                 or not isinstance(desc, str) or not desc.strip()
                 or not isinstance(transition, str)):
             raise ValueError("Form AI thiếu nội dung hoặc sai số thứ tự.")
-        mapped[number] = (desc.strip(), transition.strip())
+        segments = row.get("speech_segments")
+        scene_source = next((s for s in plan["scenes"] if s["number"] == number), {})
+        if segments is not None or plan.get("speech_roles_required"):
+            validate_speech_segments(scene_source, segments)
+        mapped[number] = (desc.strip(), transition.strip(), segments)
     if set(mapped) != set(expected_numbers):
         raise ValueError("AI trả về sai thứ tự form video.")
     for scene in plan["scenes"]:
         if scene["number"] in mapped:
-            description, transition = mapped[scene["number"]]
+            description, transition, segments = mapped[scene["number"]]
+            if segments is not None:
+                scene["speech_segments"] = segments
             bible = plan.get("character_bible", "").strip()
             scene["visual_prompt"] = (
                 description if not bible or bible in description
@@ -272,7 +306,22 @@ def continuous_video_forms_text(plan):
         next_label = "Chuyển cảnh" if vietnamese else "Next"
         if vietnamese:
             transition = transition.replace("crossfade", "mờ chồng")
-        block = f"{number:02d} | 8s | {visual} | {voice_label}: {voice}"
+        block = f"{number:02d} | 8s | {visual}"
+        segments = scene.get("speech_segments")
+        if isinstance(segments, list):
+            validate_speech_segments(scene, segments)
+            rules = ("Âm thanh theo đúng thứ tự; người kể đọc ngoài hình, nhân vật chỉ nói câu được gán; "
+                     "các nhân vật khác im lặng. Phụ đề chỉ hiển thị chữ, không đọc lại." if vietnamese else
+                     "Audio in the listed order. Narrator is off-screen; only the named character speaks each assigned line. "
+                     "Other characters remain silent. Subtitles are display-only, never read aloud again.")
+            block += " | " + rules
+            for item in segments:
+                label = (("Lời dẫn — người kể" if vietnamese else "Narrator (off-screen)") if item["kind"] == "narrator"
+                         else ("Lời thoại — " if vietnamese else "Dialogue — ") + item["speaker"])
+                block += f" | {label}: {item['text']}"
+        else:
+            block += f" | {voice_label}: {voice}"
+            block += " | Chưa phân vai lời nói" if vietnamese else " | Speech roles not assigned"
         if voice:
             block += f" | {subtitle_label}: {voice}"
         if transition:
