@@ -33,6 +33,7 @@ from browser_session_store import (
 )
 from copy_buttons import copy_all_button
 from video_forms_ui import render_video_forms
+from video_scene_planner import character_bible_prompt, parse_json_object
 from section_retries import rerun_translation, rerun_seo, portrait_retry_specs
 from character_images import (IMAGE_STORE, IMAGE_MODEL, session_images_zip, create_character_png,
     detailed_character_profiles, character_reference_description, CHARACTER_PROFILE_FIELDS)
