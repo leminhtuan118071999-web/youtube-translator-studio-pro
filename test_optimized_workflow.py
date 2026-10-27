@@ -42,7 +42,10 @@ class OptimizedScriptWorkflowTests(unittest.TestCase):
             next(i for i,p in enumerate(calls) if "Viết lại PHẦN" in p),
             next(i for i,p in enumerate(calls) if "CHỈ xuất bản dịch" in p),
         )
-        self.assertFalse(any("CHARACTER/WORLD REFERENCE" in p for p in calls))
+        self.assertTrue(any("CHARACTER/WORLD REFERENCE" in p for p in calls))
+        # Character profile creation is now a standard text stage, even
+        # when image generation is not configured. Video forms still wait
+        # for the separately uploaded completed narration audio.
         self.assertFalse(any("self-contained scene-generation prompts" in p for p in calls))
         self.assertEqual(result["fields"]["new_title"], "Een titel")
 

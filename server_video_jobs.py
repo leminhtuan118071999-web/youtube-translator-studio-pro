@@ -113,6 +113,8 @@ def run_video_forms_job(snapshot, progress):
                     "character_bible",
                 )
                 bible = response["character_bible"]
+                if isinstance(response.get("characters"), list):
+                    plan["character_profiles"] = response["characters"]
             if not isinstance(bible, str) or not bible.strip():
                 raise ValueError("Không tạo được hồ sơ nhân vật.")
             plan["character_bible"] = bible.strip()

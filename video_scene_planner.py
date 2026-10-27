@@ -113,26 +113,44 @@ def parse_json_object(raw, required_field):
 
 
 def character_bible_prompt(translation, language, style):
-    """One immutable visual identity to reuse across all video form batches."""
+    """Detailed, named reference sheets for consistent character portraits."""
     sample = translation if len(translation) <= 18000 else (
         translation[:11500] + "\n[...]\n" + translation[-5500:]
     )
     return (
-        f"Write ONLY in {language}. Make a consistent CHARACTER/WORLD REFERENCE "
-        "for a chronological video based STRICTLY on this translated text. "
-        "Do not change the story or invent new story events. For each recurring "
-        "person or animal, specify a fixed recognizable name, species/age when "
-        "supported, appearance, clothes, colors, identifying features and "
-        "behavior. If a detail is absent, choose one neutral consistent design "
-        "instead of alleging the story stated it. Keep the visual style "
-        f"consistent: {style}. Return JSON only with a non-empty string "
-        'fields: {"character_bible":"...", "characters":[{"name":"...", "description":"..."}]}. '
-        "The characters array must list each named recurring character with "
-        "complete visual identity. Translate all descriptions into "
-        f"{language}. The reference must be concise and reusable. "
-        "Source translated script:\n" + sample
+        f"Write all character descriptions in {language}. CHARACTER/WORLD REFERENCE. Extract EVERY named "
+        "character appearing in the following target-language story, including "
+        "recurring humans and named animals, without inventing new character names. "
+        "Make a production-ready, CONSISTENT visual reference sheet for EACH. "
+        "Do not change the story, identity, relationships or events. "
+        "Include detailed fixed face, body, eyes, hair, costume, colors, distinctive "
+        "features and props, age when present, personality and scene role. "
+        "If the text does NOT specify an appearance or age, choose ONE restrained "
+        "neutral design for the visual adaptation and clearly identify this as "
+        "a PROPOSED visual design in source_notes; NEVER present it as a story fact. "
+        "Do not infer sensitive characteristics as factual when not in the text. "
+        "Write a self-contained reference_prompt describing ONE full-body character "
+        "on a neutral backdrop with consistent camera, full outfit and face. "
+        f"Overall visual art style: {style}. "
+        "Return ONLY valid JSON with nonempty character_bible and a detailed "
+        "characters array of objects, one per named character, each with keys: "
+        "name, description, role, species, gender, age, body, face, skin, hair, "
+        "eyes, outfit, palette, accessories, signature, personality, "
+        "reference_prompt, source_notes. Provide concrete detail for visual "
+        "fields; use 'not specified' only when genuinely impossible to design. "
+        'Example shape: {"character_bible":"Shared world and continuity", '
+        '"characters":[{"name":"Ala","description":"Fixed visual identity",'
+        '"role":"protagonist","species":"human","gender":"female",'
+        '"age":"young adult (proposed)","body":"medium height",'
+        '"face":"oval face","skin":"warm olive tone","hair":"long black braid",'
+        '"eyes":"dark brown","outfit":"fixed red jacket","palette":"red, brown",'
+        '"accessories":"canvas satchel","signature":"silver brooch",'
+        '"personality":"thoughtful expression",'
+        '"reference_prompt":"Full-body consistent portrait of Ala...",'
+        '"source_notes":"Hair and coat colors are proposed; not stated"}]}. '
+        "Do not exceed 20,000 total characters if the cast is large. "
+        "Target-language source script:\n" + sample
     )
-
 
 def batch_prompt(plan, scenes, *, style):
     """Require self-contained 8s prompts with exact voiceover and transitions."""

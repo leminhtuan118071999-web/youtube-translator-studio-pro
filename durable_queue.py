@@ -15,7 +15,7 @@ JOB_TYPES = {"full", "video_forms"}
 VISIBLE_FIELDS = {
     "source", "title", "description", "optimized_script", "translated",
     "language", "new_title", "new_description", "seo_tags", "metadata",
-    "character_bible", "character_images_error", "character_images_manifest",
+    "character_bible", "character_profile_json", "character_images_error", "character_images_manifest",
     "video_forms",
 }
 VISIBLE_STATUSES = {"queued", "running", "retry_wait", "completed", "failed"}

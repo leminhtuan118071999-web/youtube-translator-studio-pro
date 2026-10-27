@@ -43,6 +43,17 @@ class BackgroundJobsTests(unittest.TestCase):
             self.assertEqual(api_key, self.config["api_key"])
             if "CHỈ xuất bản dịch" in prompt:
                 return "Treść przetłumaczona na język polski."
+            if "CHARACTER/WORLD REFERENCE" in prompt:
+                return json.dumps({
+                    "character_bible": "Nhân vật được nhận diện theo bản dịch.",
+                    "characters": [{
+                        "name": "Ala", "description": "Young woman with a red coat",
+                        "face": "Oval face", "hair": "Dark hair",
+                        "outfit": "Fixed red coat", "palette": "Red and brown",
+                        "source_notes": "Colors proposed for visual consistency",
+                        "reference_prompt": "Full-body character sheet",
+                    }],
+                })
             if "Soạn YouTube tiêu đề" in prompt:
                 return json.dumps({"title": "Tytuł", "description": "Opis", "tags": ["tag-a","tag-b"]})
             self.fail("Unexpected prompt: " + prompt[:100])
@@ -55,7 +66,7 @@ class BackgroundJobsTests(unittest.TestCase):
         self.assertEqual(result["fields"]["new_description"], "Opis")
         self.assertEqual(result["fields"]["seo_tags"], "tag-a, tag-b")
         self.assertNotIn("prompts", result["fields"])
-        self.assertEqual(api.call_count, 2)  # Translation + SEO, no image request
+        self.assertEqual(api.call_count, 3)  # Translation + character profiles + SEO
         self.assertEqual(progress.snapshot()[0], 100)
         self.assertNotIn("api_key", result["fields"])
         self.assertNotIn(self.config["api_key"], repr(result))
@@ -297,6 +308,17 @@ class BackgroundJobsTests(unittest.TestCase):
             })
             if "CHỈ xuất bản dịch" in prompt:
                 return "Dịch xong"
+            if "CHARACTER/WORLD REFERENCE" in prompt:
+                return json.dumps({
+                    "character_bible": "Nhân vật được nhận diện theo bản dịch.",
+                    "characters": [{
+                        "name": "Ala", "description": "Young woman with a red coat",
+                        "face": "Oval face", "hair": "Dark hair",
+                        "outfit": "Fixed red coat", "palette": "Red and brown",
+                        "source_notes": "Colors proposed for visual consistency",
+                        "reference_prompt": "Full-body character sheet",
+                    }],
+                })
             if "Soạn YouTube tiêu đề" in prompt:
                 return json.dumps({
                     "title": "Tiêu đề", "description": "Mô tả",
@@ -306,7 +328,7 @@ class BackgroundJobsTests(unittest.TestCase):
         api.side_effect = respond
         result = run_full_job(config, JobProgress())
         self.assertTrue(result["ok"], result["error"])
-        self.assertEqual(api.call_count, 2)  # Translation and SEO
+        self.assertEqual(api.call_count, 3)  # Translation, profiles and SEO
         self.assertEqual(result["fields"]["translated"], "Dịch xong")
 
     def test_cancel_does_not_touch_provider(self):

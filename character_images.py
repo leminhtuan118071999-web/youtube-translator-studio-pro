@@ -45,6 +45,80 @@ def character_specs(profile):
     return unique[:MAX_CHARACTERS]
 
 
+CHARACTER_PROFILE_FIELDS = (
+    ("role", "Vai trò trong câu chuyện"),
+    ("species", "Loài / chủng loại"),
+    ("gender", "Giới tính / biểu hiện"),
+    ("age", "Độ tuổi / nhóm tuổi"),
+    ("body", "Dáng người / vóc dáng"),
+    ("face", "Khuôn mặt / đường nét"),
+    ("skin", "Màu da / lớp phủ cơ thể"),
+    ("hair", "Tóc / kiểu tóc / màu tóc"),
+    ("eyes", "Mắt / màu mắt"),
+    ("outfit", "Trang phục cố định"),
+    ("palette", "Bảng màu nhận diện"),
+    ("accessories", "Phụ kiện / đạo cụ"),
+    ("signature", "Đặc điểm nhận diện bất biến"),
+    ("personality", "Tính cách / biểu cảm"),
+    ("reference_prompt", "Prompt ảnh tham chiếu riêng"),
+    ("source_notes", "Chi tiết gốc và đề xuất tạo hình"),
+)
+
+
+def detailed_character_profiles(profile):
+    """Normalize structured per-character design sheets without inventing fields.
+
+    Legacy profiles keep their named description, while absent visual detail
+    is explicitly marked as not specified in the translation.
+    """
+    if not isinstance(profile, dict):
+        return []
+    characters = profile.get("characters")
+    sheets = []
+    if isinstance(characters, list):
+        for record in characters:
+            if not isinstance(record, dict):
+                continue
+            name = str(record.get("name") or "").strip()[:80]
+            if not name:
+                continue
+            sheet = {"name": name}
+            for key, _label in CHARACTER_PROFILE_FIELDS:
+                val = record.get(key)
+                sheet[key] = str(val).strip()[:1500] if val else ""
+            desc = record.get("description")
+            sheet["description"] = str(desc).strip()[:1800] if desc else ""
+            sheets.append(sheet)
+    if not sheets:
+        sheets = [{"name": name, "description": description,
+                   **{field: "" for field, _ in CHARACTER_PROFILE_FIELDS}}
+                  for name, description in character_specs(profile)]
+    seen = set()
+    unique = []
+    for sheet in sheets:
+        token = sheet["name"].casefold()
+        if token not in seen:
+            unique.append(sheet)
+            seen.add(token)
+    return unique
+
+
+def character_reference_description(sheet):
+    """Use all verified design-sheet details in the image generation prompt."""
+    if not isinstance(sheet, dict):
+        return ""
+    chunks = []
+    for key, label in CHARACTER_PROFILE_FIELDS:
+        if key == "source_notes":
+            continue
+        value = sheet.get(key)
+        if isinstance(value, str) and value.strip():
+            chunks.append(f"{label}: {value.strip()}")
+    if isinstance(sheet.get("description"), str) and sheet["description"].strip():
+        chunks.insert(0, sheet["description"].strip())
+    return ". ".join(chunks)[:5000]
+
+
 def filename_part(value):
     """Make a safe archive filename while preserving recognizable names."""
     value = re.sub(r'[\\/:*?"<>|\x00-\x1f]+', "_", str(value))

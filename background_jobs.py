@@ -418,9 +418,46 @@ def run_full_job(snapshot, progress):
         # Character reference images still auto-generate where configured.
         # 8-second form generation is a DIFFERENT step requiring an uploaded
         # voiceover in the Video Forms tab after translation finishes.
+        if fields.get("translated") and not fields.get("character_profile"):
+            try:
+                progress.update(68, "👤 Đang lập hồ sơ đầy đủ cho từng nhân vật...")
+                profile_data = parse_json_object(
+                    call(character_bible_prompt(
+                        fields["translated"], language,
+                        snapshot.get("video_style", "Điện ảnh chân thực"),
+                    )), "character_bible",
+                )
+                if isinstance(profile_data.get("characters"), list):
+                    fields["character_profile"] = profile_data
+                    fields["character_profile_json"] = json.dumps(
+                        profile_data, ensure_ascii=False,
+                    )
+                    progress.publish("character_profile", profile_data)
+                    progress.publish("character_profile_json",
+                                     fields["character_profile_json"])
+                    fields["character_bible"] = str(
+                        profile_data.get("character_bible", "")
+                    ).strip()
+                    progress.publish("character_bible", fields["character_bible"])
+                else:
+                    fields["character_images_error"] = (
+                        "AI chưa trả danh sách hồ sơ nhân vật chi tiết."
+                    )
+                    progress.publish("character_images_error",
+                                     fields["character_images_error"])
+            except Exception as exc:
+                progress.check_cancelled()
+                fields["character_images_error"] = (
+                    "Chưa tạo được hồ sơ nhân vật: " + str(exc).replace(
+                        api_key, "[KEY ĐÃ ẨN]"
+                    )
+                )[:250]
+                progress.publish("character_images_error",
+                                 fields["character_images_error"])
+
         if snapshot.get("auto_character_images") and snapshot.get("image_api_key"):
             try:
-                progress.update(68, "🖼️ Đang phân tích nhân vật...")
+                progress.update(68, "🖼️ Đang chuẩn bị ảnh nhân vật...")
                 style = snapshot.get("video_style", "Điện ảnh chân thực")
                 profile_data = fields.get("character_profile")
                 if not isinstance(profile_data, dict) or not profile_data.get("character_bible"):
@@ -430,6 +467,11 @@ def run_full_job(snapshot, progress):
                     )
                     fields["character_profile"] = profile_data
                     progress.publish("character_profile", profile_data)
+                    fields["character_profile_json"] = json.dumps(
+                        profile_data, ensure_ascii=False,
+                    )
+                    progress.publish("character_profile_json",
+                                     fields["character_profile_json"])
                 bible = profile_data["character_bible"]
                 if not isinstance(bible, str) or not bible.strip():
                     raise ValueError("Không tạo được hồ sơ nhân vật.")
@@ -446,7 +488,15 @@ def run_full_job(snapshot, progress):
                 if not isinstance(manifest, dict):
                     manifest = {}
                 image_sink = snapshot.get("image_sink")
-                for name, description in character_specs(profile_data):
+                from character_images import (
+                    detailed_character_profiles, character_reference_description,
+                )
+                detailed = detailed_character_profiles(profile_data)
+                portrait_specs = [
+                    (sheet["name"], character_reference_description(sheet))
+                    for sheet in detailed
+                ][:8] or character_specs(profile_data)
+                for name, description in portrait_specs:
                     if name in manifest:
                         continue
                     progress.check_cancelled()

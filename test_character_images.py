@@ -8,6 +8,7 @@ from unittest.mock import patch
 from character_images import (
     IMAGE_STORE, CharacterImageStore, character_specs,
     create_character_png, filename_part, session_images_zip,
+    detailed_character_profiles, character_reference_description,
 )
 
 
@@ -35,6 +36,35 @@ class CharacterImagesTests(unittest.TestCase):
             for i in range(20)
         )}
         self.assertEqual(len(character_specs(profile)), 8)
+
+    def test_complete_named_profiles_are_kept_individually(self):
+        profile = {"characters": [
+            {"name": "Tấm", "description": "Young protagonist in plain clothes",
+             "role": "Nhân vật chính", "age": "thiếu nữ (đề xuất)",
+             "face": "mặt trái xoan", "hair": "tóc đen dài",
+             "outfit": "áo nâu, váy thẫm", "palette": "nâu, đen",
+             "signature": "khăn lụa", "source_notes": "Màu áo là đề xuất",
+             "reference_prompt": "Full-body character sheet, face visible"},
+            {"name": "Cám", "description": "A recurring antagonist",
+             "face": "mặt tròn", "outfit": "áo xanh"},
+        ]}
+        sheets = detailed_character_profiles(profile)
+        self.assertEqual([sheet["name"] for sheet in sheets], ["Tấm", "Cám"])
+        self.assertEqual(sheets[0]["age"], "thiếu nữ (đề xuất)")
+        self.assertEqual(sheets[1]["face"], "mặt tròn")
+        self.assertEqual(sheets[1]["hair"], "")
+        ready = character_reference_description(sheets[0])
+        self.assertIn("mặt trái xoan", ready)
+        self.assertIn("áo nâu", ready)
+        self.assertIn("Full-body character sheet", ready)
+
+    def test_legacy_bible_can_be_shown_without_false_details(self):
+        sheets = detailed_character_profiles({
+            "character_bible": "Linh: Red scarf and medium-length black hair."
+        })
+        self.assertEqual(len(sheets), 1)
+        self.assertEqual(sheets[0]["description"], "Red scarf and medium-length black hair.")
+        self.assertEqual(sheets[0]["age"], "")
 
     def test_names_are_sanitized_and_each_session_has_distinct_zip(self):
         self.assertEqual(filename_part("Ala/evil?.png"), "Ala_evil_.png")
