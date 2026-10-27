@@ -1,7 +1,7 @@
 import json
 import unittest
 from api_clients import ProviderReadTimeout
-from video_scene_planner import narration_plan
+from video_scene_planner import narration_plan, parse_json_object, InvalidFormJSON
 from video_forms_ui import _generate_all_remaining
 
 class VideoTimeoutRecoveryTests(unittest.TestCase):
@@ -16,6 +16,21 @@ class VideoTimeoutRecoveryTests(unittest.TestCase):
         _generate_all_remaining(plan,ai,checkpoint=lambda p:saved.append(sum(bool(s['visual_prompt']) for s in p['scenes'])))
         self.assertEqual(sizes[:3],[6,3,1])
         self.assertEqual(saved,list(range(1,9)))
+
+    def test_persistent_bad_json_reduces_batch_and_stops_at_one(self):
+        plan=narration_plan('word '*100,'English',audio_duration_seconds=64)
+        plan['style']='2D';plan['character_bible']=''
+        sizes=[]
+        def ai(prompt):
+            sizes.append(len(json.loads(prompt.split('Input scenes:\n')[1])))
+            return '{"scenes":['
+        with self.assertRaises(InvalidFormJSON):_generate_all_remaining(plan,ai)
+        self.assertEqual(sizes,[6,3,1])
+        self.assertEqual(sum(bool(s['visual_prompt']) for s in plan['scenes']),0)
+
+    def test_json_decoder_ignores_trailing_commentary_but_rejects_truncation(self):
+        self.assertEqual(parse_json_object('```json\n{"scenes":[]}\n``` note {extra}', 'scenes'),{'scenes':[]})
+        with self.assertRaises(InvalidFormJSON):parse_json_object('{"scenes":[', 'scenes')
 
     def test_single_scene_timeout_stops_without_loop_or_discarding_existing(self):
         plan=narration_plan('word '*100,'English',audio_duration_seconds=16)

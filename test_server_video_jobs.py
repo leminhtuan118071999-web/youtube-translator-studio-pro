@@ -97,6 +97,21 @@ class BackgroundVideoTests(unittest.TestCase):
         self.assertIn("502", result["error"])
         self.assertIn("video_forms", result["fields"])
 
+    def test_invalid_json_retries_only_failed_batch_and_keeps_completed_forms(self):
+        prompts=[]
+        def unstable(snapshot,prompt):
+            prompts.append(prompt)
+            if len(prompts)==2:return '{"scenes":[{"number":7,"visual_prompt":"broken quote'
+            clean=prompt.split('\nSTRICT OUTPUT RETRY:',1)[0]
+            return self.ai(snapshot,clean)
+        with patch("server_video_jobs._provider_call",side_effect=unstable):
+            result=run_video_forms_job(self.snapshot,JobProgress())
+        self.assertTrue(result['ok'],result['error'])
+        self.assertIn('STRICT OUTPUT RETRY',prompts[2])
+        self.assertEqual(prompts[2].split('\nSTRICT OUTPUT RETRY:',1)[0],prompts[1])
+        self.assertEqual(len(prompts),20)
+        self.assertEqual(sum(bool(s['visual_prompt']) for s in json.loads(result['fields']['video_forms'])['scenes']),109)
+
     def test_cloud_checkpoint_changes_only_active_session(self):
         from cryptography.fernet import Fernet
         key = Fernet.generate_key().decode()

@@ -13,7 +13,7 @@ from translation_language import saved_translation_language
 from api_clients import ProviderReadTimeout
 
 from video_scene_planner import (
-    narration_plan, character_bible_prompt, batch_prompt,
+    narration_plan, character_bible_prompt, batch_prompt, InvalidFormJSON,
     parse_json_object, apply_ai_batch, source_fingerprint, plan_export_text,
     continuous_video_forms_text, grouped_video_forms, add_scene_subtitles, continuous_image_prompts_text, continuous_combined_forms_text,
 )
@@ -68,14 +68,15 @@ def _generate_all_remaining(plan, ai, *, progress=None, checkpoint=None):
             progress(plan, "🎬 Đang viết form video")
         try:
             written = _generate_batch(plan, ai, batch_size=batch_size)
-        except ProviderReadTimeout:
+        except (ProviderReadTimeout, InvalidFormJSON) as exc:
             pending_count = sum(not s.get("visual_prompt", "").strip() for s in plan["scenes"])
             attempted = min(batch_size, pending_count)
             if attempted <= 1:
                 raise
             batch_size = max(1, attempted // 2)
             if progress:
-                progress(plan, f"⏳ API xử lý chậm; tự giảm còn {batch_size} form/lượt")
+                reason = "AI trả JSON lỗi" if isinstance(exc, InvalidFormJSON) else "API xử lý chậm"
+                progress(plan, f"⏳ {reason}; tự giảm còn {batch_size} form/lượt")
             continue
         if not written:
             raise RuntimeError("Không thể tiếp tục tạo form video.")

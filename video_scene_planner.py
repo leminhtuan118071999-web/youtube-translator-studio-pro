@@ -97,18 +97,22 @@ def narration_plan(translation, language, *, words_per_minute=DEFAULT_WPM,
     }
 
 
+class InvalidFormJSON(ValueError):
+    """Malformed/incomplete structured output, distinct from content rejection."""
+
+
 def parse_json_object(raw, required_field):
     if not isinstance(raw, str):
-        raise ValueError("AI trả về dữ liệu không hợp lệ.")
-    left, right = raw.find("{"), raw.rfind("}")
-    if left < 0 or right <= left:
-        raise ValueError("AI không trả về JSON của form video.")
+        raise InvalidFormJSON("AI trả về dữ liệu không hợp lệ.")
+    left = raw.find("{")
+    if left < 0:
+        raise InvalidFormJSON("AI không trả về JSON của form video.")
     try:
-        result = json.loads(raw[left:right + 1])
+        result, _ = json.JSONDecoder().raw_decode(raw, left)
     except (json.JSONDecodeError, TypeError) as exc:
-        raise ValueError("JSON tạo form video không hợp lệ.") from exc
+        raise InvalidFormJSON("JSON tạo form video không hợp lệ.") from exc
     if not isinstance(result, dict) or required_field not in result:
-        raise ValueError("AI thiếu trường dữ liệu form video.")
+        raise InvalidFormJSON("AI thiếu trường dữ liệu form video.")
     return result
 
 

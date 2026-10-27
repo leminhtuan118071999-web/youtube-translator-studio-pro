@@ -10,7 +10,7 @@ import threading
 import time
 
 from faithful_summary import source_hash
-from video_scene_planner import source_fingerprint, validate_speech_segments, normalize_speech_segments, repair_speech_segments
+from video_scene_planner import InvalidFormJSON, source_fingerprint, validate_speech_segments, normalize_speech_segments, repair_speech_segments
 from api_clients import generate_text
 from provider_retries import retry_transient_provider
 from groq_pacing import groq_request_gate
@@ -206,7 +206,7 @@ def run_video_forms_job(snapshot, progress):
             # The signed-in user's checkpoint persists without a browser poll.
             save_cloud_video_checkpoint(snapshot, encoded, "running")
 
-        def checked_form_call(prompt):
+        def checked_form_call_once(prompt):
             raw = call_with_retry(prompt)
             if not snapshot.get("verify_form_language"):
                 return raw
@@ -272,6 +272,26 @@ def run_video_forms_job(snapshot, progress):
                         "For an unknown speaker use narrator, never guess a name. Return ONLY JSON. "
                         "Issues: " + errors + "\nDATA:\n" + raw + "\nORIGINAL INPUT:\n" + prompt)
             raise ValueError("Form chưa đạt ngôn ngữ/phân vai lời nói sau khi tự sửa: " + errors)
+
+        def checked_form_call(prompt):
+            for attempt in range(2):
+                progress.check_cancelled()
+                try:
+                    result = checked_form_call_once(prompt if attempt == 0 else prompt +
+                        "\nSTRICT OUTPUT RETRY: Previous response was malformed/incomplete JSON. "
+                        "Return exactly one complete JSON object, no markdown or commentary. "
+                        "Escape quotes and newlines inside strings. Keep visual descriptions concise "
+                        "while returning every requested scene, image_prompt and verbatim speech segment. "
+                        "Do not omit the final closing brackets or change the original narration.")
+                    parse_json_object(result, "scenes")
+                    return result
+                except InvalidFormJSON:
+                    if attempt == 1:
+                        raise
+                    completed = _completed_count(plan)
+                    total = len(plan.get("scenes", []))
+                    progress.update(round(100 * completed / total) if total else 0,
+                                    "🛠️ AI trả JSON lỗi; đang tự yêu cầu lại nhóm form hiện tại")
 
         checkpoint(plan)
         _generate_all_remaining(
