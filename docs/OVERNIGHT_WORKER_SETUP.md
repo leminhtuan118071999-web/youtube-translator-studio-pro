@@ -28,6 +28,8 @@ Nhập các biến **trong Render**, không ghi vào GitHub hoặc ảnh chụp:
 | `SUPABASE_URL` | URL HTTPS của project Supabase. |
 | `SUPABASE_SERVICE_ROLE_KEY` | *Secret/service role* chỉ cấp trong Render để worker đưa PNG vào Storage. **Không bao giờ** cấu hình vào Streamlit hoặc frontend. |
 
+Worker kiểm tra `DATABASE_URL`, khóa Fernet, trạng thái bảng migration và cấu hình lưu ảnh trước khi phát tín hiệu hoạt động. Nếu một thành phần chưa đúng, worker sẽ dừng với thông báo khắc phục cụ thể; không báo heartbeat giả khiến Streamlit nhận job dù không thể xử lý.
+
 Render sẽ chạy `python durable_worker.py` và tự khởi động lại khi service bị gián đoạn. Worker chỉ cần CPU nhỏ cho prompt generation, không render MP4. Nếu Render gửi SIGTERM hoặc host chết khi đang gọi API, công việc vẫn nằm trong Postgres và sẽ được nhận lại khi lease hết hạn (180 giây), với dữ liệu đã checkpoint.
 
 > Render Background Worker là dịch vụ tính phí; ngoài ra nhà cung cấp AI có thể tính phí theo token/lần tạo ảnh. Worker xử lý một tác vụ mỗi instance, nhiều phiên sẽ xếp hàng; không bảo đảm mỗi phiên hoàn thành trước một giờ cố định nếu API chậm/hết quota.

@@ -40,6 +40,55 @@ def connect():
     return psycopg.connect(dsn, row_factory=dict_row, connect_timeout=12)
 
 
+def validate_startup_config():
+    """Fail before heartbeats when the worker cannot process queued jobs.
+
+    A live heartbeat from a misconfigured machine would make Streamlit offer
+    overnight execution even though every queued task is doomed to fail.
+    """
+    dsn = os.environ.get("DATABASE_URL", "").strip()
+    if not dsn.startswith(("postgres://", "postgresql://")):
+        raise RuntimeError("Thiếu DATABASE_URL PostgreSQL cho worker độc lập.")
+    secret = os.environ.get("SESSION_ENCRYPTION_KEY", "").strip()
+    if not secret:
+        raise RuntimeError("Thiếu SESSION_ENCRYPTION_KEY của Streamlit.")
+    try:
+        Fernet(secret.encode("ascii"))
+    except (TypeError, ValueError) as exc:
+        raise RuntimeError(
+            "SESSION_ENCRYPTION_KEY phải là khóa Fernet hợp lệ và "
+            "trùng với khóa đang dùng trên Streamlit."
+        ) from exc
+
+    storage_url = os.environ.get("SUPABASE_URL", "").strip()
+    storage_secret = os.environ.get("SUPABASE_SERVICE_ROLE_KEY", "").strip()
+    if bool(storage_url) != bool(storage_secret):
+        raise RuntimeError(
+            "Để lưu ảnh nhân vật, phải cấu hình cả SUPABASE_URL và "
+            "SUPABASE_SERVICE_ROLE_KEY trong Render."
+        )
+    # Only the server reads this DSN. Do not print a secret or an entire
+    # underlying connection error, which may contain database credentials.
+    try:
+        with connect() as conn:
+            row = conn.execute("""
+                select to_regclass('public.lmt_durable_jobs') is not null as jobs,
+                       to_regclass('public.lmt_worker_health') is not null as health
+            """).fetchone()
+        if not row or not row["jobs"] or not row["health"]:
+            raise RuntimeError(
+                "Chưa tạo đủ bảng Supabase của hàng đợi. "
+                "Hãy áp dụng migration trước khi chạy Render worker."
+            )
+    except RuntimeError:
+        raise
+    except Exception as exc:
+        raise RuntimeError(
+            "Worker chưa kết nối được PostgreSQL/Supabase. "
+            "Kiểm tra DATABASE_URL, kết nối mạng, SSL và quyền ghi database."
+        ) from exc
+
+
 def claim_one(worker_name):
     """Atomically acquire a task across multiple workers via SKIP LOCKED."""
     query = """
@@ -362,6 +411,7 @@ def run_forever():
 
 
 def main():
+    validate_startup_config()
     def handle_signal(_signal, _frame):
         _stop.set()
     signal.signal(signal.SIGTERM,handle_signal)
