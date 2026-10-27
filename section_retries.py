@@ -64,7 +64,7 @@ def rerun_target_rewrite(session, target_language, call, progress):
     """Rebuild from the original; commit target text and review atomically."""
     original = (session.get("source") or "").strip()
     if not original:
-        raise ValueError("Cần văn bản gốc để viết lại bản ngôn ngữ đích dưới 9.000 ký tự.")
+        raise ValueError("Cần văn bản gốc để dịch đầy đủ sang ngôn ngữ đích.")
     if session.get("optimization_work_json"):
         progress.publish("optimization_work_json", session["optimization_work_json"])
     result = rewrite_target_script(original, target_language, call, progress)

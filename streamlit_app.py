@@ -1648,7 +1648,7 @@ language = st.selectbox(
 )
 session["language"] = language
 
-st.caption("Bắt đầu: phân tích bản gốc, chọn một phần hấp dẫn và liền mạch để tách thành câu chuyện riêng bằng ngôn ngữ đích, khoảng 9.000 ký tự (tối đa 8.999). Giữ đúng hook, hành động, quan hệ và ý nghĩa số liệu của tuyến được chọn.")
+st.caption("Bắt đầu: dịch đầy đủ văn bản gốc sang ngôn ngữ đích dưới dạng lời đọc, tự kiểm tra và sửa lỗi nhẹ; giữ sát nội dung gốc, không giới hạn 9.000 ký tự.")
 if st.button("🚀 BẮT ĐẦU TẠO TOÀN BỘ", type="primary",
              use_container_width=True, key=f"run_all_{sid}"):
     sync_form(sid)
@@ -1857,48 +1857,21 @@ with st.container(key="result_tabs"):
          "🎬 Form video 8 giây", "🖼️ Ảnh nhân vật"]
     )
 with tab_translate:
-    if session.get("optimized_script", "").strip():
-        with st.expander("✍️ Bản viết lại ngôn ngữ đích (dưới 9.000 ký tự)", expanded=False):
-            st.caption(
-                f"{len(session['optimized_script']):,} ký tự · Quy tắc mới: tối đa 8.999 ký tự. "
-                "Giữ nguyên phụ đề gốc để đối chiếu."
-            )
-            try:
-                summary_review = json.loads(session.get("optimization_review_json") or "{}")
-            except (ValueError, TypeError):
-                summary_review = {}
-            if (isinstance(summary_review, dict)
-                    and summary_review.get("version") in COMPATIBLE_OPTIMIZATION_VERSIONS
-                    and summary_review.get("method") == "selected_story_target"
-                    and summary_review.get("target_language") == language
-                    and len(session["optimized_script"]) <= MAX_TARGET_SCRIPT_CHARS
-                    and summary_review.get("source_sha256") == source_hash(session.get("source", ""))
-                    and summary_review.get("output_sha256") == source_hash(session["optimized_script"])):
-                st.caption("Đã chọn một tuyến truyện liền mạch từ bản gốc, viết bằng ngôn ngữ đích và đối soát hook, hành động, quan hệ, số liệu.")
-                selection = summary_review.get("story_selection", {})
-                if selection:
-                    st.caption("Lý do chọn: " + str(selection.get("reason", "")))
-                    with st.expander("📖 Phần văn bản gốc được chọn", expanded=False):
-                        st.code(session.get("source", "").strip()[selection["start"]:selection["end"]], language=None, wrap_lines=True)
-                source_repairs = summary_review.get("source_repairs", [])
-                if source_repairs:
-                    with st.expander(f"🛠️ Các sửa đổi trên bản xử lý ({len(source_repairs)})", expanded=False):
-                        for repair in source_repairs:
-                            if isinstance(repair, dict):
-                                st.markdown("**Trước:** " + str(repair.get("before", "")))
-                                st.markdown("**Sau:** " + str(repair.get("after", "")))
-                                st.caption(str(repair.get("reason", "")))
-                for conflict in summary_review.get("source_conflicts", []):
-                    st.warning("Điểm trong bản gốc chưa đủ căn cứ để tự sửa: " + str(conflict))
-            else:
-                st.info("Nội dung phiên cũ chưa theo quy tắc mới. Nhấn Chạy lại riêng — Bản dịch hoặc Bắt đầu để viết lại từ bản gốc dưới 9.000 ký tự.")
-            st.code(session["optimized_script"], language=None, wrap_lines=True)
+    if session.get("optimization_review_json"):
+        try:
+            report = json.loads(session["optimization_review_json"])
+        except (ValueError, TypeError):
+            report = {}
+        if isinstance(report, dict) and report.get("method") == "full_narration_translation":
+            st.caption("Bản dịch đầy đủ dạng lời đọc, đã kiểm tra và sửa lỗi theo văn bản gốc.")
+        else:
+            st.info("Phiên cũ: nhấn Chạy lại riêng — Bản dịch để dịch đầy đủ theo yêu cầu mới.")
     if st.button(
         "🔄 Chạy lại riêng — Bản dịch", key=f"translate_{sid}",
         disabled=session.get("job_state") == "running",
     ):
         try:
-            with st.spinner(f"Đang chọn tuyến truyện và viết câu chuyện riêng sang {language}, dưới 9.000 ký tự..."):
+            with st.spinner(f"Đang dịch đầy đủ và kiểm tra lời đọc bằng {language}..."):
                 rerun_target_rewrite(session, language, ai, JobProgress())
             mark_session_processed(session)
             _persist_and_rerun()
@@ -1914,8 +1887,8 @@ with tab_translate:
         session["translated"],
         key=f"copy_all_translation_{sid}",
     )
-    with st.expander(f"🌍 Bản viết lại hoàn chỉnh ({language}) — Nhấn để xem toàn bộ", expanded=False):
-        st.caption(f"{len(session['translated']):,} ký tự · Quy tắc mới: dưới 9.000 ký tự, giữ cốt truyện và các tình tiết quan trọng. Có thể Copy hoặc tải TXT.")
+    with st.expander(f"🌍 Bản dịch giọng đọc ({language}) — Nhấn để xem toàn bộ", expanded=False):
+        st.caption(f"{len(session['translated']):,} ký tự · Dịch đầy đủ, giữ sát nội dung gốc. Có thể Copy hoặc tải TXT.")
         output("📋 Copy toàn bộ bản dịch", session["translated"], allow_download=True)
 
 with tab_seo:

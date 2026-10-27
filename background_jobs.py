@@ -294,8 +294,7 @@ def run_full_job(snapshot, progress):
         fields["source"] = source
         progress.publish("source", source)
 
-        # Rewrite directly from the immutable original into the target language.
-        # The final target text, including spaces/newlines, must be below 9,000.
+        # Translate the complete original as reviewed spoken narration.
         target_text = fields.get("optimized_script")
         try:
             review = json.loads(fields.get("optimization_review_json") or "{}")
@@ -303,12 +302,10 @@ def run_full_job(snapshot, progress):
             review = {}
         verified_checkpoint = (
             isinstance(target_text, str) and bool(target_text.strip())
-            and len(target_text) <= MAX_TARGET_SCRIPT_CHARS
             and isinstance(review, dict)
-            and review.get("version") in COMPATIBLE_OPTIMIZATION_VERSIONS
-            and review.get("method") == "selected_story_target"
+            and review.get("version") == 1
+            and review.get("method") == "full_narration_translation"
             and review.get("target_language") == language
-            and review.get("max_characters") == MAX_TARGET_SCRIPT_CHARS
             and review.get("source_sha256") == source_hash(source)
             and review.get("output_sha256") == source_hash(target_text)
         )
@@ -324,8 +321,8 @@ def run_full_job(snapshot, progress):
             fields["optimization_review_json"] = progress.partial_result().get("optimization_review_json", "")
         else:
             progress.update(67, "✅ Đã khôi phục bản viết lại ngôn ngữ đích đã đối soát")
-        if not target_text.strip() or len(target_text) > MAX_TARGET_SCRIPT_CHARS:
-            raise ValueError("Bản viết lại ngôn ngữ đích phải dưới 9.000 ký tự.")
+        if not target_text.strip():
+            raise ValueError("Bản dịch giọng đọc không được rỗng.")
         fields.update(optimized_script=target_text, translated=target_text,
                       optimization_work_json="", translation_parts=[target_text],
                       translation_complete=True)
@@ -333,170 +330,12 @@ def run_full_job(snapshot, progress):
                      "translated", "translation_parts", "translation_complete"):
             progress.publish(name, fields.get(name, ""))
 
-        # Character reference images still auto-generate where configured.
-        # 8-second form generation is a DIFFERENT step requiring an uploaded
-        # voiceover in the Video Forms tab after translation finishes.
-        if fields.get("translated") and not fields.get("character_profile"):
-            try:
-                progress.update(68, "👤 Đang lập hồ sơ đầy đủ cho từng nhân vật...")
-                profile_data = parse_json_object(
-                    call(character_bible_prompt(
-                        fields["translated"], language,
-                        snapshot.get("video_style", "Điện ảnh chân thực"),
-                    )), "character_bible",
-                )
-                if isinstance(profile_data.get("characters"), list):
-                    fields["character_profile"] = profile_data
-                    fields["character_profile_json"] = json.dumps(
-                        profile_data, ensure_ascii=False,
-                    )
-                    progress.publish("character_profile", profile_data)
-                    progress.publish("character_profile_json",
-                                     fields["character_profile_json"])
-                    fields["character_bible"] = str(
-                        profile_data.get("character_bible", "")
-                    ).strip()
-                    progress.publish("character_bible", fields["character_bible"])
-                else:
-                    fields["character_images_error"] = (
-                        "AI chưa trả danh sách hồ sơ nhân vật chi tiết."
-                    )
-                    progress.publish("character_images_error",
-                                     fields["character_images_error"])
-            except Exception as exc:
-                progress.check_cancelled()
-                fields["character_images_error"] = (
-                    "Chưa tạo được hồ sơ nhân vật: " + str(exc).replace(
-                        api_key, "[KEY ĐÃ ẨN]"
-                    )
-                )[:250]
-                progress.publish("character_images_error",
-                                 fields["character_images_error"])
-
-        if snapshot.get("auto_character_images") and snapshot.get("image_api_key"):
-            try:
-                progress.update(68, "🖼️ Đang chuẩn bị ảnh nhân vật...")
-                style = snapshot.get("video_style", "Điện ảnh chân thực")
-                profile_data = fields.get("character_profile")
-                if not isinstance(profile_data, dict) or not profile_data.get("character_bible"):
-                    profile_data = parse_json_object(
-                        call(character_bible_prompt(fields["translated"], language, style)),
-                        "character_bible",
-                    )
-                    fields["character_profile"] = profile_data
-                    progress.publish("character_profile", profile_data)
-                    fields["character_profile_json"] = json.dumps(
-                        profile_data, ensure_ascii=False,
-                    )
-                    progress.publish("character_profile_json",
-                                     fields["character_profile_json"])
-                bible = profile_data["character_bible"]
-                if not isinstance(bible, str) or not bible.strip():
-                    raise ValueError("Không tạo được hồ sơ nhân vật.")
-                fields["character_bible"] = bible.strip()
-                progress.publish("character_bible", fields["character_bible"])
-                image_key = snapshot["image_api_key"]
-                # Durable workers upload PNG into private Supabase Storage.
-                # Local Streamlit workers retain their original in-memory path.
-                manifest_raw = fields.get("character_images_manifest", "")
-                try:
-                    manifest = json.loads(manifest_raw) if manifest_raw else {}
-                except (TypeError, ValueError):
-                    manifest = {}
-                if not isinstance(manifest, dict):
-                    manifest = {}
-                image_sink = snapshot.get("image_sink")
-                from character_images import (
-                    detailed_character_profiles, character_reference_description,
-                )
-                detailed = detailed_character_profiles(profile_data)
-                portrait_specs = [
-                    (sheet["name"], character_reference_description(sheet))
-                    for sheet in detailed
-                ][:8] or character_specs(profile_data)
-                for name, description in portrait_specs:
-                    if name in manifest:
-                        continue
-                    progress.check_cancelled()
-                    progress.update(68, f"🖼️ Đang tạo ảnh nhân vật {name}...")
-                    try:
-                        png = create_character_png(
-                            image_key, name, description,
-                            style=style, bible=bible,
-                            model=snapshot.get("image_model") or IMAGE_MODEL,
-                        )
-                        if callable(image_sink):
-                            manifest[name] = image_sink(name, png)
-                            fields["character_images_manifest"] = json.dumps(
-                                manifest, ensure_ascii=False
-                            )
-                            progress.publish(
-                                "character_images_manifest",
-                                fields["character_images_manifest"],
-                            )
-                            fields["character_images_count"] = len(manifest)
-                        else:
-                            IMAGE_STORE.save(
-                                snapshot["image_scope"], snapshot["image_session_id"],
-                                name, png,
-                            )
-                            fields["character_images_count"] = len(
-                                IMAGE_STORE.images(snapshot["image_scope"],
-                                                   snapshot["image_session_id"])
-                            )
-                        progress.publish("character_images_count",
-                                         fields["character_images_count"])
-                    except Exception as exc:
-                        fields["character_images_error"] = (
-                            "Tạo ảnh chưa hoàn tất: "
-                            + str(exc).replace(image_key, "[IMAGE KEY ĐÃ ẨN]")
-                        )[:250]
-                        progress.publish("character_images_error",
-                                         fields["character_images_error"])
-            except Exception as exc:
-                progress.check_cancelled()
-                message = str(exc).replace(api_key, "[API KEY ĐÃ ẨN]")
-                message = message.replace(snapshot.get("image_api_key", ""), "[IMAGE KEY ĐÃ ẨN]")
-                fields["character_images_error"] = message[:250]
-                progress.publish("character_images_error", fields["character_images_error"])
-
-        if all(isinstance(fields.get(k),str) and fields[k].strip()
-               for k in ("new_title","new_description","seo_tags")):
-            result["ok"] = True
-            progress.update(100, "✅ SEO đã có từ checkpoint; hoàn thành phiên.")
-            return result
-
-        # SEO still needs a concise overview for long transcripts, but do
-        # not perform any image-prompt generation or publish prompt fields.
-        progress.update(70, "📝 Đang chuẩn bị nội dung SEO...")
-        # The canonical target rewrite is already below 9,000 characters.
-        # Re-summarizing it for SEO costs extra calls and risks losing hooks.
-        brief = (fields["translated"] if len(fields["translated"]) <= MAX_TARGET_SCRIPT_CHARS
-                 else overview(fields["translated"], call, progress))
-        progress.check_cancelled()
-        progress.update(84, "📝 Đang tạo tiêu đề, mô tả và SEO...")
-        metadata = parse_object(call(
-            f"Soạn YouTube tiêu đề, mô tả và 15 từ khóa SEO bằng {language}. "
-            "Sát ý gốc, giàu ngữ cảnh, không bịa tình tiết, mô tả có emoji phù hợp. "
-            'Chỉ trả JSON {"title":"...", "description":"...", "tags":["..."]}.\n\n'
-            f"Tiêu đề gốc: {title}\nMô tả gốc: {description}\n"
-            f"Nội dung:\n{brief}"
-        ), "title")
-        tags = metadata.get("tags", [])
-        tags = (", ".join(map(str, tags)) if isinstance(tags, list) else str(tags))
-        new_title = str(metadata.get("title", "")).strip()
-        new_desc = str(metadata.get("description", "")).strip()
-        if not all([new_title, new_desc, tags.strip()]):
-            raise ValueError("Thiếu tiêu đề, mô tả hoặc từ khóa SEO trong phản hồi API.")
-        fields["new_title"] = new_title
-        fields["new_description"] = new_desc
-        fields["seo_tags"] = tags
-        fields["metadata"] = "\n\n".join([new_title, new_desc, tags])
         fields["language"] = language
-        for item in ("new_title", "new_description", "seo_tags", "metadata", "language"):
-            progress.publish(item, fields[item])
+        progress.publish("language", language)
         result["ok"] = True
-        progress.update(100, "✅ Hoàn thành. Đã lưu vào danh sách phiên.")
+        progress.update(100, "✅ Hoàn thành bản dịch giọng đọc đã kiểm tra")
+        return result
+
     except Exception as exc:
         pending_optimization = progress.partial_result().get("optimization_work_json", "")
         if pending_optimization:

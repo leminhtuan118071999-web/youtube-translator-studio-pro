@@ -418,12 +418,11 @@ def optimize_source_script(source, call, progress, *, target_language=None,
 
 
 def rewrite_target_script(source, target_language, call, progress):
-    """One source-to-target rewrite pipeline, capped strictly below 9,000 chars."""
+    """Compatibility entry point for full-source narration translation."""
     if not isinstance(target_language, str) or not target_language.strip():
         raise ValueError("Chưa chọn ngôn ngữ đích.")
-    from story_selection import extract_target_story
-    return extract_target_story(source, target_language.strip(), call, progress,
-                                optimize_source_script)
+    from narration_translation import translate_narration
+    return translate_narration(source, target_language.strip(), call, progress)
 
 
 
