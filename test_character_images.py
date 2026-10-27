@@ -8,7 +8,7 @@ from unittest.mock import patch
 from character_images import (
     IMAGE_STORE, CharacterImageStore, character_specs,
     create_character_png, filename_part, session_images_zip,
-    detailed_character_profiles, character_reference_description,
+    detailed_character_profiles, character_reference_description, character_profile_text,
 )
 
 
@@ -65,6 +65,23 @@ class CharacterImagesTests(unittest.TestCase):
         self.assertEqual(len(sheets), 1)
         self.assertEqual(sheets[0]["description"], "Red scarf and medium-length black hair.")
         self.assertEqual(sheets[0]["age"], "")
+
+    def test_copy_keeps_full_identity_provenance_and_long_details(self):
+        detail = "tóc đen " * 1000
+        sheet = detailed_character_profiles({"characters": [{
+            "name": "Tấm", "hair": detail, "source_notes": "Tạo hình đề xuất",
+        }]})[0]
+        copied = character_profile_text(sheet)
+        self.assertIn("Nhân vật: Tấm", copied)
+        self.assertIn(detail.strip(), copied)
+        self.assertIn("Tạo hình đề xuất", copied)
+        self.assertIn("Chưa được xác định", copied)
+        self.assertIn(detail.strip(), character_reference_description(sheet))
+
+    def test_prompt_reads_middle_of_long_translation(self):
+        from video_scene_planner import character_bible_prompt
+        story = "a" * 12000 + "Nhân vật giữa truyện" + "b" * 12000
+        self.assertIn(story, character_bible_prompt(story, "Vietnamese", "2D"))
 
     def test_names_are_sanitized_and_each_session_has_distinct_zip(self):
         self.assertEqual(filename_part("Ala/evil?.png"), "Ala_evil_.png")

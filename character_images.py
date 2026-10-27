@@ -85,9 +85,9 @@ def detailed_character_profiles(profile):
             sheet = {"name": name}
             for key, _label in CHARACTER_PROFILE_FIELDS:
                 val = record.get(key)
-                sheet[key] = str(val).strip()[:1500] if val else ""
+                sheet[key] = str(val).strip() if val else ""
             desc = record.get("description")
-            sheet["description"] = str(desc).strip()[:1800] if desc else ""
+            sheet["description"] = str(desc).strip() if desc else ""
             sheets.append(sheet)
     if not sheets:
         sheets = [{"name": name, "description": description,
@@ -116,7 +116,16 @@ def character_reference_description(sheet):
             chunks.append(f"{label}: {value.strip()}")
     if isinstance(sheet.get("description"), str) and sheet["description"].strip():
         chunks.insert(0, sheet["description"].strip())
-    return ". ".join(chunks)[:5000]
+    return ". ".join(chunks)
+
+
+def character_profile_text(sheet):
+    """Copy the complete named sheet, including provenance and empty fields."""
+    lines = [f"Nhân vật: {sheet.get('name', '')}",
+             "Nhận diện tổng quan: " + (sheet.get("description") or "Chưa được xác định")]
+    for field, label in CHARACTER_PROFILE_FIELDS:
+        lines.append(f"{label}: {sheet.get(field) or 'Chưa được xác định'}")
+    return "\n".join(lines)
 
 
 def filename_part(value):

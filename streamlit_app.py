@@ -1,4 +1,5 @@
 import json
+import hashlib
 import re
 import uuid
 import time
@@ -36,7 +37,7 @@ from video_forms_ui import render_video_forms
 from video_scene_planner import character_bible_prompt, parse_json_object
 from section_retries import rerun_translation, rerun_seo, portrait_retry_specs
 from character_images import (IMAGE_STORE, IMAGE_MODEL, session_images_zip, create_character_png,
-    detailed_character_profiles, character_reference_description, CHARACTER_PROFILE_FIELDS)
+    detailed_character_profiles, character_reference_description, character_profile_text, CHARACTER_PROFILE_FIELDS)
 from session_name_controls import session_name_control, rename_record
 from durable_queue import (queue_available, worker_healthy, submit_job,
     get_owned_jobs, apply_owned_job_results, fetch_portrait_images)
@@ -1987,11 +1988,16 @@ with tab_characters:
             saved_video_plan = json.loads(raw_video_plan)
             if isinstance(saved_video_plan, dict):
                 character_bible = (
-                    str(saved_video_plan.get("character_bible") or "").strip()
-                    or character_bible
+                    character_bible
+                    or str(saved_video_plan.get("character_bible") or "").strip()
                 )
         except (ValueError, TypeError):
             pass
+    if character_bible:
+        copy_all_button(
+            "📋 Copy hồ sơ nhân vật/bối cảnh cố định", character_bible,
+            key=f"copy_character_bible_{sid}",
+        )
     with st.expander(
         "📌 Hồ sơ nhân vật/bối cảnh cố định cho mọi form", expanded=False
     ):
@@ -2069,31 +2075,62 @@ with tab_characters:
             "Mỗi hồ sơ mở/thu gọn riêng, phục vụ tạo ảnh tham chiếu "
             "giữ nguyên diện mạo trong tất cả các cảnh."
         )
+        copy_all_button(
+            "📋 Copy toàn bộ hồ sơ nhân vật",
+            "\n\n".join(character_profile_text(sheet) for sheet in saved_sheets),
+            key=f"copy_all_character_profiles_{sid}",
+        )
         for idx, sheet in enumerate(saved_sheets, start=1):
+            # Copy stays available even while the character's form is collapsed.
+            copy_all_button(
+                f"📋 Copy hồ sơ — {sheet['name']}",
+                character_profile_text(sheet),
+                key=f"copy_character_reference_{sid}_{idx}",
+            )
             with st.expander(
-                f"👤 Nhân vật {idx:02d} — {sheet['name']}",
-                expanded=False,
+                f"👤 Nhân vật {idx:02d} — {sheet['name']}", expanded=False,
             ):
-                if sheet.get("description"):
-                    st.markdown("**Nhận diện tổng quan**")
-                    st.write(sheet["description"])
-                for field, field_label in CHARACTER_PROFILE_FIELDS:
-                    value = sheet.get(field, "")
-                    if value:
-                        st.markdown(f"**{field_label}:** {value}")
-                    else:
-                        st.caption(f"{field_label}: Chưa được xác định")
-                st.caption(
-                    "Phân biệt chi tiết có trong nguyên tác với các yếu tố "
-                    "đề xuất tạo hình tại mục 'Chi tiết gốc và đề xuất tạo hình'."
-                )
-                reference_text = character_reference_description(sheet)
-                if reference_text:
-                    copy_all_button(
-                        f"📋 Copy mô tả ảnh tham chiếu — {sheet['name']}",
-                        reference_text,
-                        key=f"copy_character_reference_{sid}_{idx}",
+                revision = hashlib.sha256(
+                    json.dumps(sheet, ensure_ascii=False, sort_keys=True).encode()
+                ).hexdigest()[:12]
+                form_key = f"character_profile_{sid}_{idx}_{revision}"
+                with st.form(form_key):
+                    st.text_input("Tên nhân vật", value=sheet["name"], disabled=True,
+                                  key=f"{form_key}_name")
+                    edited = dict(sheet)
+                    edited["description"] = st.text_area(
+                        "Nhận diện tổng quan", value=sheet.get("description", ""),
+                        key=f"{form_key}_description",
                     )
+                    for field, field_label in CHARACTER_PROFILE_FIELDS:
+                        edited[field] = st.text_area(
+                            field_label, value=sheet.get(field, ""),
+                            key=f"{form_key}_{field}", height=100,
+                        )
+                    st.caption(
+                        "Ghi rõ chi tiết trong bản dịch và chi tiết đề xuất tạo hình. "
+                        "Lưu hồ sơ trước khi sao chép hoặc tạo lại ảnh tham chiếu."
+                    )
+                    save_profile = st.form_submit_button(
+                        "💾 Lưu hồ sơ nhân vật",
+                        disabled=session.get("job_state") == "running",
+                    )
+                if save_profile:
+                    saved_sheets[idx - 1] = edited
+                    updated_profile = {
+                        "characters": saved_sheets,
+                        "character_bible": "\n\n".join(
+                            character_profile_text(item) for item in saved_sheets
+                        ),
+                    }
+                    session["character_profile_json"] = json.dumps(
+                        updated_profile, ensure_ascii=False,
+                    )
+                    session["character_profile"] = updated_profile
+                    session["character_bible"] = updated_profile["character_bible"]
+                    mark_session_processed(session)
+                    _persist_and_rerun()
+
     else:
         st.info(
             "Chưa có hồ sơ chi tiết. Nhấn 'Tạo/cập nhật hồ sơ chi tiết "

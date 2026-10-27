@@ -114,9 +114,7 @@ def parse_json_object(raw, required_field):
 
 def character_bible_prompt(translation, language, style):
     """Detailed, named reference sheets for consistent character portraits."""
-    sample = translation if len(translation) <= 18000 else (
-        translation[:11500] + "\n[...]\n" + translation[-5500:]
-    )
+    sample = translation
     return (
         f"Write all character descriptions in {language}. CHARACTER/WORLD REFERENCE. Extract EVERY named "
         "character appearing in the following target-language story, including "
@@ -148,7 +146,7 @@ def character_bible_prompt(translation, language, style):
         '"personality":"thoughtful expression",'
         '"reference_prompt":"Full-body consistent portrait of Ala...",'
         '"source_notes":"Hair and coat colors are proposed; not stated"}]}. '
-        "Do not exceed 20,000 total characters if the cast is large. "
+        "Never omit a named character to shorten the output; merge aliases of the same character. "
         "Target-language source script:\n" + sample
     )
 

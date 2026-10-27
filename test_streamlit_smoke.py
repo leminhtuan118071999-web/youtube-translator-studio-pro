@@ -17,6 +17,31 @@ class StreamlitSmokeTests(unittest.TestCase):
         self.app.session_state["_browser_api_restored"] = True
         self.app.session_state["_session_name_test_fallback"] = True
 
+    def test_character_profile_form_saves_each_character_independently(self):
+        import json
+        app = self.app
+        for key in ('_browser_sessions_restored','_browser_api_restored','_session_name_test_fallback'):
+            app.session_state[key] = True
+        app.run()
+        assert not app.exception, [x.message for x in app.exception]
+        sid = app.session_state['selected_session']
+        session = app.session_state['workspaces'][sid]
+        session['translated'] = 'Tấm gặp Cám.'
+        session['character_profile_json'] = json.dumps({'characters': [{'name':'Tấm','hair':'tóc đen'}, {'name':'Cám','hair':'tóc dài'}]})
+        app.run()
+        assert not app.exception, [x.message for x in app.exception]
+        assert len([x for x in app.text_area if x.label == 'Tóc / kiểu tóc / màu tóc']) == 2
+        hair = next(x for x in app.text_area if x.label == 'Tóc / kiểu tóc / màu tóc')
+        hair.set_value('Tóc đen tết bím')
+        next(x for x in app.button if x.label == '💾 Lưu hồ sơ nhân vật').click()
+        app.run()
+        assert not app.exception, [x.message for x in app.exception]
+        profile = json.loads(app.session_state['workspaces'][sid]['character_profile_json'])
+        assert profile['characters'][0]['hair'] == 'Tóc đen tết bím'
+        assert profile['characters'][1]['hair'] == 'tóc dài'
+        assert any(x.label == '👤 Nhân vật 01 — Tấm' for x in app.expander)
+        assert next(x for x in app.text_area if x.label == 'Tóc / kiểu tóc / màu tóc').value == 'Tóc đen tết bím'
+
     def test_ai33_app_switch_avoids_page_lookup_and_preserves_work(self):
         """Switch both views without re-registering pages or losing futures."""
         from concurrent.futures import Future
