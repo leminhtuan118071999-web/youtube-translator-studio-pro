@@ -1,10 +1,13 @@
 """Build reference sheets with bounded source scans and one portrait per call."""
 import hashlib
 import json
+import re
 import unicodedata
 
 from video_scene_planner import character_bible_prompt, parse_json_object
 from character_images import CHARACTER_PROFILE_FIELDS
+
+MAX_DETAILED_CHARACTERS = 9
 
 
 def _identity(name):
@@ -56,7 +59,10 @@ def build_character_profiles(text, language, style, call, *, state=None,
             f"Read this target-language story excerpt in {language}. Extract EVERY "
             "named human or animal, including minor characters. Return ONLY JSON: "
             '{"world":"brief explicit setting facts", "characters":'
-            '[{"name":"exact canonical name", "evidence":"explicit facts only"}]}. '
+            '[{"name":"exact canonical name", "evidence":"explicit facts only", '
+            '"importance":2}]}. '
+            "importance is 2 for a central/protagonist character, 1 for a recurring "
+            "supporting character, 0 for a minor/cameo character. "
             "Do NOT design appearances yet. For each character capture ALL stated "
             "appearance, age, outfit, role, relationships and identifying facts, "
             "concisely, without inventing. Return an empty array if no names occur. "
@@ -80,6 +86,9 @@ def build_character_profiles(text, language, style, call, *, state=None,
             if target is None:
                 target = {"name": name, "facts": []}
                 state["evidence"].append(target)
+            importance = record.get("importance", 0)
+            if type(importance) is int and 0 <= importance <= 2:
+                target["importance"] = max(target.get("importance", 0), importance)
             facts = record["evidence"].strip()
             if facts not in target["facts"]:
                 target["facts"].append(facts)
@@ -89,9 +98,26 @@ def build_character_profiles(text, language, style, call, *, state=None,
         state["scanned"] = index + 1
         save()
 
-    total = len(state["evidence"])
-    for index in range(len(state["sheets"]), total):
-        record = state["evidence"][index]
+    selected = state["evidence"]
+    if len(selected) > MAX_DETAILED_CHARACTERS:
+        normalized_text = _identity(text)
+        def priority(record):
+            mentions = len(re.findall(
+                r"(?<!\w)" + re.escape(_identity(record["name"])) + r"(?!\w)",
+                normalized_text,
+            ))
+            return record.get("importance", 0), mentions
+        selected = sorted(selected, key=priority, reverse=True)[:MAX_DETAILED_CHARACTERS]
+    # Older checkpoints may already contain more than nine completed sheets.
+    # Keep only the chosen identities, and reuse them even if ranking changed.
+    completed = {_identity(s["name"]): s for s in state["sheets"]}
+    state["sheets"] = [completed[_identity(r["name"])] for r in selected
+                       if _identity(r["name"]) in completed]
+    save()
+    total = len(selected)
+    for index, record in enumerate(selected):
+        if _identity(record["name"]) in completed:
+            continue
         status(f"Đang tạo hồ sơ {index + 1}/{total}: {record['name']}")
         # Each response contains exactly one detailed sheet instead of all
         # characters and a full story in a single slow model completion.
@@ -119,6 +145,8 @@ def build_character_profiles(text, language, style, call, *, state=None,
         sheets[0]["name"] = record["name"]
         state["sheets"].append(sheets[0])
         save()
+    completed = {_identity(s["name"]): s for s in state["sheets"]}
+    state["sheets"] = [completed[_identity(r["name"])] for r in selected]
     bible = "\n".join(state["world"] + [
         f"{sheet['name']}: {sheet['reference_prompt']}" for sheet in state["sheets"]
     ])

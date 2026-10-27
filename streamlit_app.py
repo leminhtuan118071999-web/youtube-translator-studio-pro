@@ -11,7 +11,7 @@ import streamlit.components.v1 as components
 from streamlit.runtime import exists as streamlit_runtime_exists
 
 import requests
-from character_profiles import build_character_profiles
+from character_profiles import build_character_profiles, MAX_DETAILED_CHARACTERS
 import streamlit as st
 from PIL import Image
 from youtube_transcript_api import YouTubeTranscriptApi
@@ -2035,6 +2035,10 @@ with tab_characters:
             "character_bible": character_bible,
         })
 
+    st.caption(
+        f"Tạo tối đa {MAX_DETAILED_CHARACTERS} hồ sơ nhân vật; ưu tiên nhân vật "
+        "chính và nhân vật xuất hiện nhiều trong bản dịch."
+    )
     if st.button(
         "🔄 Tạo/cập nhật hồ sơ chi tiết từng nhân vật",
         key=f"regenerate_detailed_characters_{sid}",
