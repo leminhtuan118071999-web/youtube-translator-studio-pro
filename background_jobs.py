@@ -255,13 +255,13 @@ def run_full_job(snapshot, progress):
         language = snapshot["language"]
         provided_source = (snapshot.get("uploaded_source") or "").strip()
         if vid:
-            if isinstance(fields.get("source"),str) and fields["source"].strip():
+            if provided_source:
+                progress.update(6, "📄 Dùng nội dung nhập hoặc phụ đề tải lên...")
+                source, caption_lang = provided_source, "Nội dung được cung cấp"
+            elif isinstance(fields.get("source"),str) and fields["source"].strip():
                 source = fields["source"]
                 caption_lang = fields.get("caption_language", "Phụ đề đã lưu")
                 progress.update(8, "📄 Tiếp tục với phụ đề đã lưu từ phiên trước")
-            elif provided_source:
-                progress.update(6, "📄 Dùng file phụ đề đã tải lên...")
-                source, caption_lang = provided_source, "Phụ đề tải lên"
             else:
                 progress.update(5, "📥 Đang lấy phụ đề YouTube...")
                 source, caption_lang = fetch_subtitles(

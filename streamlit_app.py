@@ -139,13 +139,13 @@ LANGUAGES = [
     "Tiếng Catalan", "Tiếng Basque", "Tiếng Wales", "Tiếng Luxembourg",
     "Tiếng Macedonia", "Tiếng Việt", "Tiếng Nhật", "Tiếng Hàn",
 ]
-FIELDS = ("url", "source", "title", "description", "translated", "prompts", "metadata", "language", "new_title", "new_description", "seo_tags", "video_forms", "optimized_script", "optimization_review_json", "optimization_work_json", "character_images_error", "character_bible", "character_images_manifest", "character_profile_json", "seo_stale", "character_bible_stale")
-FORM_FIELDS = ("url", "language")
+FIELDS = ("url", "source", "pasted_source", "title", "description", "translated", "prompts", "metadata", "language", "new_title", "new_description", "seo_tags", "video_forms", "optimized_script", "optimization_review_json", "optimization_work_json", "character_images_error", "character_bible", "character_images_manifest", "character_profile_json", "seo_stale", "character_bible_stale")
+FORM_FIELDS = ("url", "language", "pasted_source")
 
 
 def blank_session(name):
     return {
-        "name": name, "url": "", "source": "", "title": "", "description": "",
+        "name": name, "url": "", "source": "", "pasted_source": "", "title": "", "description": "",
         "translated": "", "prompts": "", "metadata": "", "language": "Tiếng Ba Lan",
         "saved": False, "processed": False, "saved_order": 0,
         "new_title": "", "new_description": "", "seo_tags": "", "video_forms": "", "optimized_script": "", "optimization_review_json": "", "optimization_work_json": "", "character_images_error": "", "character_bible": "", "character_images_manifest": "", "character_profile_json": "", "seo_stale": False, "character_bible_stale": False,
@@ -783,6 +783,7 @@ def _clear_session_widgets(session_id):
     named_widgets = {
         f"field_{session_id}_url",
         f"field_{session_id}_language",
+        f"field_{session_id}_pasted_source",
         f"inline_session_name_{session_id}",
     }
     prefixes = (f"thumb_{session_id}_",)
@@ -1638,6 +1639,14 @@ with st.expander("📄 Phụ đề dự phòng từ máy (.srt / .vtt / .txt)", 
     else:
         st.caption("Có thể để trống nếu dùng YouTube trực tiếp hoặc dịch vụ phụ đề Supadata.")
 
+session["pasted_source"] = st.text_area(
+    "📝 Nhập phụ đề hoặc nội dung văn bản có sẵn",
+    value=session.get("pasted_source", ""),
+    key=f"field_{sid}_pasted_source", height=220, max_chars=350000,
+    placeholder="Dán phụ đề SRT/VTT hoặc nội dung văn bản gốc cần dịch vào đây...",
+)
+st.caption("Nếu có nội dung trong ô này, app sẽ ưu tiên dùng để dịch. Để trống để dùng file phụ đề hoặc YouTube.")
+
 # Target language is chosen next to the generation controls, not the sidebar.
 lang_value = session.get("language", "Tiếng Ba Lan")
 language = st.selectbox(
@@ -1654,8 +1663,8 @@ if st.button("🚀 BẮT ĐẦU TẠO TOÀN BỘ", type="primary",
     sync_form(sid)
     if not key.strip():
         st.error("Hãy nhập API key trước khi chạy.")
-    elif not vid and uploaded_subtitle is None and not session["source"].strip():
-        st.warning("Hãy dán link YouTube hoặc tải file phụ đề (.srt/.vtt/.txt).")
+    elif not vid and uploaded_subtitle is None and not session.get("pasted_source", "").strip() and not session["source"].strip():
+        st.warning("Hãy nhập nội dung văn bản, dán link YouTube hoặc tải file phụ đề (.srt/.vtt/.txt).")
     elif (
         sid in st.session_state.background_jobs
         and not st.session_state.background_jobs[sid]["future"].done()
@@ -1675,7 +1684,12 @@ if st.button("🚀 BẮT ĐẦU TẠO TOÀN BỘ", type="primary",
                 raise ValueError("Hãy nhập Model ID.")
             progress = JobProgress()
             run_id = uuid.uuid4().hex
+            pasted = session.get("pasted_source", "").strip()
             subtitle_from_file = (
+                parse_uploaded_subtitles(
+                    "pasted.vtt" if re.search(r"\d{2}:\d{2}.*-->", pasted) or pasted.startswith("WEBVTT") else "pasted.txt",
+                    pasted.encode("utf-8"),
+                ) if pasted else
                 parse_uploaded_subtitles(uploaded_subtitle.name, uploaded_subtitle.getvalue())
                 if uploaded_subtitle is not None else ""
             )
