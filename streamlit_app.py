@@ -1598,7 +1598,7 @@ if session.get("job_state") == "running":
     )
 elif session.get("job_state") in ("failed", "interrupted"):
     st.error(f"⚠️ Phiên này chưa hoàn tất: {session.get('job_error', 'Không rõ lỗi')}")
-    st.caption("Các kết quả đã tạo vẫn được giữ trong phiên. Có thể dùng nút BẮT ĐẦU TẠO TOÀN BỘ để thử lại.")
+    pass
 session["url"] = st.text_input(
     "🔗 Dán link video YouTube",
     value=session["url"], key=f"field_{sid}_url",
@@ -1613,9 +1613,9 @@ with st.expander("📄 Phụ đề dự phòng từ máy (.srt / .vtt / .txt)", 
         key=f"subtitle_fallback_upload_{sid}",
     )
     if uploaded_subtitle is not None:
-        st.caption("✅ Đã chọn file. Khi bắt đầu, app sẽ ưu tiên file này và không gọi phụ đề YouTube.")
+        pass
     else:
-        st.caption("Có thể để trống nếu dùng YouTube trực tiếp hoặc dịch vụ phụ đề Supadata.")
+        pass
 
 session["pasted_source"] = st.text_area(
     "📝 Nhập phụ đề hoặc nội dung văn bản có sẵn",
@@ -1623,7 +1623,7 @@ session["pasted_source"] = st.text_area(
     key=f"field_{sid}_pasted_source", height=220, max_chars=350000,
     placeholder="Dán phụ đề SRT/VTT hoặc nội dung văn bản gốc cần dịch vào đây...",
 )
-st.caption("Nếu có nội dung trong ô này, app sẽ ưu tiên dùng để dịch. Để trống để dùng file phụ đề hoặc YouTube.")
+pass
 
 # Target language is chosen next to the generation controls, not the sidebar.
 lang_value = session.get("language", "Tiếng Ba Lan")
@@ -1795,7 +1795,7 @@ def show_background_job_progress():
             st.progress(pct, text=f"👥 {name}: {stage}")
     if (not st.session_state.background_jobs and not active_queue
             and not st.session_state.profile_background_jobs):
-        st.caption("Không có phiên nào đang chạy nền.")
+        pass
     if st.session_state.get("_durable_queue_error"):
         st.warning("Không đọc được hàng đợi: "
                    + st.session_state["_durable_queue_error"])
@@ -1836,7 +1836,7 @@ if vid:
                 type="primary", key=f"thumb_{sid}_{vid}",
             )
     else:
-        st.caption("Không lấy được thumbnail gốc từ YouTube cho video này.")
+        pass
 
 
 # Original transcript, title and description are retained internally for processing,
@@ -1854,7 +1854,7 @@ with tab_translate:
         except (ValueError, TypeError):
             report = {}
         if isinstance(report, dict) and report.get("method") == "full_narration_translation":
-            st.caption("Bản dịch đầy đủ dạng lời đọc, đã kiểm tra và sửa lỗi theo văn bản gốc.")
+            pass
         else:
             st.info("Phiên cũ: nhấn Chạy lại riêng — Bản dịch để dịch đầy đủ theo yêu cầu mới.")
     if st.button(
@@ -1879,7 +1879,7 @@ with tab_translate:
         key=f"copy_all_translation_{sid}",
     )
     with st.expander(f"🌍 Bản dịch giọng đọc ({language}) — Nhấn để xem toàn bộ", expanded=False):
-        st.caption(f"{len(session['translated']):,} ký tự · Dịch đầy đủ, giữ sát nội dung gốc. Có thể Copy hoặc tải TXT.")
+        pass
         output("📋 Copy toàn bộ bản dịch", session["translated"], allow_download=True)
 
 with tab_seo:
@@ -1917,7 +1917,7 @@ with tab_seo:
     # Legacy SEO content remains viewable if a saved older session did
     # not have separately generated title, description, and SEO fields.
     if not any(session.get(field) for field in ("new_title", "new_description", "seo_tags")) and session.get("metadata", "").strip():
-        st.caption("Nội dung SEO từ bản cũ (chưa được tách các mục):")
+        pass
         copy_all_button(
             "📋 Copy toàn bộ SEO phiên cũ", session["metadata"],
             key=f"copy_all_legacy_seo_{sid}",
@@ -2114,16 +2114,10 @@ with tab_characters:
             "character_bible": character_bible,
         })
 
-    st.caption(
-        f"Tạo tối đa {MAX_DETAILED_CHARACTERS} hồ sơ nhân vật; ưu tiên nhân vật "
-        "chính và nhân vật xuất hiện nhiều trong bản dịch."
-    )
+    pass
     current_profile_job = profile_job(session)
     profile_running = current_profile_job.get("state") == "running"
-    st.caption(
-        "Tác vụ chạy nền trên máy chủ, tự lưu tiến độ và tiếp tục khi bạn "
-        "chuyển mục hoặc tải lại trang."
-    )
+    pass
     if profile_running:
         active_profile_job = st.session_state.profile_background_jobs.get(sid)
         if active_profile_job:
@@ -2136,7 +2130,7 @@ with tab_characters:
         st.success("Đã hoàn thành và lưu hồ sơ nhân vật.")
     elif current_profile_job.get("state") in ("failed", "interrupted"):
         st.error("Tác vụ hồ sơ chưa hoàn thành: " + current_profile_job.get("error", ""))
-        st.caption("Nhấn tạo/cập nhật để tiếp tục từ phần đã lưu. Kiểm tra API nếu lỗi vẫn xảy ra.")
+        pass
     if current_profile_job.get("save_error"):
         st.warning(current_profile_job["save_error"])
     if st.button(
@@ -2152,11 +2146,7 @@ with tab_characters:
 
     st.markdown("**👥 Hồ sơ ảnh tham chiếu theo từng nhân vật**")
     if saved_sheets:
-        st.caption(
-            f"Đã nhận diện {len(saved_sheets)} nhân vật. "
-            "Mỗi hồ sơ mở/thu gọn riêng, phục vụ tạo ảnh tham chiếu "
-            "giữ nguyên diện mạo trong tất cả các cảnh."
-        )
+        pass
         copy_all_button(
             "📋 Copy toàn bộ hồ sơ nhân vật",
             "\n\n".join(character_profile_text(sheet) for sheet in saved_sheets),
@@ -2189,10 +2179,7 @@ with tab_characters:
                             field_label, value=sheet.get(field, ""),
                             key=f"{form_key}_{field}", height=100,
                         )
-                    st.caption(
-                        "Ghi rõ chi tiết trong bản dịch và chi tiết đề xuất tạo hình. "
-                        "Lưu hồ sơ trước khi sao chép hoặc tạo lại ảnh tham chiếu."
-                    )
+                    pass
                     save_profile = st.form_submit_button(
                         "💾 Lưu hồ sơ nhân vật",
                         disabled=session.get("job_state") == "running" or profile_running,
@@ -2219,10 +2206,7 @@ with tab_characters:
             "từng nhân vật' để trích xuất từ bản dịch đích."
         )
 
-    st.caption(
-        "Ảnh được tự tạo sau Hồ sơ nhân vật nếu đã nhập OpenAI Images API key. "
-        "Chỉ chứa nhân vật thuộc phiên hiện tại, không lẫn phiên khác."
-    )
+    pass
     if st.button(
         "🔄 Chạy lại riêng — Ảnh nhân vật",
         key=f"retry_character_images_{sid}",
@@ -2289,10 +2273,7 @@ with tab_characters:
             use_container_width=True,
             type="primary",
         )
-        st.caption(
-            "Muốn chọn thư mục lưu, bật tùy chọn trình duyệt 'Hỏi vị trí lưu "
-            "mỗi file trước khi tải xuống'."
-        )
+        pass
     elif session.get("job_state") == "running":
         st.info("Đang chờ hoàn thành Hồ sơ nhân vật / tạo ảnh...")
     elif not image_api_key:
@@ -2309,7 +2290,7 @@ with tab_characters:
                 "Không cần chạy lại BẮT ĐẦU TẠO TOÀN BỘ."
             )
 
-st.caption("📋 Nút Copy toàn bộ nằm ngay bên ngoài từng mục và sao chép đầy đủ nội dung, kể cả khi khung xem đang thu gọn.")
+pass
 
 # Automatically save changed sessions and ALL manually-entered API provider
 # settings/keys, encrypted, after widgets update on each Streamlit rerun.
