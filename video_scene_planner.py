@@ -214,7 +214,8 @@ def batch_prompt(plan, scenes, *, style):
         + json.dumps(basic, ensure_ascii=False)
     )
     from wardrobe_lock import wardrobe_instruction
-    return instructions + wardrobe_instruction(plan)
+    from character_identity import name_contract
+    return instructions + wardrobe_instruction(plan) + name_contract(plan.get("canonical_character_names", []))
 
 
 def normalize_speech_segments(scene, segments):

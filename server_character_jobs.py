@@ -7,6 +7,7 @@ import requests
 
 from api_clients import RateLimitError, TransientProviderError
 from background_jobs import JobProgress
+from character_identity import profile_names
 from character_profiles import build_character_profiles, source_chunks, MAX_DETAILED_CHARACTERS
 from server_video_jobs import _provider_call, _persist_lock
 from video_scene_planner import source_fingerprint
@@ -131,9 +132,16 @@ def run_character_job(snapshot, progress):
                     wait -= 1
 
     try:
+        names = profile_names(data)
+        if not names:
+            try:
+                video_plan = json.loads(snapshot.get("video_forms") or "{}")
+                names = video_plan.get("canonical_character_names", []) or profile_names({"characters": video_plan.get("character_profiles", [])})
+            except (ValueError, TypeError, AttributeError):
+                names = []
         profile = build_character_profiles(
             snapshot["translated"], snapshot["language"], snapshot["style"], call,
-            state=data.get("_profile_build"), checkpoint=checkpoint, report=report,
+            state=data.get("_profile_build"), checkpoint=checkpoint, report=report, canonical_names=names,
         )
         if not profile["characters"]:
             raise ValueError("AI chưa nhận diện được nhân vật có tên.")
