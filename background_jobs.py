@@ -306,7 +306,7 @@ def run_full_job(snapshot, progress):
             and len(target_text) <= MAX_TARGET_SCRIPT_CHARS
             and isinstance(review, dict)
             and review.get("version") in COMPATIBLE_OPTIMIZATION_VERSIONS
-            and review.get("method") == "direct_target_rewrite"
+            and review.get("method") == "selected_story_target"
             and review.get("target_language") == language
             and review.get("max_characters") == MAX_TARGET_SCRIPT_CHARS
             and review.get("source_sha256") == source_hash(source)

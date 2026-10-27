@@ -1,3 +1,4 @@
+from test_selection_helpers import whole_source_selection
 import json
 import unittest
 from unittest.mock import Mock, patch
@@ -69,6 +70,8 @@ class DirectProviderRetryTests(unittest.TestCase):
                 app.run()
                 prompts = []
                 def api(_provider, _base, _model, _key, prompt, **_options):
+                    if prompt.startswith("STORY_ARC_SELECTION"):
+                        return whole_source_selection(prompt)
                     prompts.append(prompt)
                     if persistent or len(prompts) == 1:
                         raise TransientProviderError("Upstream service temporarily unavailable", 502)
@@ -89,7 +92,7 @@ class DirectProviderRetryTests(unittest.TestCase):
                     self.assertTrue(any("HTTP 502" in x.value for x in app.error))
                 else:
                     self.assertEqual(record["translated"], "Nora odwiedza Maisie.")
-                    self.assertEqual(len(prompts), 3)
+                    self.assertEqual(len(prompts), 4)
                     self.assertEqual(prompts[0], prompts[1])
                     wait.assert_called_once_with(3.0)
 

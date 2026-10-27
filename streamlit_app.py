@@ -1648,7 +1648,7 @@ language = st.selectbox(
 )
 session["language"] = language
 
-st.caption("Bắt đầu: viết lại trực tiếp từ văn bản gốc bằng ngôn ngữ đích, tối đa 8.999 ký tự; giữ hook, cốt truyện, hành động, quan hệ và ý nghĩa số liệu.")
+st.caption("Bắt đầu: phân tích bản gốc, chọn một phần hấp dẫn và liền mạch để tách thành câu chuyện riêng bằng ngôn ngữ đích, khoảng 9.000 ký tự (tối đa 8.999). Giữ đúng hook, hành động, quan hệ và ý nghĩa số liệu của tuyến được chọn.")
 if st.button("🚀 BẮT ĐẦU TẠO TOÀN BỘ", type="primary",
              use_container_width=True, key=f"run_all_{sid}"):
     sync_form(sid)
@@ -1869,12 +1869,17 @@ with tab_translate:
                 summary_review = {}
             if (isinstance(summary_review, dict)
                     and summary_review.get("version") in COMPATIBLE_OPTIMIZATION_VERSIONS
-                    and summary_review.get("method") == "direct_target_rewrite"
+                    and summary_review.get("method") == "selected_story_target"
                     and summary_review.get("target_language") == language
                     and len(session["optimized_script"]) <= MAX_TARGET_SCRIPT_CHARS
                     and summary_review.get("source_sha256") == source_hash(session.get("source", ""))
                     and summary_review.get("output_sha256") == source_hash(session["optimized_script"])):
-                st.caption("Đã viết lại trực tiếp từ bản gốc bằng ngôn ngữ đích và đối soát hook, hành động, quan hệ, số liệu; không qua bản tóm tắt trung gian.")
+                st.caption("Đã chọn một tuyến truyện liền mạch từ bản gốc, viết bằng ngôn ngữ đích và đối soát hook, hành động, quan hệ, số liệu.")
+                selection = summary_review.get("story_selection", {})
+                if selection:
+                    st.caption("Lý do chọn: " + str(selection.get("reason", "")))
+                    with st.expander("📖 Phần văn bản gốc được chọn", expanded=False):
+                        st.code(session.get("source", "").strip()[selection["start"]:selection["end"]], language=None, wrap_lines=True)
                 source_repairs = summary_review.get("source_repairs", [])
                 if source_repairs:
                     with st.expander(f"🛠️ Các sửa đổi trên bản xử lý ({len(source_repairs)})", expanded=False):
@@ -1893,7 +1898,7 @@ with tab_translate:
         disabled=session.get("job_state") == "running",
     ):
         try:
-            with st.spinner(f"Đang viết lại trực tiếp từ bản gốc sang {language}, dưới 9.000 ký tự..."):
+            with st.spinner(f"Đang chọn tuyến truyện và viết câu chuyện riêng sang {language}, dưới 9.000 ký tự..."):
                 rerun_target_rewrite(session, language, ai, JobProgress())
             mark_session_processed(session)
             _persist_and_rerun()

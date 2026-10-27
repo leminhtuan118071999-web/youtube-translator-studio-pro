@@ -1,3 +1,4 @@
+from test_selection_helpers import whole_source_selection
 import json
 import re
 import unittest
@@ -52,6 +53,8 @@ class FaithfulSummaryTests(unittest.TestCase):
         source = "Nora visits Maisie. Luca follows Nora. " * 500 + "The final adoption."
         generated, reviewed, targets = [], [], []
         def call(prompt):
+            if prompt.startswith("STORY_ARC_SELECTION"):
+                return whole_source_selection(prompt)
             if prompt.startswith("SOURCE_GROUNDED_SUMMARY"):
                 data = json.loads(prompt.split("SOURCE DATA:\n", 1)[1])
                 generated.append(data["core"])
@@ -94,6 +97,8 @@ class FaithfulSummaryTests(unittest.TestCase):
             with self.subTest(reason=reason):
                 source = (original + "\n") * 180
                 def call(prompt):
+                    if prompt.startswith("STORY_ARC_SELECTION"):
+                        return whole_source_selection(prompt)
                     if prompt.startswith("SOURCE_GROUNDED_SUMMARY"):
                         return draft(prompt, good if reason in prompt else bad)
                     data = json.loads(prompt.split("instructions:\n", 1)[1])
@@ -109,6 +114,8 @@ class FaithfulSummaryTests(unittest.TestCase):
         source = "Nora visits Maisie in the hospital. " * 500
         calls = []
         def call(prompt):
+            if prompt.startswith("STORY_ARC_SELECTION"):
+                return whole_source_selection(prompt)
             calls.append(prompt)
             return json.dumps({"summary": "A summary.", "entities": ["InventedPerson"],
                 "anchors": [{"fact": "Invented event", "quote": "This is not in the original"}]})
@@ -120,6 +127,8 @@ class FaithfulSummaryTests(unittest.TestCase):
         source = "Nora visits Maisie in the hospital. " * 500
         progress = JobProgress()
         def call(prompt):
+            if prompt.startswith("STORY_ARC_SELECTION"):
+                return whole_source_selection(prompt)
             if prompt.startswith("SOURCE_GROUNDED_SUMMARY"):
                 return draft(prompt, "Nora visits Maisie.")
             return '{"ok":false,"issues":["Ending omitted"],"source_conflicts":[]}'
@@ -130,6 +139,8 @@ class FaithfulSummaryTests(unittest.TestCase):
     def test_translation_rechecks_actor_and_uses_neighboring_context(self):
         prompts = []
         def call(prompt):
+            if prompt.startswith("STORY_ARC_SELECTION"):
+                return whole_source_selection(prompt)
             prompts.append(prompt)
             if prompt.startswith("FAITHFULNESS_REVIEW"):
                 data = json.loads(prompt.split("instructions:\n", 1)[1])
@@ -146,6 +157,8 @@ class FaithfulSummaryTests(unittest.TestCase):
 
     def test_invalid_review_cannot_silently_approve_translation(self):
         def call(prompt):
+            if prompt.startswith("STORY_ARC_SELECTION"):
+                return whole_source_selection(prompt)
             return "Looks correct" if prompt.startswith("FAITHFULNESS_REVIEW") else "Draft translation"
         with self.assertRaisesRegex(ValueError, "đối soát"):
             translate_part_faithfully("Original", "Polish", call)
@@ -160,6 +173,8 @@ class FaithfulSummaryTests(unittest.TestCase):
                    "translation_parts": ["Old wrong translation"],
                }}
         def call(_provider, _base, _model, _key, prompt):
+            if prompt.startswith("STORY_ARC_SELECTION"):
+                return whole_source_selection(prompt)
             if prompt.startswith("FAITHFULNESS_REVIEW"):
                 return accepted()
             if prompt.startswith("SOURCE_GROUNDED_SUMMARY"):

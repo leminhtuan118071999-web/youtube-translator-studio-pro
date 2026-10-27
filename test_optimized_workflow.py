@@ -1,3 +1,4 @@
+from test_selection_helpers import whole_source_selection
 import json
 import unittest
 from unittest.mock import patch
@@ -9,6 +10,8 @@ class OptimizedScriptWorkflowTests(unittest.TestCase):
         transcript = "The original tale with characters, events and a conclusion."
         calls = []
         def provider(_p, _b, _m, _k, prompt):
+            if prompt.startswith("STORY_ARC_SELECTION"):
+                return whole_source_selection(prompt)
             calls.append(prompt)
             if prompt.startswith("STORY_REPAIR_PLAN"):
                 return '{"edits":[],"unresolved":[]}'
@@ -59,6 +62,8 @@ class OptimizedScriptWorkflowTests(unittest.TestCase):
         source = "The hero Ala meets Ola at the lake."
         calls = []
         def provider(_p, _b, _m, _k, prompt):
+            if prompt.startswith("STORY_ARC_SELECTION"):
+                return whole_source_selection(prompt)
             calls.append(prompt)
             if prompt.startswith("STORY_REPAIR_PLAN"):
                 return '{"edits":[],"unresolved":[]}'

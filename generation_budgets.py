@@ -7,6 +7,8 @@ def task_output_budget(prompt):
     # reviews whose final output is only a short JSON verdict.
     if prompt.startswith(("FAITHFULNESS_REVIEW", "STORY_REPAIR_REVIEW")):
         return 1024
+    if prompt.startswith("STORY_ARC_SELECTION"):
+        return 3072
     if prompt.startswith("STORY_REPAIR_PLAN"):
         return 1800
     if prompt.startswith("SOURCE_GROUNDED_SUMMARY"):

@@ -5,8 +5,8 @@ import re
 
 MAX_OPTIMIZED_SCRIPT_CHARS = 9999
 MAX_TARGET_SCRIPT_CHARS = 8999
-OPTIMIZATION_VERSION = 4
-COMPATIBLE_OPTIMIZATION_VERSIONS = (3, 4)
+OPTIMIZATION_VERSION = 5
+COMPATIBLE_OPTIMIZATION_VERSIONS = (3, 4, 5)
 MAX_ATTEMPTS = 2
 
 FACT_RULES = (
@@ -204,7 +204,7 @@ def _review(call, original, candidate, *, mode, context, anchors=None, previous=
 
 
 def optimize_source_script(source, call, progress, *, target_language=None,
-                           max_characters=MAX_OPTIMIZED_SCRIPT_CHARS):
+                           max_characters=MAX_OPTIMIZED_SCRIPT_CHARS, narrative_context=None):
     if not isinstance(source, str) or not source.strip():
         raise ValueError("Thiếu phụ đề gốc để tối ưu kịch bản.")
     source = source.strip()
@@ -280,6 +280,7 @@ def optimize_source_script(source, call, progress, *, target_language=None,
                     context = {"before": part["before"], "after": part["after"],
                                "canonical_names_already_seen": known_names,
                                "target_language": target_language,
+                               "selected_story_context": narrative_context or {},
                                "previous_target_paragraph": summaries[-1][-600:] if target_language and summaries else ""}
                     writing_instruction = (
                         f"TARGET_STORY_REWRITE: Write a NEW fluent narrative directly "
@@ -288,6 +289,10 @@ def optimize_source_script(source, call, progress, *, target_language=None,
                         "the strong original hooks, stakes, turning points, reveals, "
                         "climax and ending. Keep ALL plot-critical actions, character "
                         "relationships and the exact meaning of every important number. "
+                        "This core belongs to ONE selected contiguous story arc. Use only "
+                        "verbatim background evidence in selected_story_context to clarify "
+                        "necessary setup, never import other subplots or invent closure. "
+                        "Aim near the allocated budget when substance supports it, without padding. "
                         "No fabricated drama, hooks or facts. Use natural native "
                         "narration/dialogue and clear transitions. If the story is short, "
                         "translate all material content; do not pad to reach the budget. "
@@ -390,10 +395,10 @@ def rewrite_target_script(source, target_language, call, progress):
     """One source-to-target rewrite pipeline, capped strictly below 9,000 chars."""
     if not isinstance(target_language, str) or not target_language.strip():
         raise ValueError("Chưa chọn ngôn ngữ đích.")
-    return optimize_source_script(
-        source, call, progress, target_language=target_language.strip(),
-        max_characters=MAX_TARGET_SCRIPT_CHARS,
-    )
+    from story_selection import extract_target_story
+    return extract_target_story(source, target_language.strip(), call, progress,
+                                optimize_source_script)
+
 
 
 def translate_part_faithfully(part, language, call, *, before="", after="", previous="", check_cancelled=None):

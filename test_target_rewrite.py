@@ -1,3 +1,4 @@
+from test_selection_helpers import whole_source_selection
 import json
 import unittest
 from unittest.mock import patch
@@ -23,6 +24,8 @@ class TargetRewriteTests(unittest.TestCase):
         target = "Nora zapłaciła 268000 USD, aby uratować Maisie. Luca odkrył, że jej ojcem był Enzo."
         calls = []
         def provider(_p, _base, _m, _key, prompt, **_options):
+            if prompt.startswith("STORY_ARC_SELECTION"):
+                return whole_source_selection(prompt)
             calls.append(prompt)
             if prompt.startswith("SOURCE_GROUNDED_SUMMARY"):
                 self.assertIn(original, prompt)
@@ -54,7 +57,7 @@ class TargetRewriteTests(unittest.TestCase):
         self.assertLess(len(fields["translated"]), 9000)
         self.assertFalse(any("CHỈ xuất bản dịch" in p or p.startswith("STORY_REPAIR_PLAN") for p in calls))
         report = json.loads(fields["optimization_review_json"])
-        self.assertEqual(report["method"], "direct_target_rewrite")
+        self.assertEqual(report["method"], "selected_story_target")
         self.assertEqual(report["max_characters"], 8999)
         self.assertEqual(report["target_language"], "Tiếng Ba Lan")
 
@@ -62,6 +65,8 @@ class TargetRewriteTests(unittest.TestCase):
         original = "Nora's sacrifice saved Maisie. The family adopted her."
         seen = []
         def call(prompt):
+            if prompt.startswith("STORY_ARC_SELECTION"):
+                return whole_source_selection(prompt)
             if prompt.startswith("FAITHFULNESS_REVIEW"):
                 return approved()
             seen.append(json.loads(prompt.split("SOURCE DATA:\n", 1)[1])["core"])
@@ -79,6 +84,8 @@ class TargetRewriteTests(unittest.TestCase):
             with self.subTest(reason=reason):
                 drafts = []
                 def call(prompt):
+                    if prompt.startswith("STORY_ARC_SELECTION"):
+                        return whole_source_selection(prompt)
                     if prompt.startswith("SOURCE_GROUNDED_SUMMARY"):
                         drafts.append(prompt)
                         return draft(prompt, good if reason in prompt else "Incorrect target story")
@@ -94,6 +101,8 @@ class TargetRewriteTests(unittest.TestCase):
         original = "Nora visits Maisie. Luca waits.\n" * 600 + "Enzo is revealed as her father. They adopt Maisie."
         cores = []
         def call(prompt):
+            if prompt.startswith("STORY_ARC_SELECTION"):
+                return whole_source_selection(prompt)
             if prompt.startswith("FAITHFULNESS_REVIEW"):
                 return approved()
             core = json.loads(prompt.split("SOURCE DATA:\n", 1)[1])["core"]
@@ -110,6 +119,8 @@ class TargetRewriteTests(unittest.TestCase):
         progress = JobProgress()
         count = 0
         def interrupted(prompt):
+            if prompt.startswith("STORY_ARC_SELECTION"):
+                return whole_source_selection(prompt)
             nonlocal count
             count += 1
             if count > 2:
@@ -121,6 +132,8 @@ class TargetRewriteTests(unittest.TestCase):
         resumed.publish("optimization_work_json", progress.partial_result()["optimization_work_json"])
         cores = []
         def call(prompt):
+            if prompt.startswith("STORY_ARC_SELECTION"):
+                return whole_source_selection(prompt)
             if prompt.startswith("FAITHFULNESS_REVIEW"):
                 return approved()
             cores.append(json.loads(prompt.split("SOURCE DATA:\n", 1)[1])["core"])
@@ -134,6 +147,8 @@ class TargetRewriteTests(unittest.TestCase):
         session = {"source": original, "optimized_script": "Old summary", "translated": "Old target"}
         previous = dict(session)
         def call(prompt):
+            if prompt.startswith("STORY_ARC_SELECTION"):
+                return whole_source_selection(prompt)
             if prompt.startswith("FAITHFULNESS_REVIEW"):
                 return '{"ok":false,"issues":["Critical hook missing"],"source_conflicts":[]}'
             self.assertNotIn("Old summary", prompt)
