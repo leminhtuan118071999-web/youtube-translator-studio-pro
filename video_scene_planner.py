@@ -426,6 +426,28 @@ def continuous_image_prompts_text(plan):
     )
 
 
+def continuous_combined_forms_text(plan):
+    """One copy-ready form per scene; still-image constraints have local scope."""
+    blocks = []
+    for scene in plan.get("scenes", []):
+        video = continuous_video_forms_text({"scenes":[scene], "language":plan.get("language", "")})
+        if not video:
+            continue
+        image = scene.get("image_prompt", "")
+        if isinstance(image, str) and image.strip():
+            image = " ".join(image.split())
+            video_payload = video.split(" | ", 2)[2]
+            block = (f"{int(scene['number']):02d} | 8s | OUTPUT: one continuous moving video clip. "
+                     "OPENING-FRAME REFERENCE ONLY: the following IMAGE section defines the initial still composition, "
+                     "not a separate shot or a freeze frame. Its Negative constraints apply only to the reference image, "
+                     "not to the video's specified subtitles. Animate from this composition using the VIDEO section. "
+                     f"| IMAGE REFERENCE: {image} | VIDEO, AUDIO AND SUBTITLES: {video_payload}")
+            blocks.append(block)
+        else:
+            blocks.append(video)
+    return "\n\n".join(blocks)
+
+
 VIDEO_FORMS_PER_PANEL = 99
 
 
@@ -449,7 +471,7 @@ def grouped_video_forms(plan, group_size=VIDEO_FORMS_PER_PANEL):
                   and str(scene.get("visual_prompt", "")).strip()]
         if not filled:
             continue
-        content = continuous_video_forms_text({"scenes": filled, "language": plan.get("language", "")})
+        content = continuous_combined_forms_text({"scenes": filled, "language": plan.get("language", "")})
         result.append({
             "panel": start // group_size + 1,
             "first": start + 1,

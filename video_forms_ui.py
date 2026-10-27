@@ -15,7 +15,7 @@ from api_clients import ProviderReadTimeout
 from video_scene_planner import (
     narration_plan, character_bible_prompt, batch_prompt,
     parse_json_object, apply_ai_batch, source_fingerprint, plan_export_text,
-    continuous_video_forms_text, grouped_video_forms, add_scene_subtitles, continuous_image_prompts_text,
+    continuous_video_forms_text, grouped_video_forms, add_scene_subtitles, continuous_image_prompts_text, continuous_combined_forms_text,
 )
 from copy_buttons import copy_all_button
 from voice_alignment import duration_weighted_plan, speech_statistics, MAX_AUDIO_BYTES
@@ -267,12 +267,12 @@ def render_video_forms(session, sid, language, *, ai, api_key,
     if done < len(scenes):
         st.info(
             f"Còn {len(scenes) - done} form chưa hoàn thành. "
-            "Nhấn '🔄 Chạy lại riêng — Form video 8 giây' ở trên "
+            "Nhấn '🎬 Tạo form 8 giây theo giọng đọc' ở trên "
             "để hệ thống tự tạo tiếp toàn bộ từ vị trí chưa xong."
         )
 
     st.caption("Phụ đề lấy từ lời đọc của từng form; thời điểm theo giọng đọc chỉ là ước tính.")
-    continuous_text = continuous_video_forms_text(plan)
+    continuous_text = continuous_combined_forms_text(plan)
     st.markdown("**📜 Tất cả form video — liền mạch**")
     st.caption(
         "Mỗi ô tối đa 99 form; mỗi ô mở/thu gọn và Copy toàn bộ độc lập. "
@@ -292,13 +292,7 @@ def render_video_forms(session, sid, language, *, ai, api_key,
                 group["content"],
                 key=f"copy_all_video_forms_{sid}_{group['panel']}",
             )
-            st.markdown("**🎬 Video Prompts**")
             st.code(group["content"], language=None, wrap_lines=True)
-            if group["image_content"]:
-                st.markdown("**🖼️ Image Prompts — khung hình mở đầu cùng cảnh**")
-                copy_all_button(f"📋 Copy prompt ảnh ô {group['panel']}", group["image_content"],
-                                key=f"copy_image_prompts_{sid}_{group['panel']}")
-                st.code(group["image_content"], language=None, wrap_lines=True)
 
     st.download_button(
         "⬇️ Tải tất cả form (.txt)", continuous_text,
