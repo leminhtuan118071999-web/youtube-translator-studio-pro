@@ -1879,6 +1879,8 @@ with tab_translate:
         session["translated"],
         key=f"copy_all_translation_{sid}",
     )
+    translation_character_count = len(session.get("translated", ""))
+    st.caption(f"{translation_character_count:,} ký tự (gồm khoảng trắng và xuống dòng)")
     with st.expander(f"🌍 Bản dịch giọng đọc ({language}) — Nhấn để xem toàn bộ", expanded=False):
         pass
         output("📋 Copy toàn bộ bản dịch", session["translated"], allow_download=True)
