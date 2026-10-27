@@ -16,6 +16,16 @@ class BackgroundJobsTests(unittest.TestCase):
         )
         self.optimize_patch.start()
         self.addCleanup(self.optimize_patch.stop)
+        # Exercise API pacing/retry semantics separately from factual review;
+        # the real reviewed translation path has dedicated integration tests.
+        translator = patch(
+            "background_jobs.translate_part_faithfully",
+            side_effect=lambda part, language, call, **_: call(
+                f"Dịch sang {language}. CHỈ xuất bản dịch.\n\n" + part
+            ),
+        )
+        translator.start()
+        self.addCleanup(translator.stop)
         self.config = {
             "url": "https://youtube.com/watch?v=12345678901",
             "source": "",

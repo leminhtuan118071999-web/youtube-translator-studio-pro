@@ -10,10 +10,12 @@ class OptimizedScriptWorkflowTests(unittest.TestCase):
         calls = []
         def provider(_p, _b, _m, _k, prompt):
             calls.append(prompt)
+            if prompt.startswith("FAITHFULNESS_REVIEW"):
+                return '{"ok":true,"issues":[],"source_conflicts":[]}'
             if "Viết lại PHẦN" in prompt:
                 return "A concise tale preserving the characters, events and conclusion."
             if "CHỈ xuất bản dịch" in prompt:
-                self.assertIn("concise tale", prompt)
+                self.assertIn("original tale", prompt)
                 return "Een beknopt verhaal met de personages, gebeurtenissen en afloop."
             if "CHARACTER/WORLD REFERENCE" in prompt:
                 return '{"character_bible":"Een vrouw met donker haar en rode jas."}'
@@ -38,10 +40,9 @@ class OptimizedScriptWorkflowTests(unittest.TestCase):
         self.assertLess(len(result["fields"]["optimized_script"]),10000)
         self.assertIn("beknopt",result["fields"]["translated"])
         self.assertNotIn("video_forms", result["fields"])
-        self.assertLess(
-            next(i for i,p in enumerate(calls) if "Viết lại PHẦN" in p),
-            next(i for i,p in enumerate(calls) if "CHỈ xuất bản dịch" in p),
-        )
+        self.assertEqual(result["fields"]["optimized_script"], transcript)
+        self.assertFalse(any("Viết lại PHẦN" in p for p in calls))
+        self.assertTrue(any(p.startswith("FAITHFULNESS_REVIEW") for p in calls))
         self.assertTrue(any("CHARACTER/WORLD REFERENCE" in p for p in calls))
         # Character profile creation is now a standard text stage, even
         # when image generation is not configured. Video forms still wait
@@ -55,6 +56,8 @@ class OptimizedScriptWorkflowTests(unittest.TestCase):
         calls = []
         def provider(_p, _b, _m, _k, prompt):
             calls.append(prompt)
+            if prompt.startswith("FAITHFULNESS_REVIEW"):
+                return '{"ok":true,"issues":[],"source_conflicts":[]}'
             if "CHỈ xuất bản dịch" in prompt:
                 return "Ala meets Ola in the lake."
             if "CHARACTER/WORLD REFERENCE" in prompt:

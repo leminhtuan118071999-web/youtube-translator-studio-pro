@@ -11,6 +11,7 @@ import streamlit.components.v1 as components
 from streamlit.runtime import exists as streamlit_runtime_exists
 
 import requests
+from faithful_summary import translate_part_faithfully, OPTIMIZATION_VERSION, source_hash
 from character_profiles import MAX_DETAILED_CHARACTERS
 from server_character_jobs import (
     profile_job, start_character_job, collect_character_jobs,
@@ -137,7 +138,7 @@ LANGUAGES = [
     "Tiếng Catalan", "Tiếng Basque", "Tiếng Wales", "Tiếng Luxembourg",
     "Tiếng Macedonia", "Tiếng Việt", "Tiếng Nhật", "Tiếng Hàn",
 ]
-FIELDS = ("url", "source", "title", "description", "translated", "prompts", "metadata", "language", "new_title", "new_description", "seo_tags", "video_forms", "optimized_script", "character_images_error", "character_bible", "character_images_manifest", "character_profile_json", "seo_stale", "character_bible_stale")
+FIELDS = ("url", "source", "title", "description", "translated", "prompts", "metadata", "language", "new_title", "new_description", "seo_tags", "video_forms", "optimized_script", "optimization_review_json", "character_images_error", "character_bible", "character_images_manifest", "character_profile_json", "seo_stale", "character_bible_stale")
 FORM_FIELDS = ("url", "language")
 
 
@@ -146,7 +147,7 @@ def blank_session(name):
         "name": name, "url": "", "source": "", "title": "", "description": "",
         "translated": "", "prompts": "", "metadata": "", "language": "Tiếng Ba Lan",
         "saved": False, "processed": False, "saved_order": 0,
-        "new_title": "", "new_description": "", "seo_tags": "", "video_forms": "", "optimized_script": "", "character_images_error": "", "character_bible": "", "character_images_manifest": "", "character_profile_json": "", "seo_stale": False, "character_bible_stale": False,
+        "new_title": "", "new_description": "", "seo_tags": "", "video_forms": "", "optimized_script": "", "optimization_review_json": "", "character_images_error": "", "character_bible": "", "character_images_manifest": "", "character_profile_json": "", "seo_stale": False, "character_bible_stale": False,
     }
 
 
@@ -1489,13 +1490,12 @@ def translate_full_script(source_text, target_language, report=None):
     for idx, part in enumerate(pieces, start=1):
         if report:
             report(idx, len(pieces))
-        request = (
-            f"Dịch chính xác toàn bộ đoạn {idx}/{len(pieces)} sang {target_language}. "
-            "Giữ tên nhân vật, mạch truyện, lời thoại, dấu câu và các đoạn xuống dòng. "
-            "Viết tự nhiên như người bản xứ, không bỏ câu, không thêm tình tiết. "
-            "CHỈ xuất bản dịch, không ghi tiêu đề hay chú thích.\n\n" + part
-        )
-        translated_parts.append(ai(request))
+        translated_parts.append(translate_part_faithfully(
+            part, target_language, ai,
+            before=pieces[idx - 2][-800:] if idx > 1 else "",
+            after=pieces[idx][:800] if idx < len(pieces) else "",
+            previous=translated_parts[-1] if translated_parts else "",
+        ))
     return "\n\n".join(translated_parts)
 
 
@@ -1844,7 +1844,26 @@ with st.container(key="result_tabs"):
 with tab_translate:
     if session.get("optimized_script", "").strip():
         with st.expander("✍️ Kịch bản đã tối ưu (dưới 10.000 ký tự)", expanded=False):
-            st.caption("Tạo từ phụ đề gốc trước khi dịch, giữ nguyên phụ đề để đối chiếu.")
+            st.caption(
+                f"{len(session['optimized_script']):,} ký tự · Giới hạn tối đa 9.999 ký tự. "
+                "Giữ nguyên phụ đề gốc để đối chiếu."
+            )
+            try:
+                summary_review = json.loads(session.get("optimization_review_json") or "{}")
+            except (ValueError, TypeError):
+                summary_review = {}
+            if (isinstance(summary_review, dict)
+                    and summary_review.get("version") == OPTIMIZATION_VERSION
+                    and summary_review.get("source_sha256") == source_hash(session.get("source", ""))
+                    and summary_review.get("output_sha256") == source_hash(session["optimized_script"])):
+                if summary_review.get("method") == "verbatim":
+                    st.caption("Bản gốc đã dưới giới hạn nên được giữ nguyên, không viết lại.")
+                else:
+                    st.caption("Đã đối soát từng phần với bản gốc bằng AI; vẫn có thể còn sai sót.")
+                for conflict in summary_review.get("source_conflicts", []):
+                    st.warning("Điểm chưa nhất quán trong bản gốc: " + str(conflict))
+            else:
+                st.info("Kịch bản cũ chưa có kết quả đối soát mới. Chạy lại tạo toàn bộ để tóm tắt lại từ bản gốc.")
             st.code(session["optimized_script"], language=None, wrap_lines=True)
     if st.button(
         "🔄 Chạy lại riêng — Bản dịch", key=f"translate_{sid}",
