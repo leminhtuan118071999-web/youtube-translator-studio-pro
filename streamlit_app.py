@@ -41,7 +41,7 @@ from browser_session_store import (
 from copy_buttons import copy_all_button
 from video_forms_ui import render_video_forms
 from video_scene_planner import character_bible_prompt, parse_json_object
-from section_retries import rerun_translation, rerun_seo, portrait_retry_specs
+from section_retries import rerun_translation, rerun_seo, portrait_retry_specs, prepare_reviewed_script
 from character_images import (IMAGE_STORE, IMAGE_MODEL, session_images_zip, create_character_png,
     detailed_character_profiles, character_reference_description, character_profile_text, CHARACTER_PROFILE_FIELDS)
 from session_name_controls import session_name_control, rename_record
@@ -1857,11 +1857,21 @@ with tab_translate:
                     and summary_review.get("source_sha256") == source_hash(session.get("source", ""))
                     and summary_review.get("output_sha256") == source_hash(session["optimized_script"])):
                 if summary_review.get("method") == "verbatim":
-                    st.caption("Bản gốc đã dưới giới hạn nên được giữ nguyên, không viết lại.")
+                    st.caption("Đã rà lỗi nguồn; bản xử lý dưới giới hạn được giữ nguyên ở bước tóm tắt.")
+                elif summary_review.get("method") == "repaired_source":
+                    st.caption("Đã sửa lỗi nguồn có căn cứ; văn bản dưới giới hạn nên không cần tóm tắt thêm.")
                 else:
-                    st.caption("Đã đối soát từng phần với bản gốc bằng AI; vẫn có thể còn sai sót.")
+                    st.caption("Đã rà lỗi nguồn, tóm tắt và đối soát từng phần bằng AI; vẫn có thể còn sai sót.")
+                source_repairs = summary_review.get("source_repairs", [])
+                if source_repairs:
+                    with st.expander(f"🛠️ Các sửa đổi trên bản xử lý ({len(source_repairs)})", expanded=False):
+                        for repair in source_repairs:
+                            if isinstance(repair, dict):
+                                st.markdown("**Trước:** " + str(repair.get("before", "")))
+                                st.markdown("**Sau:** " + str(repair.get("after", "")))
+                                st.caption(str(repair.get("reason", "")))
                 for conflict in summary_review.get("source_conflicts", []):
-                    st.warning("Điểm chưa nhất quán trong bản gốc: " + str(conflict))
+                    st.warning("Điểm trong bản gốc chưa đủ căn cứ để tự sửa: " + str(conflict))
             else:
                 st.info("Kịch bản cũ chưa có kết quả đối soát mới. Chạy lại tạo toàn bộ để tóm tắt lại từ bản gốc.")
             st.code(session["optimized_script"], language=None, wrap_lines=True)
@@ -1874,6 +1884,7 @@ with tab_translate:
                 rerun_translation(
                     session, language,
                     lambda source, target: translate_full_script(source, target),
+                    prepare=lambda current: prepare_reviewed_script(current, ai, JobProgress()),
                 )
             mark_session_processed(session)
             _persist_and_rerun()

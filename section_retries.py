@@ -4,20 +4,47 @@ Callers pass their already-configured generation functions. Mutation only
 happens after valid results are available, avoiding partial overwrite on error.
 """
 import hashlib
+import json
+
+from faithful_summary import (
+    optimize_source_script, OPTIMIZATION_VERSION, source_hash, MAX_OPTIMIZED_SCRIPT_CHARS,
+)
 
 from character_images import character_specs
 from video_scene_planner import character_bible_prompt, parse_json_object
 
 
-def rerun_translation(session, target_language, translate):
+def prepare_reviewed_script(session, call, progress):
+    """Return staged updates; do not overwrite a session if later translation fails."""
+    original = (session.get("source") or "").strip()
+    if not original:
+        return {}
+    optimized = session.get("optimized_script") or ""
+    try:
+        report = json.loads(session.get("optimization_review_json") or "{}")
+    except (ValueError, TypeError):
+        report = {}
+    if (isinstance(report, dict) and report.get("version") == OPTIMIZATION_VERSION
+            and bool(optimized.strip()) and len(optimized) <= MAX_OPTIMIZED_SCRIPT_CHARS
+            and report.get("source_sha256") == source_hash(original)
+            and report.get("output_sha256") == source_hash(optimized)):
+        return {}
+    optimized = optimize_source_script(original, call, progress)
+    return {"optimized_script": optimized,
+            "optimization_review_json": progress.partial_result()["optimization_review_json"]}
+
+
+def rerun_translation(session, target_language, translate, *, prepare=None):
     """Use previously optimized script, rather than raw transcript."""
-    source = (session.get("optimized_script") or session.get("source") or "").strip()
+    prepared = prepare(session) if prepare else {}
+    source = (prepared.get("optimized_script") or session.get("optimized_script") or session.get("source") or "").strip()
     if not source:
         raise ValueError("Chưa có kịch bản gốc hoặc kịch bản tối ưu để dịch lại.")
     result = translate(source, target_language)
     if not isinstance(result, str) or not result.strip():
         raise ValueError("API trả bản dịch rỗng; giữ nguyên bản dịch trước.")
     previous = session.get("translated", "")
+    session.update(prepared)
     session["translated"] = result.strip()
     if previous.strip() != result.strip():
         session["seo_stale"] = bool(

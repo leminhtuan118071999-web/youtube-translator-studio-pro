@@ -10,6 +10,8 @@ class OptimizedScriptWorkflowTests(unittest.TestCase):
         calls = []
         def provider(_p, _b, _m, _k, prompt):
             calls.append(prompt)
+            if prompt.startswith("STORY_REPAIR_PLAN"):
+                return '{"edits":[],"unresolved":[]}'
             if prompt.startswith("FAITHFULNESS_REVIEW"):
                 return '{"ok":true,"issues":[],"source_conflicts":[]}'
             if "Viết lại PHẦN" in prompt:
@@ -56,6 +58,8 @@ class OptimizedScriptWorkflowTests(unittest.TestCase):
         calls = []
         def provider(_p, _b, _m, _k, prompt):
             calls.append(prompt)
+            if prompt.startswith("STORY_REPAIR_PLAN"):
+                return '{"edits":[],"unresolved":[]}'
             if prompt.startswith("FAITHFULNESS_REVIEW"):
                 return '{"ok":true,"issues":[],"source_conflicts":[]}'
             if "CHỈ xuất bản dịch" in prompt:
@@ -112,6 +116,8 @@ class OptimizedScriptWorkflowTests(unittest.TestCase):
     def test_unable_to_reduce_under_10000_never_silently_truncates_story(self):
         huge=("A long story with details and ending. " * 600)
         def stubborn(_prompt):
+            if _prompt.startswith("STORY_REPAIR_PLAN"):
+                return '{"edits":[],"unresolved":[]}'
             return "x" * 11000
         with self.assertRaisesRegex(ValueError,"10.000"):
             optimize_source_script(huge,stubborn,JobProgress())

@@ -312,6 +312,7 @@ def run_full_job(snapshot, progress):
             # new factual review. Do not combine them with a regenerated script.
             for field in ("translation_parts", "translation_complete", "translated",
                           "character_bible", "character_profile", "character_profile_json",
+                          "character_images_manifest", "character_images_error",
                           "new_title", "new_description", "seo_tags", "metadata"):
                 fields.pop(field, None)
             optimized = optimize_source_script(source, call, progress)

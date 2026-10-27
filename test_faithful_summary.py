@@ -22,6 +22,13 @@ def draft(prompt, summary):
 
 
 class FaithfulSummaryTests(unittest.TestCase):
+    def setUp(self):
+        # Source repair is covered independently in test_story_repair.py.
+        repair = patch("faithful_summary.repair_source_script",
+                       side_effect=lambda source, call, progress: (source, [], []))
+        repair.start()
+        self.addCleanup(repair.stop)
+
     def test_short_sources_are_preserved_exactly_without_model_rewrite(self):
         for length in (20, 9999):
             text = ("Nora 中文 ć " * 1000)[:length]
