@@ -7,8 +7,11 @@ of uninterrupted processing after a Streamlit Cloud worker restart.
 """
 import json
 import threading
+import time
 
 from api_clients import generate_text
+from provider_retries import retry_transient_provider
+from groq_pacing import groq_request_gate
 from video_scene_planner import character_bible_prompt, parse_json_object
 from voice_alignment import duration_weighted_plan
 from video_forms_ui import _generate_all_remaining, _completed_count
@@ -90,6 +93,28 @@ def run_video_forms_job(snapshot, progress):
     """Resume or generate all forms; checkpoint after each six-scene API batch."""
     fields = {}
     plan = None
+    def call_with_retry(prompt):
+        def wait(seconds):
+            remaining = seconds
+            while remaining > 0:
+                progress.check_cancelled()
+                step = min(1.0, remaining)
+                time.sleep(step)
+                remaining -= step
+            progress.check_cancelled()
+
+        def report(message):
+            completed = _completed_count(plan) if plan else 0
+            total = len(plan.get("scenes", [])) if plan else 0
+            percent = round(100 * completed / total) if total else 0
+            progress.update(percent, message)
+
+        def request():
+            progress.check_cancelled()
+            with groq_request_gate.reporting(progress):
+                return _provider_call(snapshot, prompt)
+        return retry_transient_provider(request, report=report, wait=wait)
+
     try:
         progress.check_cancelled()
         if snapshot.get("existing_plan"):
@@ -106,7 +131,7 @@ def run_video_forms_job(snapshot, progress):
             if not bible:
                 progress.update(0, "👤 Đang tạo hồ sơ nhân vật cố định")
                 response = parse_json_object(
-                    _provider_call(snapshot, character_bible_prompt(
+                    call_with_retry(character_bible_prompt(
                         snapshot["translated"], snapshot["language"],
                         snapshot["style"],
                     )),
@@ -135,7 +160,7 @@ def run_video_forms_job(snapshot, progress):
 
         checkpoint(plan)
         _generate_all_remaining(
-            plan, lambda prompt: _provider_call(snapshot, prompt),
+            plan, call_with_retry,
             checkpoint=checkpoint,
         )
         final = fields["video_forms"]

@@ -67,6 +67,36 @@ class BackgroundVideoTests(unittest.TestCase):
         final = json.loads(resumed["fields"]["video_forms"])
         self.assertEqual(len([s for s in final["scenes"] if s["visual_prompt"]]), 109)
 
+    def test_transient_502_retries_failed_batch_and_preserves_completed_forms(self):
+        from api_clients import TransientProviderError
+        calls = []
+        def unstable(snapshot, prompt):
+            calls.append(prompt)
+            if len(calls) == 2:
+                raise TransientProviderError("HTTP 502 upstream", status_code=502)
+            return self.ai(snapshot, prompt)
+        progress = JobProgress()
+        with patch("server_video_jobs._provider_call", side_effect=unstable), \
+             patch("server_video_jobs.time.sleep") as sleep:
+            result = run_video_forms_job(self.snapshot, progress)
+        self.assertTrue(result["ok"], result["error"])
+        self.assertEqual(calls[1], calls[2])
+        self.assertEqual(len(calls), 20)
+        self.assertEqual(sleep.call_count, 3)
+        self.assertEqual(len([x for x in json.loads(result["fields"]["video_forms"])["scenes"] if x["visual_prompt"]]), 109)
+
+    def test_persistent_502_stops_after_bounded_retries_with_checkpoint(self):
+        from api_clients import TransientProviderError
+        def unavailable(snapshot, prompt):
+            raise TransientProviderError("HTTP 502 upstream", status_code=502)
+        with patch("server_video_jobs._provider_call", side_effect=unavailable) as vendor, \
+             patch("server_video_jobs.time.sleep"):
+            result = run_video_forms_job(self.snapshot, JobProgress())
+        self.assertFalse(result["ok"])
+        self.assertEqual(vendor.call_count, 4)
+        self.assertIn("502", result["error"])
+        self.assertIn("video_forms", result["fields"])
+
     def test_cloud_checkpoint_changes_only_active_session(self):
         from cryptography.fernet import Fernet
         key = Fernet.generate_key().decode()
