@@ -209,12 +209,12 @@ class _FullJobProgressProxy:
     """Publish translation/SEO partials to both process memory and account DB."""
 
     def __init__(self, snapshot, progress):
-        self.snapshot, self.progress = snapshot, progress
+        self.job_snapshot, self.progress = snapshot, progress
 
     def publish(self, field, value):
         self.progress.publish(field, value)
         save_cloud_full_checkpoint(
-            self.snapshot, self.progress.partial_result(), "running",
+            self.job_snapshot, self.progress.partial_result(), "running",
         )
 
     def __getattr__(self, key):
