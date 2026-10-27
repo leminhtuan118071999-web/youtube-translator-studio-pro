@@ -161,8 +161,18 @@ def batch_prompt(plan, scenes, *, style):
     } for scene in scenes]
     instructions = (
         f"Write visual_prompt and all production directions ONLY in English. Create exactly {len(scenes)} "
-        "self-contained scene-generation prompts for an 8-second-per-scene "
+        "PAIRED_SCENE_PROMPTS: self-contained video and opening-frame image prompts for an 8-second-per-scene "
         "video based STRICTLY on the provided target-language voiceover. "
+        "Format visual_prompt as ONE English line with explicit labeled sections separated by |: "
+        "Duration: 8 seconds | Setting & Time | Character Description | Action Timeline (0-2s, 2-5s, 5-8s) | "
+        "Camera & Lens | Lighting | Ambience | SFX | Music. Limit actions to what fits naturally in 8s. "
+        "Use the fixed visual style and character identity; do not invent new ages, heights or wardrobe. "
+        "Also return image_prompt for the SAME scene's OPENING frame only, not a collage or future action. "
+        "Use one English line: Subject Description | Environment & Time | Lighting | Composition & Framing | "
+        "Camera & Lens | Color Palette | Mood & Atmosphere | Effects | Negative | Aspect Ratio: 16:9. "
+        "Image and video MUST use identical character appearances, clothes, props, positions, setting and light. "
+        "Describe fully the characters present, with the same reference facts; do not add absent characters. "
+        "The opening-frame image should contain no subtitles, watermarks or text; video subtitles are added separately. "
         "Do not add new plot points, dialogues or narration; do not translate, "
         "reword or omit the voiceover. Each visual_prompt must cover the "
         "specific events in that scene's voiceover and describe in detail "
@@ -180,7 +190,7 @@ def batch_prompt(plan, scenes, *, style):
         "into the next 8-second clip. The transition must be inside the "
         "8-second clip, not added as extra runtime. For the very last scene, "
         "return an empty transition_to_next. Return ONLY JSON: "
-        '{"scenes":[{"number":1,"visual_prompt":"...","transition_to_next":"..."}]}. '
+        '{"scenes":[{"number":1,"visual_prompt":"...","image_prompt":"...","transition_to_next":"..."}]}. '
         "Also return speech_segments for each scene: an ordered array of "
         "{kind: narrator|character, speaker: exact character name or narrator, text: verbatim core words}. "
         "Concatenating segment texts in order must reproduce the FULL voiceover exactly, including punctuation. "
@@ -305,16 +315,21 @@ def apply_ai_batch(plan, raw, expected_numbers):
                 or not isinstance(desc, str) or not desc.strip()
                 or not isinstance(transition, str)):
             raise ValueError("Form AI thiếu nội dung hoặc sai số thứ tự.")
+        image_prompt = row.get("image_prompt")
+        if plan.get("paired_prompts_required") and (not isinstance(image_prompt, str) or not image_prompt.strip()):
+            raise ValueError("Form thiếu Image Prompt khung hình mở đầu.")
         segments = row.get("speech_segments")
         scene_source = next((s for s in plan["scenes"] if s["number"] == number), {})
         if segments is not None or plan.get("speech_roles_required"):
             validate_speech_segments(scene_source, segments)
-        mapped[number] = (desc.strip(), transition.strip(), segments)
+        mapped[number] = (desc.strip(), transition.strip(), segments, image_prompt)
     if set(mapped) != set(expected_numbers):
         raise ValueError("AI trả về sai thứ tự form video.")
     for scene in plan["scenes"]:
         if scene["number"] in mapped:
-            description, transition, segments = mapped[scene["number"]]
+            description, transition, segments, image_prompt = mapped[scene["number"]]
+            if isinstance(image_prompt, str) and image_prompt.strip():
+                scene["image_prompt"] = image_prompt.strip()
             if segments is not None:
                 scene["speech_segments"] = segments
             bible = plan.get("character_bible", "").strip()
@@ -403,6 +418,14 @@ def continuous_video_forms_text(plan):
     return "\n\n".join(blocks)
 
 
+def continuous_image_prompts_text(plan):
+    return "\n\n".join(
+        f"{int(s['number']):02d} | " + " ".join(s["image_prompt"].split())
+        for s in plan.get("scenes", [])
+        if isinstance(s, dict) and isinstance(s.get("image_prompt"), str) and s["image_prompt"].strip()
+    )
+
+
 VIDEO_FORMS_PER_PANEL = 99
 
 
@@ -433,5 +456,6 @@ def grouped_video_forms(plan, group_size=VIDEO_FORMS_PER_PANEL):
             "last": min(start + group_size, len(scenes)),
             "completed": len(filled),
             "content": content,
+            "image_content": continuous_image_prompts_text({"scenes": filled}),
         })
     return result

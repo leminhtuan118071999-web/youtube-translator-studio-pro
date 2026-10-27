@@ -15,7 +15,7 @@ from api_clients import ProviderReadTimeout
 from video_scene_planner import (
     narration_plan, character_bible_prompt, batch_prompt,
     parse_json_object, apply_ai_batch, source_fingerprint, plan_export_text,
-    continuous_video_forms_text, grouped_video_forms, add_scene_subtitles,
+    continuous_video_forms_text, grouped_video_forms, add_scene_subtitles, continuous_image_prompts_text,
 )
 from copy_buttons import copy_all_button
 from voice_alignment import duration_weighted_plan, speech_statistics, MAX_AUDIO_BYTES
@@ -62,7 +62,7 @@ def _generate_all_remaining(plan, ai, *, progress=None, checkpoint=None):
     Checkpoints happen only after an entire AI batch validates successfully.
     On provider errors, previously generated prompts remain intact.
     """
-    batch_size = 3 if plan.get("speech_roles_required") else 6
+    batch_size = 2 if plan.get("paired_prompts_required") else 3 if plan.get("speech_roles_required") else 6
     while _completed_count(plan) < len(plan["scenes"]):
         if progress:
             progress(plan, "🎬 Đang viết form video")
@@ -292,13 +292,24 @@ def render_video_forms(session, sid, language, *, ai, api_key,
                 group["content"],
                 key=f"copy_all_video_forms_{sid}_{group['panel']}",
             )
+            st.markdown("**🎬 Video Prompts**")
             st.code(group["content"], language=None, wrap_lines=True)
+            if group["image_content"]:
+                st.markdown("**🖼️ Image Prompts — khung hình mở đầu cùng cảnh**")
+                copy_all_button(f"📋 Copy prompt ảnh ô {group['panel']}", group["image_content"],
+                                key=f"copy_image_prompts_{sid}_{group['panel']}")
+                st.code(group["image_content"], language=None, wrap_lines=True)
 
     st.download_button(
         "⬇️ Tải tất cả form (.txt)", continuous_text,
         file_name=f"video-forms-{sid[:8]}.txt",
         mime="text/plain", key=f"download_video_forms_text_{sid}",
     )
+    image_text = continuous_image_prompts_text(plan)
+    if image_text:
+        st.download_button("⬇️ Tải tất cả prompt ảnh (.txt)", image_text,
+                           file_name=f"image-prompts-{sid[:8]}.txt", mime="text/plain",
+                           key=f"download_image_prompts_{sid}")
     st.download_button(
         "⬇️ Tải JSON form video", json.dumps(plan, ensure_ascii=False),
         file_name=f"video-forms-{sid[:8]}.json",

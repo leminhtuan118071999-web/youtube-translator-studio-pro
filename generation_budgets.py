@@ -7,6 +7,9 @@ def task_output_budget(prompt):
     # reviews whose final output is only a short JSON verdict.
     if prompt.startswith(("FAITHFULNESS_REVIEW", "STORY_REPAIR_REVIEW")):
         return 1024
+    if prompt.startswith("Write visual_prompt") and "PAIRED_SCENE_PROMPTS" in prompt[:500]:
+        count = re.search(r"Create exactly (\d+)", prompt[:300])
+        return min(6144, 800 + 1800 * int(count[1])) if count else 4400
     if prompt.startswith("NARRATION_TRANSLATION"):
         return 4096
     if prompt.startswith("STORY_ARC_SELECTION"):

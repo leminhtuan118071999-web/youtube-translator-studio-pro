@@ -43,7 +43,7 @@ class FormLanguageTests(unittest.TestCase):
                 checks.append(prompt)
                 if 'Polski opis' in prompt:return '{"ok":false,"issues":["Polish instead of Vietnamese"]}'
                 return '{"ok":true,"issues":[]}'
-            if prompt.startswith('Correct the visual_prompt'):return '{"scenes":[{"number":1,"visual_prompt":"Bà Thu embraces her granddaughter.","transition_to_next":"","speech_segments":[{"kind":"narrator","speaker":"narrator","text":"Bà Thu ôm Quỳnh Anh."}]}]}'
+            if prompt.startswith('Correct the visual_prompt'):return '{"scenes":[{"number":1,"visual_prompt":"Bà Thu embraces her granddaughter.","image_prompt":"Opening frame: Bà Thu sitting next to Quỳnh Anh.","transition_to_next":"","speech_segments":[{"kind":"narrator","speaker":"narrator","text":"Bà Thu ôm Quỳnh Anh."}]}]}'
             self.fail(prompt[:100])
         with patch('server_video_jobs._provider_call',side_effect=provider):
             result=run_video_forms_job(snap,JobProgress())
