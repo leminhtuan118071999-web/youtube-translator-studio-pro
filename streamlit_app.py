@@ -609,7 +609,7 @@ def collect_video_background_jobs():
             st.session_state.video_background_jobs.pop(session_id, None)
             continue
         for field, value in job["progress"].partial_result().items():
-            if field == "video_forms" and record.get(field) != value:
+            if field in ("video_forms", "character_profile_json", "character_bible") and record.get(field) != value:
                 record[field] = value
                 changed = True
         percentage, stage = job["progress"].snapshot()
@@ -625,7 +625,7 @@ def collect_video_background_jobs():
             outcome = {"ok": False, "fields": {},
                        "error": "Tác vụ nền kết thúc ngoài dự kiến."}
         for field, value in outcome.get("fields", {}).items():
-            if field == "video_forms":
+            if field in ("video_forms", "character_profile_json", "character_bible"):
                 record[field] = value
         record["video_job_state"] = "completed" if outcome.get("ok") else "failed"
         record["video_job_error"] = "" if outcome.get("ok") else outcome.get("error", "")
@@ -1931,6 +1931,8 @@ def launch_video_forms_background(duration, audio_hash, audio_name,
                                   translated, target_language, style,
                                   bible, existing_plan):
     """Start server-side video generation for the selected session only."""
+    if profile_job(session).get("state") == "running":
+        raise ValueError("Hồ sơ nhân vật đang được cập nhật; hãy chờ tác vụ này hoàn thành rồi tạo form.")
     if sid in st.session_state.video_background_jobs:
         job = st.session_state.video_background_jobs[sid]
         if not job["future"].done():
@@ -1947,6 +1949,7 @@ def launch_video_forms_background(duration, audio_hash, audio_name,
                 "duration_seconds": duration, "audio_hash": audio_hash,
                 "audio_name": audio_name, "style": style,
                 "character_bible": bible, "existing_plan": existing_plan, "verify_form_language": True, "auto_form_language": True,
+                "auto_character_profiles": True,
                 "character_profile_json": session.get("character_profile_json", ""),
                 "wardrobe_lock_enabled": session.get("wardrobe_lock_enabled", True),
                 "wardrobe_lock_notes": session.get("wardrobe_lock_notes", ""),
@@ -1974,6 +1977,7 @@ def launch_video_forms_background(duration, audio_hash, audio_name,
         "duration_seconds": duration, "audio_hash": audio_hash,
         "audio_name": audio_name, "style": style,
         "character_bible": bible, "existing_plan": existing_plan, "verify_form_language": True, "auto_form_language": True,
+                "auto_character_profiles": True,
                 "character_profile_json": session.get("character_profile_json", ""),
                 "wardrobe_lock_enabled": session.get("wardrobe_lock_enabled", True),
                 "wardrobe_lock_notes": session.get("wardrobe_lock_notes", ""),
@@ -2018,6 +2022,8 @@ def launch_video_forms_background(duration, audio_hash, audio_name,
 
 
 def launch_character_profile_background():
+    if session.get("video_job_state") == "running":
+        raise ValueError("Tác vụ tạo form đang tự xử lý hồ sơ nhân vật của phiên này.")
     if not key.strip() or not model.strip():
         raise ValueError("Cần API văn bản và model hợp lệ để tạo hồ sơ nhân vật.")
     sync_form(sid)
@@ -2133,7 +2139,7 @@ with tab_characters:
         "🔄 Tạo/cập nhật hồ sơ chi tiết từng nhân vật",
         key=f"regenerate_detailed_characters_{sid}",
         disabled=not bool(session.get("translated", "").strip())
-                 or session.get("job_state") == "running" or profile_running,
+                 or session.get("job_state") == "running" or session.get("video_job_state") == "running" or profile_running,
     ):
         try:
             launch_character_profile_background()
@@ -2178,7 +2184,7 @@ with tab_characters:
                     pass
                     save_profile = st.form_submit_button(
                         "💾 Lưu hồ sơ nhân vật",
-                        disabled=session.get("job_state") == "running" or profile_running,
+                        disabled=session.get("job_state") == "running" or session.get("video_job_state") == "running" or profile_running,
                     )
                 if save_profile:
                     saved_sheets[idx - 1] = edited
@@ -2188,6 +2194,9 @@ with tab_characters:
                             character_profile_text(item) for item in saved_sheets
                         ),
                     }
+                    previous_profile = json.loads(session.get("character_profile_json") or "{}")
+                    if previous_profile.get("_video_profile_signature"):
+                        updated_profile["_video_profile_signature"] = previous_profile["_video_profile_signature"]
                     session["character_profile_json"] = json.dumps(
                         updated_profile, ensure_ascii=False,
                     )

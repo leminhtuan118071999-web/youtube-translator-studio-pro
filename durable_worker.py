@@ -301,6 +301,9 @@ def build_snapshot(job):
         snapshot["resume_fields"] = dict(job.get("result") or {})
     else:
         snapshot["cloud"] = None
+        for field in ("character_profile_json", "character_bible"):
+            if isinstance((job.get("result") or {}).get(field), str):
+                snapshot[field] = job["result"][field]
         # Existing plan has checkpointed prompts (from prior lease holder).
         if isinstance((job.get("result") or {}).get("video_forms"), str):
             snapshot["existing_plan"] = job["result"]["video_forms"]

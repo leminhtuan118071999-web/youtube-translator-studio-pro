@@ -7,6 +7,7 @@ of uninterrupted processing after a Streamlit Cloud worker restart.
 """
 from character_identity import profile_names, name_contract, apply_name_lock, validate_speaker_spelling
 from wardrobe_lock import apply_wardrobe_lock
+from video_character_profiles import prepare_video_profiles
 import json
 import threading
 import time
@@ -75,13 +76,17 @@ def save_cloud_video_checkpoint(snapshot, encoded, state, error=""):
         record = payload.get("workspaces", {}).get(snapshot["sid"])
         if not isinstance(record, dict) or record.get("video_job_run_id") != snapshot["run_id"]:
             raise RuntimeError("Phiên đã được xóa hoặc thay thế; dừng lưu form cũ.")
-        record["video_forms"] = encoded
+        for field, value in snapshot.get("profile_checkpoint_fields", {}).items():
+            if field in ("character_profile_json", "character_bible"):
+                record[field] = value
+        if encoded:
+            record["video_forms"] = encoded
         record["video_job_state"] = state
         record["video_job_error"] = str(error)[:300]
-        total = len(_json.loads(encoded).get("scenes", []))
+        total = len(_json.loads(encoded or "{}").get("scenes", []))
         completed = sum(
             bool(x.get("visual_prompt", "").strip())
-            for x in _json.loads(encoded).get("scenes", [])
+            for x in _json.loads(encoded or "{}").get("scenes", [])
         )
         record["video_job_percent"] = round(100 * completed / total) if total else 0
         record["video_job_stage"] = f"Đã tạo {completed}/{total} form"
@@ -136,6 +141,22 @@ def run_video_forms_job(snapshot, progress):
             if not isinstance(language, str) or not language.strip() or len(language) > 80:
                 raise ValueError("Chưa nhận diện được ngôn ngữ bản dịch.")
             snapshot["language"] = language.strip()
+        if snapshot.get("auto_character_profiles"):
+            def publish_profile(field, value):
+                fields[field] = value
+                progress.publish(field, value)
+                snapshot.setdefault("profile_checkpoint_fields", {})[field] = value
+                save_cloud_video_checkpoint(snapshot, "", "running")
+            progress.update(0, "👥 Đang chuẩn bị hồ sơ ảnh tham chiếu nhân vật")
+            profile = prepare_video_profiles(
+                snapshot, call_with_retry, publish_profile,
+                lambda message: progress.update(0, "👥 " + message),
+            )
+            snapshot["character_profile_json"] = json.dumps(profile, ensure_ascii=False)
+            snapshot["character_bible"] = profile.get("character_bible", "")
+            for field in ("character_profile_json", "character_bible"):
+                publish_profile(field, snapshot[field])
+
         existing = json.loads(snapshot["existing_plan"]) if snapshot.get("existing_plan") else None
         if existing and snapshot.get("auto_form_language") and (
                 existing.get("language") != snapshot["language"]
@@ -145,7 +166,8 @@ def run_video_forms_job(snapshot, progress):
                     s.get("visual_prompt") and ("speech_segments" not in s or not s.get("image_prompt")) for s in existing.get("scenes", [])))):
             # Rebuild voiceover/subtitles from the correct translation using saved audio timing.
             snapshot["duration_seconds"] = existing.get("audio_duration_seconds") or snapshot["duration_seconds"]
-            snapshot["character_bible"] = ""
+            if not snapshot.get("auto_character_profiles"):
+                snapshot["character_bible"] = ""
             existing = None
         if existing:
             plan = existing
@@ -174,6 +196,17 @@ def run_video_forms_job(snapshot, progress):
                 raise ValueError("Không tạo được hồ sơ nhân vật.")
             plan["character_bible"] = bible.strip()
             plan["style"] = snapshot["style"]
+
+        if snapshot.get("auto_character_profiles"):
+            reference_key = source_hash(json.dumps(profile.get("characters", []), ensure_ascii=False, sort_keys=True))
+            if plan.get("profile_reference_hash") != reference_key:
+                for scene in plan.get("scenes", []):
+                    for field in ("visual_prompt", "image_prompt", "speech_segments", "transition_to_next"):
+                        scene.pop(field, None)
+                plan.pop("wardrobe_reference", None)
+            plan["profile_reference_hash"] = reference_key
+            plan["character_profiles"] = profile.get("characters", [])
+            plan["character_bible"] = snapshot["character_bible"] or plan["character_bible"]
 
         names = profile_names(snapshot.get("character_profile_json", ""))
         if not names:
