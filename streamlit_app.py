@@ -1976,6 +1976,30 @@ with tab_characters:
             except Exception as exc:
                 st.warning("Chưa tải được ảnh nhân vật từ Storage: " + str(exc)[:180])
     st.subheader("🖼️ Ảnh nhân vật của phiên này")
+    # Display the same bible previously shown in Video Forms here instead.
+    # Some older sessions only kept the bible inside video_forms JSON.
+    character_bible = str(session.get("character_bible") or "").strip()
+    raw_video_plan = session.get("video_forms", "")
+    if isinstance(raw_video_plan, str) and raw_video_plan:
+        try:
+            saved_video_plan = json.loads(raw_video_plan)
+            if isinstance(saved_video_plan, dict):
+                character_bible = (
+                    str(saved_video_plan.get("character_bible") or "").strip()
+                    or character_bible
+                )
+        except (ValueError, TypeError):
+            pass
+    with st.expander(
+        "📌 Hồ sơ nhân vật/bối cảnh cố định cho mọi form", expanded=False
+    ):
+        if character_bible:
+            st.code(character_bible, language=None, wrap_lines=True)
+        else:
+            st.info(
+                "Chưa có hồ sơ nhân vật. Hãy chạy BẮT ĐẦU TẠO TOÀN BỘ "
+                "hoặc tạo form video 8 giây để hệ thống lập hồ sơ."
+            )
     st.caption(
         "Ảnh được tự tạo sau Hồ sơ nhân vật nếu đã nhập OpenAI Images API key. "
         "Chỉ chứa nhân vật thuộc phiên hiện tại, không lẫn phiên khác."
