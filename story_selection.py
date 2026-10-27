@@ -2,7 +2,7 @@
 import json
 
 from faithful_summary import (FACT_RULES, MAX_ATTEMPTS, OPTIMIZATION_VERSION,
-                              MAX_TARGET_SCRIPT_CHARS, _json, _review,
+                              MAX_TARGET_SCRIPT_CHARS, ReviewFormatError, _json, _review,
                               source_hash, source_windows)
 
 
@@ -112,23 +112,31 @@ def extract_target_story(source, language, call, progress, optimize):
     selected = source[selection["start"]:selection["end"]]
     context = {"background_quotes": selection.get("background_quotes", []),
                "scope": "One selected contiguous arc; unrelated original subplots are excluded."}
-    adapter = SelectionProgress(progress, saved)
-    result = optimize(selected, call, adapter, target_language=language,
-                      max_characters=MAX_TARGET_SCRIPT_CHARS, narrative_context=context)
-    progress.check_cancelled()
-    progress.update(65, "🔎 Đối soát toàn bộ câu chuyện đã tách với đoạn gốc và bối cảnh")
-    try:
-        conflicts = _review(call, selected, result, mode="target_rewrite",
-            context={**context, "target_language": language,
-                     "whole_story_check": "Require a standalone coherent arc, source-supported setup and stopping point; "
-                     "no invented closure, dangling causal dependencies or duplicated scenes. Preserve all "
-                     "important hooks/actions/relationships/numeric meanings INSIDE the selected arc. "
-                     "Do not require unrelated excluded subplots. Background quotes are original evidence."})
-    except ValueError:
-        # Do not reuse drafts that failed the global continuity audit.
-        saved.pop("chunk_work", None)
-        progress.publish("optimization_work_json", json.dumps(saved, ensure_ascii=False))
-        raise
+    for repair_attempt in range(2):
+        adapter = SelectionProgress(progress, saved)
+        result = optimize(selected, call, adapter, target_language=language,
+                          max_characters=MAX_TARGET_SCRIPT_CHARS, narrative_context=context)
+        progress.check_cancelled()
+        progress.update(65, "🔎 Đối soát toàn bộ câu chuyện đã tách với đoạn gốc và bối cảnh")
+        try:
+            conflicts = _review(call, selected, result, mode="target_rewrite",
+                context={**context, "target_language": language,
+                         "whole_story_check": "Require a standalone coherent arc, source-supported setup and stopping point; "
+                         "no invented closure, dangling causal dependencies or duplicated scenes. Preserve all "
+                         "important hooks/actions/relationships/numeric meanings INSIDE the selected arc. "
+                         "Do not require unrelated excluded subplots. Background quotes are original evidence."})
+        except ReviewFormatError:
+            raise
+        except ValueError as exc:
+            # Do not reuse drafts that failed the global continuity audit.
+            saved.pop("chunk_work", None)
+            progress.publish("optimization_work_json", json.dumps(saved, ensure_ascii=False))
+            if repair_attempt == 1:
+                raise
+            context["required_corrections"] = str(exc)[:1600]
+            progress.update(60, "🛠️ Tự sửa lỗi liên kết câu chuyện theo bản gốc rồi kiểm tra lại")
+            continue
+        break
     report = adapter.report
     report.update(identity, source_characters=len(source), story_selection=selection,
                   selected_source_sha256=source_hash(selected), selected_source_characters=len(selected))

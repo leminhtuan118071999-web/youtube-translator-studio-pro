@@ -91,6 +91,22 @@ class StorySelectionTests(unittest.TestCase):
         self.assertEqual(rewrite_target_script(self.source, "Polish", call, JobProgress()), self.target)
         self.assertEqual(count, 2)
 
+    def test_global_content_error_triggers_bounded_source_grounded_repair(self):
+        reviews = 0
+        def call(prompt):
+            nonlocal reviews
+            if 'whole_story_check' in prompt:
+                reviews += 1
+                if reviews == 1:
+                    return '{"ok":false,"issues":["Clarify mother relationship"],"source_conflicts":[]}'
+            return self.provider(prompt)
+        result = rewrite_target_script(self.source, "Polish", call, JobProgress())
+        self.assertEqual(result, self.target)
+        self.assertEqual(reviews, 2)
+        drafts = [p for p in self.calls if p.startswith("SOURCE_GROUNDED_SUMMARY")]
+        self.assertEqual(len(drafts), 2)
+        self.assertIn("Clarify mother relationship", drafts[1])
+
     def test_start_uses_new_selection_and_preserves_original(self):
         cfg = dict(source=self.source, url="", language="Polish", provider="OpenAI",
                    base_url="https://api.openai.com/v1", model="test", api_key="secret")
