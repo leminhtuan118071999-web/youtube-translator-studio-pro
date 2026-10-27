@@ -9,6 +9,7 @@ import math
 from io import BytesIO
 
 import streamlit as st
+from api_clients import ProviderReadTimeout
 
 from video_scene_planner import (
     narration_plan, character_bible_prompt, batch_prompt,
@@ -43,9 +44,9 @@ def _progress_description(plan, stage):
     return completed, total, percent, f"{stage} • {completed}/{total} form ({percent}%)"
 
 
-def _generate_batch(plan, ai):
+def _generate_batch(plan, ai, batch_size=6):
     """One atomic six-scene provider call, used internally by auto-completion."""
-    pending = [s for s in plan["scenes"] if not s.get("visual_prompt", "").strip()][:6]
+    pending = [s for s in plan["scenes"] if not s.get("visual_prompt", "").strip()][:batch_size]
     if not pending:
         return 0
     expected = [item["number"] for item in pending]
@@ -60,10 +61,21 @@ def _generate_all_remaining(plan, ai, *, progress=None, checkpoint=None):
     Checkpoints happen only after an entire AI batch validates successfully.
     On provider errors, previously generated prompts remain intact.
     """
+    batch_size = 6
     while _completed_count(plan) < len(plan["scenes"]):
         if progress:
             progress(plan, "🎬 Đang viết form video")
-        written = _generate_batch(plan, ai)
+        try:
+            written = _generate_batch(plan, ai, batch_size=batch_size)
+        except ProviderReadTimeout:
+            pending_count = sum(not s.get("visual_prompt", "").strip() for s in plan["scenes"])
+            attempted = min(batch_size, pending_count)
+            if attempted <= 1:
+                raise
+            batch_size = max(1, attempted // 2)
+            if progress:
+                progress(plan, f"⏳ API xử lý chậm; tự giảm còn {batch_size} form/lượt")
+            continue
         if not written:
             raise RuntimeError("Không thể tiếp tục tạo form video.")
         if checkpoint:

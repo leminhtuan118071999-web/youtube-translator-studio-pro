@@ -163,6 +163,10 @@ def run_video_forms_job(snapshot, progress):
         _generate_all_remaining(
             plan, call_with_retry,
             checkpoint=checkpoint,
+            progress=lambda current, stage: progress.update(
+                round(100 * _completed_count(current) / len(current["scenes"])) if current["scenes"] else 0,
+                stage,
+            ),
         )
         final = fields["video_forms"]
         save_cloud_video_checkpoint(snapshot, final, "completed")

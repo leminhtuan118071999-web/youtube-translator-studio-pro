@@ -260,6 +260,10 @@ def _request(method, url, headers, **kwargs):
 
 
 
+class ProviderReadTimeout(RuntimeError):
+    """Provider did not finish a response within the request deadline."""
+
+
 class TransientProviderError(RuntimeError):
     """A provider/gateway responded with a retryable 502/503/504.
 
@@ -557,7 +561,7 @@ def generate_text(
             "trong thanh bên và kiểm tra Base URL/gateway."
         ) from exc
     except requests.Timeout as exc:
-        raise RuntimeError(
+        raise ProviderReadTimeout(
             "Nhà cung cấp AI phản hồi quá thời gian chờ (150 giây). "
             "Đây có thể là do model xử lý lâu hoặc gateway quá tải. "
             "Hãy thử model phản hồi nhanh hơn hoặc thử lại sau."
