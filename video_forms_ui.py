@@ -157,7 +157,7 @@ def render_video_forms(session, sid, language, *, ai, api_key,
             st.error(f"Không đọc được file giọng đọc: {exc}")
             audio_error = True
     else:
-        st.info("Vui lòng tải giọng đọc đã hoàn chỉnh trước khi tạo form.")
+        pass
     st.caption(
         "📏 Hệ thống chỉ dùng thời lượng file giọng đọc và độ dài bản dịch "
         "để ƯỚC TÍNH tốc độ đọc và phân chia lời đọc cho từng form. "
@@ -177,36 +177,20 @@ def render_video_forms(session, sid, language, *, ai, api_key,
     if stale:
         st.warning(
             "Bản dịch, ngôn ngữ hoặc file giọng đọc đã thay đổi. "
-            "Hãy tạo lại form theo audio mới."
+            "Nhấn Tạo form 8 giây theo giọng đọc để tự đồng bộ."
         )
+    saved_audio_available = bool(plan and plan.get("audio_duration_seconds"))
     cannot_generate = (
-        audio_error or upload is None or not translated
-        or bool(session.get("job_state") == "running")
-        or bool(session.get("video_job_state") == "running")
+        audio_error or (upload is None and not saved_audio_available) or not translated
+        or session.get("job_state") == "running"
+        or session.get("video_job_state") == "running"
     )
     generate_clicked = st.button(
         "🎬 Tạo form 8 giây theo giọng đọc",
         type="primary", key=f"create_video_forms_{sid}",
         disabled=cannot_generate,
     )
-    retry_clicked = st.button(
-        "🔄 Chạy lại riêng — Form video 8 giây",
-        key=f"retry_video_forms_{sid}",
-        # A saved plan already contains the total voice duration and words.
-        # Let recovery after a server restart work without re-uploading MP3.
-        disabled=(
-            not translated or plan is None
-            or (stale and (not plan.get("audio_duration_seconds") or (audio_hash is not None and plan.get("audio_sha256") != audio_hash)))
-            or session.get("job_state") == "running"
-            or session.get("video_job_state") == "running"
-        ),
-    )
-    rewrite_clicked = st.button(
-        "🌐 Tự nhận diện và viết lại ngôn ngữ form", key=f"rewrite_video_language_{sid}",
-        disabled=(plan is None or not translated or not plan.get("audio_duration_seconds")
-                  or session.get("job_state") == "running" or session.get("video_job_state") == "running"),
-    )
-    if generate_clicked or retry_clicked or rewrite_clicked:
+    if generate_clicked:
         if not api_key.strip():
             st.warning("Hãy nhập API key của nhà cung cấp AI trước khi tạo form.")
         elif launch_video_job is None:
@@ -215,8 +199,10 @@ def render_video_forms(session, sid, language, *, ai, api_key,
             try:
                 # Sending duration and translated text is sufficient. Do not
                 # upload audio or call a speech transcription API.
-                saved_plan = plan if retry_clicked and plan is not None else None
-                if rewrite_clicked:
+                same_audio = plan is not None and (upload is None or plan.get("audio_sha256") == audio_hash)
+                saved_plan = (plan if same_audio and _completed_count(plan) < len(plan["scenes"])
+                              and plan.get("style") == style else None)
+                if upload is None and saved_audio_available:
                     seconds = plan["audio_duration_seconds"]
                     audio_hash = plan.get("audio_sha256", "")
                     audio_name = plan.get("audio_filename", "speech")
@@ -227,7 +213,7 @@ def render_video_forms(session, sid, language, *, ai, api_key,
                     (saved_plan.get("audio_sha256") if saved_plan else audio_hash),
                     (saved_plan.get("audio_filename", "") if saved_plan else audio_name),
                     translated, language, style,
-                    "" if rewrite_clicked else character_bible,
+                    character_bible,
                     json.dumps(saved_plan, ensure_ascii=False) if saved_plan else None,
                 )
             except (TypeError, ValueError, RuntimeError, KeyError) as exc:
@@ -247,7 +233,7 @@ def render_video_forms(session, sid, language, *, ai, api_key,
         st.warning(
             "Tác vụ tạo form bị gián đoạn: "
             + str(session.get("video_job_error", "Không rõ nguyên nhân."))
-            + " Chạy lại riêng để tiếp tục những form còn thiếu."
+            + " Nhấn Tạo form 8 giây theo giọng đọc để tiếp tục những form còn thiếu."
         )
     if plan is not None and not stale:
         count, total, ratio, label = _progress_description(
