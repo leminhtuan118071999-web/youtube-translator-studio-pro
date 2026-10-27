@@ -90,7 +90,7 @@ def render_video_forms(session, sid, language, *, ai, api_key,
                        mark_processed, persist_and_rerun, launch_video_job=None):
     """Independent voice-first prompt generation after translation."""
     language = saved_translation_language(session) or language
-    st.subheader(f"🎬 Form video 8 giây — {language}")
+    st.subheader(f"🎬 Form video 8 giây — English · Lời đọc: {language}")
     st.caption(
         "Mỗi form là PROMPT tạo clip 8 giây, chưa xuất MP4. "
         "Lời đọc lấy nguyên văn từ BẢN DỊCH của đúng phiên và cùng ngôn ngữ đích. "

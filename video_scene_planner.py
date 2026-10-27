@@ -160,7 +160,7 @@ def batch_prompt(plan, scenes, *, style):
         "following_voiceover": next((s["voiceover"] for s in plan["scenes"] if s["number"] == scene["number"]+1), ""),
     } for scene in scenes]
     instructions = (
-        f"Write ONLY in {plan['language']}. Create exactly {len(scenes)} "
+        f"Write visual_prompt and all production directions ONLY in English. Create exactly {len(scenes)} "
         "self-contained scene-generation prompts for an 8-second-per-scene "
         "video based STRICTLY on the provided target-language voiceover. "
         "Do not add new plot points, dialogues or narration; do not translate, "
@@ -193,7 +193,8 @@ def batch_prompt(plan, scenes, *, style):
         "Subtitles are ON-SCREEN TEXT ONLY and must never be spoken a second time. "
         "Do not return or modify voiceover text. The number must match "
         "each requested number exactly. Every visual_prompt and nonempty "
-        "transition_to_next must be written in the TARGET language. "
+        "transition_to_next must be written in English. "
+        f"Spoken narration, dialogue and subtitle text MUST remain verbatim in {plan['language']}; do not translate them into English. "
         f"Visual style: {style}. Fixed character reference: "
         f"{plan['character_bible']}\nInput scenes:\n"
         + json.dumps(basic, ensure_ascii=False)
@@ -339,7 +340,7 @@ def add_scene_subtitles(plan):
 
 
 def plan_export_text(plan):
-    pieces = [f"Video scene forms | {plan['language']} | 8s per scene",
+    pieces = [f"Video scene forms | English instructions | Spoken/subtitle language: {plan['language']} | 8s per scene",
               f"Character continuity: {plan['character_bible']}"]
     for scene in plan["scenes"]:
         pieces.append(
@@ -370,13 +371,15 @@ def continuous_video_forms_text(plan):
         visual = " ".join(scene["visual_prompt"].split())
         voice = " ".join(str(scene.get("voiceover", "")).split())
         transition = " ".join(str(scene.get("transition_to_next", "")).split())
-        vietnamese = plan.get("language") in ("Tiếng Việt", "Vietnamese")
+        vietnamese = False  # Production instructions are English; spoken/subtitle text stays source-locked.
         voice_label = "Lời đọc" if vietnamese else "Voice"
         subtitle_label = "Phụ đề trên màn hình" if vietnamese else "Subtitle (on screen, target language)"
         next_label = "Chuyển cảnh" if vietnamese else "Next"
         if vietnamese:
             transition = transition.replace("crossfade", "mờ chồng")
         block = f"{number:02d} | 8s | {visual}"
+        if plan.get("language"):
+            block += f" | Spoken/subtitle language: {plan['language']} (keep supplied text verbatim)"
         segments = scene.get("speech_segments")
         if isinstance(segments, list):
             validate_speech_segments(scene, segments)

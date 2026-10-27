@@ -52,10 +52,10 @@ class SpeechRolesTests(unittest.TestCase):
         segments=[dict(kind='narrator',speaker='narrator',text='Bà Thu nói:'),dict(kind='character',speaker='Bà Thu',text='“Cảm ơn cháu.”'),dict(kind='narrator',speaker='narrator',text='Quỳnh Anh ôm bà.')]
         apply_ai_batch(p,self.rows(segments),[1])
         text=continuous_video_forms_text(p)
-        self.assertIn('Lời thoại — Bà Thu: “Cảm ơn cháu.”',text)
-        self.assertIn('Lời dẫn — người kể: Quỳnh Anh ôm bà.',text)
-        self.assertIn('Phụ đề chỉ hiển thị chữ, không đọc lại.',text)
-        self.assertNotIn(' | Lời đọc:',text)
+        self.assertIn('Dialogue — Bà Thu: “Cảm ơn cháu.”',text)
+        self.assertIn('Narrator (off-screen): Quỳnh Anh ôm bà.',text)
+        self.assertIn('Subtitles are display-only, never read aloud again.',text)
+        self.assertNotIn(' | Voice:',text)
     def test_changed_words_or_unnamed_speaker_do_not_mutate_scene(self):
         for segment in [dict(kind='character',speaker='unknown',text=self.plan()['scenes'][0]['voiceover']),dict(kind='narrator',speaker='narrator',text='Invented')]:
             p=self.plan()

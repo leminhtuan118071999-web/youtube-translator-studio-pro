@@ -96,7 +96,8 @@ class VideoScenePlannerTests(unittest.TestCase):
         self.assertIn(plan["character_bible"], prompt)
         self.assertIn("0-8 second timeline", prompt)
         self.assertIn("1.0 second", prompt)
-        self.assertIn("ONLY in Tiếng Ba Lan", prompt)
+        self.assertIn("ONLY in English", prompt)
+        self.assertIn("verbatim in Tiếng Ba Lan", prompt)
         expected = [scene["number"] for scene in plan["scenes"]]
         generated = json.dumps({
             "scenes": [

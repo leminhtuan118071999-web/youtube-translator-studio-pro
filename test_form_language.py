@@ -37,13 +37,13 @@ class FormLanguageTests(unittest.TestCase):
                   existing_plan=None,provider='test',base_url='',model='test',api_key='key',verify_form_language=True)
         checks=[]
         def provider(snapshot,prompt):
-            if prompt.startswith('Translate this fixed'): return '{"character_bible":"Bà Thu và Quỳnh Anh."}'
-            if prompt.startswith('Write ONLY'): return '{"scenes":[{"number":1,"visual_prompt":"Polski opis.","transition_to_next":"","speech_segments":[{"kind":"narrator","speaker":"narrator","text":"Bà Thu ôm Quỳnh Anh."}]}]}'
+            if prompt.startswith('Translate this fixed'): return '{"character_bible":"Bà Thu and Quỳnh Anh."}'
+            if prompt.startswith('Write visual_prompt'): return '{"scenes":[{"number":1,"visual_prompt":"Polski opis.","transition_to_next":"","speech_segments":[{"kind":"narrator","speaker":"narrator","text":"Bà Thu ôm Quỳnh Anh."}]}]}'
             if prompt.startswith('FORM_LANGUAGE_CHECK'):
                 checks.append(prompt)
                 if 'Polski opis' in prompt:return '{"ok":false,"issues":["Polish instead of Vietnamese"]}'
                 return '{"ok":true,"issues":[]}'
-            if prompt.startswith('Correct the visual_prompt'):return '{"scenes":[{"number":1,"visual_prompt":"Bà Thu ôm cháu gái.","transition_to_next":"","speech_segments":[{"kind":"narrator","speaker":"narrator","text":"Bà Thu ôm Quỳnh Anh."}]}]}'
+            if prompt.startswith('Correct the visual_prompt'):return '{"scenes":[{"number":1,"visual_prompt":"Bà Thu embraces her granddaughter.","transition_to_next":"","speech_segments":[{"kind":"narrator","speaker":"narrator","text":"Bà Thu ôm Quỳnh Anh."}]}]}'
             self.fail(prompt[:100])
         with patch('server_video_jobs._provider_call',side_effect=provider):
             result=run_video_forms_job(snap,JobProgress())
@@ -52,7 +52,7 @@ class FormLanguageTests(unittest.TestCase):
         self.assertNotIn('Polski',plan['scenes'][0]['visual_prompt'])
         self.assertEqual(plan['scenes'][0]['voiceover'],snap['translated'])
         content=continuous_video_forms_text(plan)
-        self.assertIn('Lời dẫn — người kể:',content)
-        self.assertIn('Phụ đề trên màn hình:',content)
+        self.assertIn('Narrator (off-screen):',content)
+        self.assertIn('Subtitle (on screen, target language):',content)
         self.assertNotIn('Voice:',grouped_video_forms(plan)[0]['content'])
         self.assertEqual(len(checks),2)
