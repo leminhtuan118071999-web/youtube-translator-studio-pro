@@ -198,7 +198,12 @@ def render_video_forms(session, sid, language, *, ai, api_key,
             or session.get("video_job_state") == "running"
         ),
     )
-    if generate_clicked or retry_clicked:
+    rewrite_clicked = st.button(
+        f"🌐 Viết lại toàn bộ form bằng {language}", key=f"rewrite_video_language_{sid}",
+        disabled=(plan is None or not translated or not plan.get("audio_duration_seconds")
+                  or session.get("job_state") == "running" or session.get("video_job_state") == "running"),
+    )
+    if generate_clicked or retry_clicked or rewrite_clicked:
         if not api_key.strip():
             st.warning("Hãy nhập API key của nhà cung cấp AI trước khi tạo form.")
         elif launch_video_job is None:
@@ -208,12 +213,18 @@ def render_video_forms(session, sid, language, *, ai, api_key,
                 # Sending duration and translated text is sufficient. Do not
                 # upload audio or call a speech transcription API.
                 saved_plan = plan if retry_clicked and plan is not None and not stale else None
+                if rewrite_clicked:
+                    seconds = plan["audio_duration_seconds"]
+                    audio_hash = plan.get("audio_sha256", "")
+                    audio_name = plan.get("audio_filename", "speech")
+                else:
+                    audio_name = upload.name if upload is not None else "speech"
                 launch_video_job(
                     (saved_plan.get("audio_duration_seconds") if saved_plan else seconds),
                     (saved_plan.get("audio_sha256") if saved_plan else audio_hash),
-                    (saved_plan.get("audio_filename", "") if saved_plan else upload.name),
+                    (saved_plan.get("audio_filename", "") if saved_plan else audio_name),
                     translated, language, style,
-                    character_bible,
+                    "" if rewrite_clicked else character_bible,
                     json.dumps(saved_plan, ensure_ascii=False) if saved_plan else None,
                 )
             except (TypeError, ValueError, RuntimeError, KeyError) as exc:

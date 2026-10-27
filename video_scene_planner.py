@@ -266,11 +266,17 @@ def continuous_video_forms_text(plan):
         visual = " ".join(scene["visual_prompt"].split())
         voice = " ".join(str(scene.get("voiceover", "")).split())
         transition = " ".join(str(scene.get("transition_to_next", "")).split())
-        block = f"{number:02d} | 8s | {visual} | Voice: {voice}"
+        vietnamese = plan.get("language") in ("Tiếng Việt", "Vietnamese")
+        voice_label = "Lời đọc" if vietnamese else "Voice"
+        subtitle_label = "Phụ đề trên màn hình" if vietnamese else "Subtitle (on screen, target language)"
+        next_label = "Chuyển cảnh" if vietnamese else "Next"
+        if vietnamese:
+            transition = transition.replace("crossfade", "mờ chồng")
+        block = f"{number:02d} | 8s | {visual} | {voice_label}: {voice}"
         if voice:
-            block += f" | Subtitle (on screen, target language): {voice}"
+            block += f" | {subtitle_label}: {voice}"
         if transition:
-            block += f" | Next: {transition}"
+            block += f" | {next_label}: {transition}"
         blocks.append(block)
     return "\n\n".join(blocks)
 
@@ -298,7 +304,7 @@ def grouped_video_forms(plan, group_size=VIDEO_FORMS_PER_PANEL):
                   and str(scene.get("visual_prompt", "")).strip()]
         if not filled:
             continue
-        content = continuous_video_forms_text({"scenes": filled})
+        content = continuous_video_forms_text({"scenes": filled, "language": plan.get("language", "")})
         result.append({
             "panel": start // group_size + 1,
             "first": start + 1,
