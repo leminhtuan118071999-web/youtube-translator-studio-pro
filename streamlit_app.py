@@ -2067,6 +2067,12 @@ with tab_characters:
                     _persist_and_rerun()
             except Exception as exc:
                 st.error("Chưa thể lập lại hồ sơ: " + str(exc)[:300])
+                st.info(
+                    f"Đang dùng API văn bản: {provider} · Model: {model}. "
+                    "Mở thanh bên → Cấu hình API → Kiểm tra kết nối API. "
+                    "Nếu kiểm tra thành công nhưng tạo hồ sơ vẫn quá thời gian chờ, "
+                    "hãy thử model phản hồi nhanh hơn. Hồ sơ đã lưu được giữ lại."
+                )
 
     st.markdown("**👥 Hồ sơ ảnh tham chiếu theo từng nhân vật**")
     if saved_sheets:

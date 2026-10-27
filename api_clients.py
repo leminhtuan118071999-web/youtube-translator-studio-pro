@@ -527,9 +527,46 @@ def generate_text(
     if provider == "Groq":
         groq_request_gate.acquire(token, model, prompt)
     try:
-        response = _request("POST", endpoint, api_headers(kind, token, selected_auth), json=body)
+        # Only a connect timeout is safe to retry: the request has not reached
+        # the provider. A read timeout/reset may follow a completed, billed POST.
+        for attempt in range(2):
+            try:
+                response = _request(
+                    "POST", endpoint, api_headers(kind, token, selected_auth), json=body,
+                )
+                break
+            except requests.ConnectTimeout:
+                if attempt:
+                    raise
+    except requests.exceptions.SSLError as exc:
+        raise RuntimeError(
+            "Kết nối HTTPS tới nhà cung cấp AI lỗi chứng chỉ SSL. "
+            "Hãy kiểm tra chứng chỉ của Base URL/gateway; không tắt xác minh SSL."
+        ) from exc
+    except requests.ConnectTimeout as exc:
+        raise RuntimeError(
+            "Không thiết lập được kết nối tới nhà cung cấp AI sau 2 lần thử "
+            "(mỗi lần tối đa 10 giây). Hãy dùng 'Kiểm tra kết nối API' "
+            "trong thanh bên và kiểm tra Base URL/gateway."
+        ) from exc
+    except requests.Timeout as exc:
+        raise RuntimeError(
+            "Nhà cung cấp AI phản hồi quá thời gian chờ (150 giây). "
+            "Đây có thể là do model xử lý lâu hoặc gateway quá tải. "
+            "Hãy thử model phản hồi nhanh hơn hoặc thử lại sau."
+        ) from exc
+    except requests.ConnectionError as exc:
+        raise RuntimeError(
+            "Kết nối tới nhà cung cấp AI bị lỗi hoặc bị ngắt. "
+            "Hãy dùng 'Kiểm tra kết nối API' trong thanh bên; "
+            "nếu vẫn lỗi, kiểm tra Base URL và khả năng truy cập gateway "
+            "từ máy chủ đang chạy ứng dụng."
+        ) from exc
     except requests.RequestException as exc:
-        raise RuntimeError("Không kết nối được nhà cung cấp AI. Hãy kiểm tra Base URL và mạng.") from exc
+        raise RuntimeError(
+            "Không gửi/nhận được yêu cầu AI. Hãy dùng 'Kiểm tra kết nối API' "
+            "trong thanh bên và kiểm tra cấu hình nhà cung cấp."
+        ) from exc
     if not response.ok:
         failure = _error(response, token, provider)
         if provider == "Groq" and isinstance(failure, RateLimitError):

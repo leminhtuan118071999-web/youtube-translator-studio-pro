@@ -2,6 +2,8 @@ import socket
 import unittest
 from unittest.mock import Mock, patch
 
+import requests
+
 from api_clients import (
     PROVIDERS,
     RateLimitError,
@@ -19,6 +21,39 @@ PUBLIC_ADDR = [(socket.AF_INET, socket.SOCK_STREAM, 6, "", ("8.8.8.8", 443))]
 
 
 class ApiClientTests(unittest.TestCase):
+    @patch("api_clients.socket.getaddrinfo", return_value=PUBLIC_ADDR)
+    @patch("api_clients._request")
+    def test_connect_timeout_retries_once_and_returns_answer(self, request, _dns):
+        response = Mock(ok=True)
+        response.json.return_value = {"choices": [{"message": {"content": "OK"}}]}
+        request.side_effect = [requests.ConnectTimeout("private-key"), response]
+        self.assertEqual(generate_text(
+            "OpenAI", "https://api.openai.com/v1", "test-model", "private-key", "Hello",
+        ), "OK")
+        self.assertEqual(request.call_count, 2)
+
+    @patch("api_clients.socket.getaddrinfo", return_value=PUBLIC_ADDR)
+    @patch("api_clients._request")
+    def test_network_failures_are_specific_and_do_not_leak_credentials(self, request, _dns):
+        for failure, expected, attempts in (
+            (requests.ConnectTimeout, "sau 2 lần thử", 2),
+            (requests.ReadTimeout, "150 giây", 1),
+            (requests.exceptions.SSLError, "chứng chỉ SSL", 1),
+            (requests.ConnectionError, "bị lỗi hoặc bị ngắt", 1),
+            (requests.RequestException, "Không gửi/nhận", 1),
+        ):
+            with self.subTest(failure=failure):
+                request.reset_mock()
+                request.side_effect = failure("private-key https://secret.example")
+                with self.assertRaises(RuntimeError) as caught:
+                    generate_text(
+                        "OpenAI", "https://api.openai.com/v1", "test-model", "private-key", "Hello",
+                    )
+                self.assertIn(expected, str(caught.exception))
+                self.assertNotIn("private-key", str(caught.exception))
+                self.assertNotIn("secret.example", str(caught.exception))
+                self.assertEqual(request.call_count, attempts)
+
     def setUp(self):
         # Exercise pacing independently in test_groq_pacing.py. These API
         # parsing tests must not wait for a rolling TPM window.
