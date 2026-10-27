@@ -52,7 +52,7 @@ from durable_queue import (queue_available, worker_healthy, submit_job,
 
 st.set_page_config(page_title="LMT Studio Pro", page_icon="🎬", layout="wide")
 st.title("🎬 LMT Studio Pro")
-st.caption("Phụ đề YouTube • Dịch đa ngôn ngữ • SEO • Thumbnail gốc • Quản lý phiên")
+pass
 
 # Disable mouse-hover explanations throughout the app. Labels, click-based
 # controls (including advanced options), and screen-reader accessible names
@@ -201,8 +201,7 @@ def _refresh_login():
 if CLOUD_ENABLED:
     if not st.session_state.get("cloud_auth"):
         st.info(
-            "🔐 Đăng nhập để giữ lại các phiên, bản dịch và cấu hình API "
-            "cho những lần mở ứng dụng sau."
+            "🔐 Cần đăng nhập để tiếp tục."
         )
         sign_in_tab, create_account_tab = st.tabs(
             ["🔑 Đăng nhập", "➕ Tạo tài khoản"]
@@ -883,10 +882,7 @@ if selected_app == "🎙️ AI33 / OpenSpeaker":
                 else:
                     st.progress(pct, text=f"{name}: {stage}")
     st.subheader("🎙️ App 2 — AI33 / OpenSpeaker")
-    st.info(
-        "AI33 là website độc lập. Nếu website không cho nhúng hoặc đăng nhập "
-        "trong iframe bị chặn, hãy sử dụng nút mở AI33 bên dưới."
-    )
+    pass
     # Do not transfer any translator settings, keys or session data to AI33.
     components.iframe("https://ai33.pro/app", height=920, scrolling=True)
     st.link_button(
@@ -894,11 +890,7 @@ if selected_app == "🎙️ AI33 / OpenSpeaker":
         "https://ai33.pro/app",
         use_container_width=True,
     )
-    st.caption(
-        "Tác vụ hồ sơ nhân vật tiếp tục khi chuyển mục hoặc tải lại trang, "
-        "miễn là máy chủ vẫn hoạt động. "
-        "Tác vụ của AI33 do AI33 quản lý riêng."
-    )
+    pass
     _save_cloud_state()
     _save_browser_api_settings()
     _save_browser_sessions()
@@ -1032,10 +1024,7 @@ with st.sidebar:
 
     st.divider()
     st.markdown("**📚 Danh sách phiên đã chạy**")
-    st.caption(
-        "Nhấp tên phiên để mở · nhấp đúp để đổi tên (Enter để lưu) · chuột phải → Xóa để xóa phiên. "
-        "🟢 Hoàn thành · 🔴 Chưa xong/lỗi · ✅ Đang xem có dấu tích xanh."
-    )
+    pass
     name_message = st.session_state.pop("session_name_message", None)
     if name_message:
         st.warning(name_message)
@@ -1052,7 +1041,7 @@ with st.sidebar:
         reverse=True,
     )
     if not saved_sessions:
-        st.caption("Chưa có phiên nào được bắt đầu. Bấm BẮT ĐẦU TẠO TOÀN BỘ trước khi tạo phiên mới.")
+        pass
     for saved_id, saved_record in saved_sessions:
         with st.container():
             job = st.session_state.background_jobs.get(saved_id)
@@ -1152,10 +1141,7 @@ with st.sidebar:
 
     st.divider()
     with st.expander("📥 Phụ đề YouTube dự phòng", expanded=False):
-        st.caption(
-            "Mặc định thử lấy phụ đề trực tiếp. Nếu YouTube chặn IP Cloud, "
-            "app sẽ tự thử dịch vụ Supadata khi bạn nhập key bên dưới."
-        )
+        pass
         try:
             backup_key_secret = str(st.secrets.get("SUPADATA_API_KEY", "") or "")
         except Exception:
@@ -1167,16 +1153,13 @@ with st.sidebar:
             placeholder="Nhập key nếu YouTube chặn trích xuất",
         )
         transcript_api_key = transcript_api_key_entered.strip() or backup_key_secret.strip()
-        st.markdown("[🔗 Lấy API key phụ đề Supadata](https://supadata.ai/)")
-        st.caption("Dịch vụ phụ đề có giới hạn lượt và có thể tính phí. Không bắt buộc nếu bạn dùng file phụ đề.")
-        st.caption("🔒 API key sẽ tự lưu mã hóa theo tài khoản (Supabase) hoặc trên trình duyệt này nếu không dùng Supabase.")
+        pass
+        pass
+        pass
 
     st.divider()
     with st.expander("🖼️ API tạo ảnh nhân vật", expanded=False):
-        st.caption(
-            "Tự tạo ảnh ngay khi xong hồ sơ nhân vật. Cần OpenAI Images API "
-            "(khác API dịch Groq/Gemini). Có thể phát sinh phí theo số nhân vật."
-        )
+        pass
         image_api_key_entered = st.text_input(
             "🔐 OpenAI Images API key", type="password",
             key="image_api_key_input",
@@ -1187,17 +1170,14 @@ with st.sidebar:
             image_key_secret = ""
         image_api_key = image_api_key_entered.strip() or image_key_secret.strip()
         if not image_api_key:
-            st.caption("Chưa có API ảnh: app vẫn tạo bản dịch, SEO và form video; chưa thể tạo PNG.")
-        st.caption(f"Model ảnh mặc định: {IMAGE_MODEL}. Tối đa 8 nhân vật/phiên.")
-        st.caption(
-            "🔎 Lỗi HTTP 401 nghĩa là API tạo ảnh không xác thực được key. "
-            "Key ảnh phải là OpenAI API key riêng, không dùng key dịch văn bản."
-        )
-        st.markdown("[🔑 Tạo/kiểm tra OpenAI API key](https://platform.openai.com/api-keys)")
+            pass
+        pass
+        pass
+        pass
 
     st.divider()
     with st.expander("🔑 Cấu hình API đa nền tảng", expanded=False):
-        st.caption("Groq • Gemini • OpenAI • Claude • Claude Gateway • API bên thứ ba • OpenRouter • DeepSeek • Together AI")
+        pass
         pending_provider = st.session_state.pop("_pending_api_provider", None)
         if pending_provider in PROVIDERS:
             st.session_state["api_provider"] = pending_provider
@@ -1253,35 +1233,17 @@ with st.sidebar:
 
         # Keep original third-party protocols and provider-specific actions
         # without crowding the three fundamental API inputs above.
-        with st.popover("⚙️ Hướng dẫn và tùy chọn nâng cao", use_container_width=True):
+        with st.popover("⚙️ Tùy chọn nâng cao", use_container_width=True):
             if provider == "Groq":
-                st.caption(
-                    "🟡 GroqCloud (khác Grok của xAI). Gói miễn phí có giới hạn "
-                    "token/phút và số yêu cầu/ngày. Model gợi ý: "
-                    "openai/gpt-oss-20b; không bảo đảm chạy video dài mà không chờ."
-                )
-                st.markdown(
-                    "[Xem hạn mức Groq](https://console.groq.com/settings/limits)"
-                )
+                pass
+                pass
             elif provider == "Google Gemini":
-                st.info(
-                    "💠 Gemini dùng API Google chính thức (generateContent), "
-                    "xác thực x-goog-api-key. Model Flash-Lite tiết kiệm, "
-                    "thích hợp thử nghiệm gói miễn phí. "
-                    "Gói miễn phí vẫn giới hạn lượt gọi."
-                )
-                st.markdown(
-                    "[Lấy Gemini API key tại Google AI Studio]"
-                    "(https://aistudio.google.com/apikey) "
-                    "· [Kiểm tra hạn mức](https://aistudio.google.com/usage)"
-                )
+                pass
+                pass
             api_format = None
             api_auth_mode = None
             if provider == "API bên thứ ba (tùy chỉnh)":
-                st.info(
-                    "🌐 Tự nhập API Key, Base URL và Model ID của dịch vụ bên thứ ba. "
-                    "Chọn đúng chuẩn API và kiểu xác thực mà nhà cung cấp hướng dẫn."
-                )
+                pass
                 format_label = st.selectbox(
                     "📡 Chuẩn API",
                     ["OpenAI Chat Completions", "Anthropic Messages"],
@@ -1299,39 +1261,18 @@ with st.sidebar:
                 api_auth_mode = {
                     "Bearer Token": "bearer", "x-api-key": "api_key",
                 }[auth_label]
-                st.caption(
-                    "Ví dụ OpenAI-compatible: https://provider.example/v1. "
-                    "Với Anthropic Messages, có thể dùng domain gốc "
-                    "(app tự thêm /v1) hoặc Base URL đã có đường dẫn API. "
-                    "Không thêm /chat/completions hay /messages vào Base URL."
-                )
+                pass
                 st.warning(
                     "Chỉ kết nối dịch vụ HTTPS đáng tin cậy: API key và nội dung "
                     "video được gửi tới máy chủ bên thứ ba. "
                     "Quét model có thể không được hỗ trợ; có thể nhập Model ID thủ công."
                 )
             if provider == "Claude Gateway (AUTH_TOKEN)":
-                st.info(
-                    "🔑 Dành cho dịch vụ gateway dùng ANTHROPIC_BASE_URL và "
-                    "ANTHROPIC_AUTH_TOKEN trong Claude Code. Đây không phải API "
-                    "Anthropic chính thức. Chỉ sử dụng máy chủ bạn tin tưởng vì "
-                    "nội dung và token sẽ được gửi tới địa chỉ đó."
-                )
-                st.caption(
-                    "Base URL: dùng ANTHROPIC_BASE_URL trong cấu hình Claude Code; "
-                    "app sẽ thêm /v1/messages khi bạn nhập domain gốc. "
-                    "Token: dùng token MỚI thay cho ANTHROPIC_AUTH_TOKEN đã lộ. "
-                    "Model ID phải là model gateway thực sự hỗ trợ."
-                )
+                pass
+                pass
             if provider == "Claude (Anthropic)":
-                st.info(
-                    "🟣 Claude API chính thức: nhập API key từ Anthropic Console. "
-                    "Ứng dụng tự dùng Messages API, không cần Base URL tùy chỉnh."
-                )
-                st.markdown(
-                    "[🔗 Lấy Claude API key tại Anthropic Console]"
-                    "(https://platform.claude.com/settings/keys)"
-                )
+                pass
+                pass
             # A Claude Code gateway token uses Authorization: Bearer. The
             # official Claude provider uses an Anthropic API-key header.
             # Warn before sending credentials to the wrong kind of endpoint.
@@ -1358,12 +1299,7 @@ with st.sidebar:
                     st.session_state["_pending_api_provider"] = gateway
                     _persist_and_rerun()
             if provider == "Claude Gateway (AUTH_TOKEN)":
-                st.caption(
-                    "ℹ️ Nhiều gateway chỉ hỗ trợ /v1/messages, không hỗ trợ "
-                    "/v1/models. Quét model thất bại không đồng nghĩa với "
-                    "không thể dịch. Nhập Model ID đúng rồi nhấn "
-                    "'Kiểm tra kết nối API'."
-                )
+                pass
 
             if provider in ("Groq", "Google Gemini"):
                 if st.button(
@@ -1405,13 +1341,10 @@ with st.sidebar:
             st.caption("✅ Đã nhập API key" + (" (Secrets)" if not entered_key else ""))
         else:
             st.caption("⚠️ Chưa nhập API key.")
-        st.caption(
-            "Các API tương thích OpenAI dùng endpoint /chat/completions; "
-            "Claude dùng /messages. Chỉ nhập Base URL HTTPS công khai, đáng tin cậy."
-        )
+        pass
         test_api = st.button("🧪 Kiểm tra kết nối API", use_container_width=True)
-        st.caption("API key không được ghi vào GitHub hoặc dữ liệu phiên. Dịch vụ API có thể tính phí.")
-        st.caption("💾 Cấu hình từng nhà cung cấp được tự lưu và khôi phục khi mở lại app; có thể thay đổi bất cứ lúc nào.")
+        pass
+        pass
 
 
 def ai(prompt):
@@ -1580,22 +1513,16 @@ def output(title, text, *, allow_download=False):
 flash = st.session_state.pop("_session_flash", None)
 if flash:
     st.success(flash)
-st.info(f"📂 **Phiên đang mở:** {session['name']} — mọi kết quả chỉ thuộc phiên này.")
+st.info(f"📂 **Phiên đang mở:** {session['name']}")
 if DURABLE_QUEUE_ENABLED:
-    st.caption(
-        "🖥️ Hàng đợi bền vững: worker độc lập xử lý và tự lưu lên Supabase "
-        "ngay cả khi Streamlit Cloud ngủ."
-    )
+    pass
 elif CLOUD_ENABLED:
-    st.caption(
-        "ℹ️ Chưa bật worker độc lập: tác vụ Streamlit có thể dừng nếu "
-        "chính máy chủ bị tạm ngưng hoặc khởi động lại."
-    )
+    pass
 if session.get("job_state") == "running":
     st.info(
         f"⏳ Phiên này đang xử lý: {session.get('job_stage', 'Đang chạy')} "
         f"({session.get('job_percent', 0)}%). "
-        "Bạn có thể tạo phiên mới; tác vụ hiện tại không bị dừng."
+
     )
 elif session.get("job_state") in ("failed", "interrupted"):
     st.error(f"⚠️ Phiên này chưa hoàn tất: {session.get('job_error', 'Không rõ lỗi')}")
@@ -1647,7 +1574,7 @@ if st.button("🚀 BẮT ĐẦU TẠO TOÀN BỘ", type="primary",
         sid in st.session_state.background_jobs
         and not st.session_state.background_jobs[sid]["future"].done()
     ):
-        st.info("Phiên này đang chạy nền. Bạn có thể bấm Tạo phiên mới ngay.")
+        st.info("Phiên này đang chạy nền.")
     elif DURABLE_QUEUE_ENABLED and session.get("job_state") == "running" and session.get("job_queue_id"):
         st.info("Phiên này đã ở hàng đợi bền vững; đang chờ hoặc đang được worker xử lý.")
     elif not DURABLE_QUEUE_ENABLED and sum(
@@ -2207,8 +2134,7 @@ with tab_characters:
 
     else:
         st.info(
-            "Chưa có hồ sơ chi tiết. Nhấn 'Tạo/cập nhật hồ sơ chi tiết "
-            "từng nhân vật' để trích xuất từ bản dịch đích."
+            "Chưa có hồ sơ chi tiết."
         )
 
     pass
@@ -2284,15 +2210,12 @@ with tab_characters:
     elif not image_api_key:
         st.warning("Hãy nhập OpenAI Images API key trong thanh bên để tự tạo ảnh ở phiên mới.")
     else:
-        st.info("Phiên này chưa có ảnh; hãy chạy BẮT ĐẦU TẠO TOÀN BỘ.")
+        st.info("Phiên này chưa có ảnh.")
     if session.get("character_images_error"):
         st.warning(str(session["character_images_error"]))
         if "401" in str(session["character_images_error"]):
             st.info(
-                "Ảnh chưa tạo được vì OpenAI API key bị từ chối. "
-                "Mở mục 🖼️ API tạo ảnh nhân vật ở thanh bên, kiểm tra "
-                "hoặc thay key, rồi bấm 🔄 Chạy lại riêng — Ảnh nhân vật. "
-                "Không cần chạy lại BẮT ĐẦU TẠO TOÀN BỘ."
+                "API tạo ảnh từ chối xác thực (401). Cần kiểm tra hoặc thay API key."
             )
 
 pass
@@ -2327,5 +2250,5 @@ if CLOUD_ENABLED:
             + st.session_state["_cloud_save_error"]
         )
     else:
-        st.caption("☁️ Phiên, bản dịch và cấu hình API được đồng bộ cho lần đăng nhập tiếp theo.")
+        pass
 

@@ -92,11 +92,7 @@ def render_video_forms(session, sid, language, *, ai, api_key,
     """Independent voice-first prompt generation after translation."""
     language = saved_translation_language(session) or language
     st.subheader(f"🎬 Form video 8 giây — English · Lời đọc: {language}")
-    st.caption(
-        "Mỗi form là PROMPT tạo clip 8 giây, chưa xuất MP4. "
-        "Lời đọc lấy nguyên văn từ BẢN DỊCH của đúng phiên và cùng ngôn ngữ đích. "
-        "Giữa các clip dùng hiệu ứng chuyển cảnh 1 giây trong đoạn cuối của mỗi clip 8 giây."
-    )
+    pass
     translated = session.get("translated", "").strip()
     if not translated:
         st.warning("Hãy tạo bản dịch ngôn ngữ đích trước khi viết form video.")
@@ -108,8 +104,7 @@ def render_video_forms(session, sid, language, *, ai, api_key,
          "Phim tài liệu thiên nhiên"),
         key=f"video_style_{sid}",
     )
-    st.caption("Bước 1: tải file giọng đọc của chính bản dịch này; "
-               "Bước 2: nhấn Tạo form video 8 giây. Không tạo form tự động khi nhấn BẮT ĐẦU TẠO TOÀN BỘ.")
+    pass
     upload = st.file_uploader(
         "🎧 Tải file giọng đọc cuối cùng (bắt buộc)",
         type=["mp3", "wav", "m4a", "ogg"],
@@ -245,11 +240,7 @@ def render_video_forms(session, sid, language, *, ai, api_key,
             st.progress(min(100, max(0, pct)), text=(
                 f"⏳ Máy chủ đang viết form: {session.get('video_job_stage', 'Đang xử lý')}"
             ))
-            st.caption(
-                "Bạn có thể để máy tính ngủ hoặc đóng trình duyệt. "
-                "Tác vụ vẫn chạy khi máy chủ còn hoạt động; nếu máy chủ "
-                "khởi động lại thì cần tiếp tục từ kết quả đã lưu."
-            )
+            pass
     elif session.get("video_job_state") == "failed":
         st.warning(
             "Tác vụ tạo form bị gián đoạn: "
@@ -265,10 +256,7 @@ def render_video_forms(session, sid, language, *, ai, api_key,
         return
     if plan.get("alignment_warning"):
         st.warning(plan["alignment_warning"])
-    st.caption(
-        "Căn ƯỚC TÍNH theo thời lượng file và độ dài bản dịch; "
-        "không dùng nhận dạng lời nói hay timestamp từng từ."
-    )
+    pass
     if plan.get("speech_stats"):
         stats = plan["speech_stats"]
         st.caption(
@@ -287,22 +275,18 @@ def render_video_forms(session, sid, language, *, ai, api_key,
     if plan.get("end_padding_seconds", 0) > 0:
         st.caption(
             f"Dự kiến dư {plan['end_padding_seconds']:.1f} giây ở cuối: "
-            "cần giữ hình hoặc điều chỉnh nhịp khi ghép audio thật."
+            "phần hình dài hơn giọng đọc."
         )
     if done < len(scenes):
         st.info(
             f"Còn {len(scenes) - done} form chưa hoàn thành. "
-            "Nhấn '🎬 Tạo form 8 giây theo giọng đọc' ở trên "
-            "để hệ thống tự tạo tiếp toàn bộ từ vị trí chưa xong."
+
         )
 
-    st.caption("Phụ đề lấy từ lời đọc của từng form; thời điểm theo giọng đọc chỉ là ước tính.")
+    pass
     continuous_text = continuous_combined_forms_text(plan)
     st.markdown("**📜 Tất cả form video — liền mạch**")
-    st.caption(
-        "Mỗi ô tối đa 99 form; mỗi ô mở/thu gọn và Copy toàn bộ độc lập. "
-        "Các form cách nhau một dòng trống, giữ nguyên thứ tự và nội dung."
-    )
+    pass
     groups = grouped_video_forms(plan)
     if not groups:
         st.info("Chưa có form hoàn thành.")
