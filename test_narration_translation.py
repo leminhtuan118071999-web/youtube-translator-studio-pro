@@ -12,6 +12,10 @@ class NarrationTests(unittest.TestCase):
             if prompt.startswith('NARRATION_TRANSLATION'):
                 core=json.loads(prompt.split('SOURCE DATA:\n')[1])['core'];cores.append(core)
                 return core
+            if prompt.startswith('Summarize') or prompt.startswith('Condense'):
+                return 'Nora pays to save Maisie.'
+            if prompt.startswith('TARGET_METADATA'):
+                return '{"title":"Rescue","description":"Nora saves Maisie.","tags":["rescue"]}'
             self.assertTrue(prompt.startswith('FAITHFULNESS_REVIEW'))
             return '{"ok":true,"issues":[],"source_conflicts":[]}'
         cfg=dict(source=original,url='',language='English',provider='OpenAI',base_url='',model='test',api_key='key')
@@ -20,8 +24,27 @@ class NarrationTests(unittest.TestCase):
         self.assertTrue(result['ok'],result['error'])
         self.assertEqual(''.join(cores),original.strip())
         self.assertGreater(len(result['fields']['translated']),9000)
-        self.assertNotIn('new_title',result['fields'])
+        self.assertEqual(result['fields']['new_title'],'Rescue')
         self.assertNotIn('character_profile',result['fields'])
+
+    def test_metadata_receives_originals_and_target_language(self):
+        prompts=[]
+        def provider(p,b,m,k,prompt):
+            prompts.append(prompt)
+            if prompt.startswith('NARRATION_TRANSLATION'): return 'Nora uratowała Maisie.'
+            if prompt.startswith('FAITHFULNESS_REVIEW'): return '{"ok":true,"issues":[],"source_conflicts":[]}'
+            self.assertTrue(prompt.startswith('TARGET_METADATA'))
+            self.assertIn('Polish',prompt)
+            data=json.loads(prompt.split('SOURCE DATA:\n')[1])
+            self.assertEqual(data['original_title'],'Nora saves Maisie')
+            self.assertEqual(data['original_description'],'A rescue story')
+            return '{"title":"Nora ratuje Maisie","description":"Historia ratunku","tags":["ratunek","rodzina"]}'
+        cfg=dict(source='Nora saved Maisie.',title='Nora saves Maisie',description='A rescue story',
+                 url='',language='Polish',provider='OpenAI',base_url='',model='test',api_key='key')
+        with patch('background_jobs.generate_text',side_effect=provider):
+            result=run_full_job(cfg,JobProgress())
+        self.assertTrue(result['ok'],result['error'])
+        self.assertEqual(result['fields']['seo_tags'],'ratunek, rodzina')
 
     def test_minimal_correction_receives_candidate_original_and_error(self):
         drafts=[]

@@ -62,5 +62,5 @@ def translate_narration(source, language, call, progress):
     progress.publish('optimization_review_json',json.dumps(dict(identity,output_sha256=source_hash(result),
                       output_characters=len(result),reviewed_parts=len(parts)),ensure_ascii=False))
     progress.publish('optimization_work_json','')
-    progress.update(100,'✅ Đã dịch đầy đủ và kiểm tra văn bản giọng đọc')
+    progress.update(95,'✅ Đã dịch đầy đủ và kiểm tra văn bản giọng đọc')
     return result
