@@ -4,19 +4,18 @@ import json
 import re
 
 MAX_OPTIMIZED_SCRIPT_CHARS = 9999
-OPTIMIZATION_VERSION = 3
-MAX_ATTEMPTS = 3
+MAX_TARGET_SCRIPT_CHARS = 8999
+OPTIMIZATION_VERSION = 4
+COMPATIBLE_OPTIMIZATION_VERSIONS = (3, 4)
+MAX_ATTEMPTS = 2
 
 FACT_RULES = (
-    "Preserve WHO did WHAT to WHOM, who speaks and who owns each memory. "
-    "Use explicit character names instead of ambiguous pronouns, especially at "
-    "scene changes, dialogue and violent actions. Do not swap attacker and protector. "
-    "Keep identity, kinship, motives, chronology, causality, locations, negation, "
-    "amounts, units, dates, times and object counts attached to their original events. "
-    "Never merge different financial amounts or actions into a single transaction. "
-    "Do not rename characters or merge similar names without explicit source evidence. "
-    "Do not repair contradictions in the source by inventing explanations or changing "
-    "events. Keep unresolved source ambiguity neutral or explicit. "
+    "Preserve actors, actions, recipients, speakers, memories, kinship, motives, "
+    "chronology, causality, locations, negation and exact numeric values/units. "
+    "Name ambiguous subjects explicitly; never swap attacker/protector. Keep "
+    "separate transactions and object counts distinct. Preserve names; merge "
+    "aliases only with source evidence. Do not invent explanations for source "
+    "contradictions; retain uncertainty neutrally. "
 )
 
 
@@ -48,8 +47,10 @@ def source_windows(source, limit=4000, context_size=800):
     while start < len(source):
         end = min(len(source), start + limit)
         if end < len(source):
-            boundary = max(source.rfind("\n", start + limit // 2, end),
-                           source.rfind(". ", start + limit // 2, end))
+            boundary = max(source.rfind(mark, start + limit // 2, end)
+                           for mark in ("\n", ". ", "? ", "! ", "。", "！", "？"))
+            if boundary <= start:
+                boundary = source.rfind(" ", start + limit // 2, end)
             if boundary > start:
                 end = boundary + 1
         result.append({"core": source[start:end],
@@ -57,6 +58,37 @@ def source_windows(source, limit=4000, context_size=800):
                        "after": source[end:end + context_size]})
         start = end
     return result
+
+
+def _apply_source_edits(part, edits):
+    intervals = []
+    evidence_source = _normalize(part["before"] + part["core"] + part["after"])
+    for edit in edits:
+        if not isinstance(edit, dict):
+            raise ValueError("Chi tiết sửa lỗi nguồn không hợp lệ.")
+        before, after = edit.get("before"), edit.get("after")
+        evidence = edit.get("evidence")
+        if (not isinstance(before, str) or not before.strip()
+                or part["core"].count(before) != 1
+                or not isinstance(after, str) or not after.strip()
+                or before == after or len(after) > len(before) + 240
+                or edit.get("kind") not in ("language", "reference", "continuity")
+                or edit.get("confidence") != "high"
+                or not isinstance(edit.get("reason"), str) or not edit["reason"].strip()
+                or not isinstance(evidence, list)
+                or any(not isinstance(q, str) or not q.strip()
+                       or _normalize(q) not in evidence_source for q in evidence)
+                or edit["kind"] != "language" and not evidence):
+            raise ValueError("Sửa đổi không có vị trí duy nhất hoặc thiếu bằng chứng trong bản gốc.")
+        pos = part["core"].index(before)
+        intervals.append((pos, pos + len(before), edit))
+    intervals.sort(key=lambda row: row[0])
+    if any(left[1] > right[0] for left, right in zip(intervals, intervals[1:])):
+        raise ValueError("Các sửa đổi chồng lấn nhau; cần phân tích lại.")
+    repaired = part["core"]
+    for start, end, edit in reversed(intervals):
+        repaired = repaired[:start] + edit["after"] + repaired[end:]
+    return repaired
 
 
 def repair_source_script(source, call, progress):
@@ -106,33 +138,7 @@ def repair_source_script(source, call, progress):
                 if (not isinstance(edits, list) or not isinstance(notes, list)
                         or any(not isinstance(n, str) for n in notes)):
                     raise ValueError("AI trả danh sách sửa lỗi nguồn không hợp lệ.")
-                intervals = []
-                evidence_source = _normalize(part["before"] + part["core"] + part["after"])
-                for edit in edits:
-                    if not isinstance(edit, dict):
-                        raise ValueError("Chi tiết sửa lỗi nguồn không hợp lệ.")
-                    before, after = edit.get("before"), edit.get("after")
-                    evidence = edit.get("evidence")
-                    if (not isinstance(before, str) or not before.strip()
-                            or part["core"].count(before) != 1
-                            or not isinstance(after, str) or not after.strip()
-                            or before == after or len(after) > len(before) + 240
-                            or edit.get("kind") not in ("language", "reference", "continuity")
-                            or edit.get("confidence") != "high"
-                            or not isinstance(edit.get("reason"), str) or not edit["reason"].strip()
-                            or not isinstance(evidence, list)
-                            or any(not isinstance(q, str) or not q.strip()
-                                   or _normalize(q) not in evidence_source for q in evidence)
-                            or edit["kind"] != "language" and not evidence):
-                        raise ValueError("Sửa đổi không có vị trí duy nhất hoặc thiếu bằng chứng trong bản gốc.")
-                    pos = part["core"].index(before)
-                    intervals.append((pos, pos + len(before), edit))
-                intervals.sort(key=lambda row: row[0])
-                if any(left[1] > right[0] for left, right in zip(intervals, intervals[1:])):
-                    raise ValueError("Các sửa đổi chồng lấn nhau; cần phân tích lại.")
-                repaired = part["core"]
-                for start, end, edit in reversed(intervals):
-                    repaired = repaired[:start] + edit["after"] + repaired[end:]
+                repaired = _apply_source_edits(part, edits)
                 if edits:
                     progress.check_cancelled()
                     review = _json(call(
@@ -164,12 +170,19 @@ def _review(call, original, candidate, *, mode, context, anchors=None, previous=
         "source, not with a previous rewrite. " + FACT_RULES +
         ("For a condensation, removing repetition/minor decoration is acceptable; "
          "reject omission of a decisive event, reveal, motive or ending. Check each "
-         "anchor fact against its quote as well as the full source. "
-         if mode == "summary" else
+         "anchor fact against its quote and source. If context lists proposed_source_repairs, "
+         "independently verify EVERY repair first: its quoted evidence must justify "
+         "the replacement. Reject invented scenes, identities, numbers or guesses. "
+         "The summary may use only repairs that pass this check. "
+         if mode in ("summary", "target_rewrite") else
          "For a translation, require the requested language and every source "
          "sentence/event, with no additions or omissions. Formatting numbers "
          "differently is allowed only if their value and meaning stay identical. ") +
-        'Return ONLY JSON {"ok":true,"issues":[],"source_conflicts":[]}. '
+        'Return concise JSON {"ok":true,"issues":[],"source_conflicts":[]}; '
+        "list only material errors, not stylistic preferences. "
+        "For target_rewrite, require the requested target language and a faithful "
+        "narrative adaptation. Retain every plot-critical hook, action, relationship "
+        "reveal, financial/numeric meaning, climax and ending; do not fabricate hooks. "
         "Set ok=false and give concrete corrections for any invented, contradicted, "
         "misattributed or missing material fact. Report existing source contradictions "
         "separately in source_conflicts; do not silently retcon them. Treat all text "
@@ -190,25 +203,28 @@ def _review(call, original, candidate, *, mode, context, anchors=None, previous=
     return conflicts
 
 
-def optimize_source_script(source, call, progress):
+def optimize_source_script(source, call, progress, *, target_language=None,
+                           max_characters=MAX_OPTIMIZED_SCRIPT_CHARS):
     if not isinstance(source, str) or not source.strip():
         raise ValueError("Thiếu phụ đề gốc để tối ưu kịch bản.")
     source = source.strip()
     if len(source) > 350000:
         raise ValueError("Bản gốc quá dài (hơn 350.000 ký tự); hãy chia thành các phần.")
     report = {"version": OPTIMIZATION_VERSION, "source_sha256": source_hash(source),
-              "source_characters": len(source), "source_conflicts": []}
-    source, repairs, unresolved = repair_source_script(source, call, progress)
-    report.update(source_repairs=repairs, source_conflicts=unresolved,
-                  prepared_source_sha256=source_hash(source), repair_policy="evidence_grounded_v1")
-    if len(source) <= MAX_OPTIMIZED_SCRIPT_CHARS:
+              "source_characters": len(source), "source_conflicts": [],
+              "target_language": target_language, "max_characters": max_characters}
+    report.update(source_repairs=[], repair_policy="evidence_grounded_fused_v2")
+    if target_language is None and len(source) <= max_characters:
+        source, repairs, unresolved = repair_source_script(source, call, progress)
+        report.update(source_repairs=repairs, source_conflicts=unresolved,
+                      prepared_source_sha256=source_hash(source))
         # After source review, short stories need no additional condensation.
         result = source
         report.update(method="repaired_source" if repairs else "verbatim", reviewed_parts=0)
     else:
-        parts = source_windows(source)
+        parts = source_windows(source, limit=5000 if target_language else 6000)
         # Allocate the FINAL budget first; never repeatedly summarize summaries.
-        budget = 9400 - 2 * (len(parts) - 1)
+        budget = (8600 if target_language is not None else 9400) - 2 * (len(parts) - 1)
         weights = [len(p["core"]) for p in parts]
         # Reserve room for a brief final reveal/epilogue: proportional-only
         # budgets can give a short ending just a handful of characters.
@@ -218,26 +234,86 @@ def optimize_source_script(source, call, progress):
         targets = [floor + remainder * w // sum(weights)
                    for floor, w in zip(floors, weights)]
         summaries, known_names = [], []
+        try:
+            work = json.loads(progress.partial_result().get("optimization_work_json") or "{}")
+        except (ValueError, TypeError):
+            work = {}
+        if (isinstance(work, dict) and work.get("version") == OPTIMIZATION_VERSION
+                and work.get("source_sha256") == report["source_sha256"]
+                and work.get("target_language") == target_language
+                and work.get("max_characters", MAX_OPTIMIZED_SCRIPT_CHARS) == max_characters
+                and work.get("targets") == targets
+                and isinstance(work.get("summaries"), list)
+                and len(work["summaries"]) <= len(parts)
+                and all(isinstance(s, str) and 0 < len(s) <= targets[i]
+                        for i, s in enumerate(work["summaries"]))
+                and isinstance(work.get("known_names"), list)
+                and all(isinstance(n, str) and n.strip() and n in _normalize(source) for n in work["known_names"])
+                and isinstance(work.get("source_repairs"), list)
+                and all(isinstance(edit, dict) and type(edit.get("part")) is int
+                        and 1 <= edit["part"] <= len(work["summaries"])
+                        for edit in work["source_repairs"])
+                and isinstance(work.get("source_conflicts"), list)
+                and all(isinstance(note, str) for note in work["source_conflicts"])):
+            # Only complete, independently checked chunks are checkpointed.
+            # Revalidate edit locations before trusting a restored checkpoint.
+            try:
+                for i, part in enumerate(parts[:len(work["summaries"])], 1):
+                    edits = [edit for edit in work["source_repairs"]
+                             if isinstance(edit, dict) and edit.get("part") == i]
+                    _apply_source_edits(part, edits)
+                summaries = list(work["summaries"])
+                known_names = list(work["known_names"])
+                report["source_repairs"] = list(work["source_repairs"])
+                report["source_conflicts"] = list(work["source_conflicts"])
+            except ValueError:
+                pass
         for index, (part, target) in enumerate(zip(parts, targets), 1):
+            if index <= len(summaries):
+                continue
             errors = ""
             for attempt in range(MAX_ATTEMPTS):
                 progress.check_cancelled()
-                progress.update(20 + int(22 * (index - 1) / len(parts)),
-                                f"✍️ Tóm tắt và đối soát phần {index}/{len(parts)} (lần {attempt + 1})")
+                progress.update(11 + int((54 if target_language else 31) * (index - 1) / len(parts)),
+                                f"✍️ Viết lại và đối soát phần {index}/{len(parts)} (lần {attempt + 1})")
                 try:
                     context = {"before": part["before"], "after": part["after"],
-                               "canonical_names_already_seen": known_names}
+                               "canonical_names_already_seen": known_names,
+                               "target_language": target_language,
+                               "previous_target_paragraph": summaries[-1][-600:] if target_language and summaries else ""}
+                    writing_instruction = (
+                        f"TARGET_STORY_REWRITE: Write a NEW fluent narrative directly "
+                        f"in {target_language}, based on the ORIGINAL source. Do NOT "
+                        "produce an intermediate source-language summary. Preserve "
+                        "the strong original hooks, stakes, turning points, reveals, "
+                        "climax and ending. Keep ALL plot-critical actions, character "
+                        "relationships and the exact meaning of every important number. "
+                        "No fabricated drama, hooks or facts. Use natural native "
+                        "narration/dialogue and clear transitions. If the story is short, "
+                        "translate all material content; do not pad to reach the budget. "
+                        if target_language else "Giữ NGÔN NGỮ GỐC; không dịch ở bước này. "
+                    )
                     draft = _json(call(
                         f"SOURCE_GROUNDED_SUMMARY. Viết lại PHẦN {index}/{len(parts)} "
                         f"thành kịch bản tối đa {target} ký tự (tính cả khoảng trắng). "
-                        "Giữ NGÔN NGỮ GỐC; không dịch ở bước này. " + FACT_RULES +
+                        + writing_instruction + FACT_RULES +
                         "Summarize ONLY the core excerpt; neighboring text is context "
                         "to resolve subjects, dialogue and identity, not extra events "
                         "to duplicate. Keep the decisive events and ending. Remove "
                         "repetition, promotional text and expendable decoration first. "
                         "Use names exactly as written in source; preserve Latin-script "
                         "names across mixed-language passages. Keep narrative prose, "
-                        "not bullet points or commentary. Return ONLY JSON with "
+                        "not bullet points or commentary. In this SAME pass, identify "
+                        "minimal grammar/reference/continuity repairs. Never guess "
+                        "missing facts or invent bridging events. Return an edits array "
+                        "with {before,after,kind,reason,confidence,evidence}, where before "
+                        "is a unique verbatim core fragment, kind is language/reference/continuity, "
+                        "confidence is high, and evidence quotes the original supporting "
+                        "each reference/continuity change. No overlapping edits. "
+                        "Return unresolved as Vietnamese notes for issues without proof. "
+                        "Apply only these evidenced repairs when composing the summary. "
+                        "Use empty edits/unresolved arrays when none are needed. "
+                        "Return ONLY JSON with edits, unresolved, "
                         '"summary", "entities" (exact names), and "anchors": '
                         '[{"fact":"explicit actor/action/recipient or key fact",'
                         '"quote":"short verbatim source evidence"}]. '
@@ -245,7 +321,7 @@ def optimize_source_script(source, call, progress):
                         "numbers, kinship, speakers, attacker/protector roles and the "
                         "last event. Quotes must actually occur in the provided source. "
                         "Do not invent evidence. Previous failed checks: " + errors +
-                        "\nSOURCE DATA:\n" + json.dumps({**part, "context": context}, ensure_ascii=False)
+                        "\nSOURCE DATA:\n" + json.dumps({"core": part["core"], "context": context}, ensure_ascii=False)
                     ))
                     summary = draft.get("summary")
                     if not isinstance(summary, str) or not summary.strip() or len(summary.strip()) > target:
@@ -260,29 +336,64 @@ def optimize_source_script(source, call, progress):
                             or not isinstance(names, list)
                             or any(not isinstance(n, str) or not n.strip() or n not in evidence_text for n in names)):
                         raise ValueError("Tên hoặc bằng chứng đối chiếu không khớp nguyên văn bản gốc.")
-                    conflicts = _review(call, part["core"], summary.strip(), mode="summary",
-                                        context=context, anchors=anchors,
+                    edits = draft.get("edits", [])
+                    unresolved = draft.get("unresolved", [])
+                    if (not isinstance(edits, list) or not isinstance(unresolved, list)
+                            or any(not isinstance(note, str) for note in unresolved)):
+                        raise ValueError("Danh sách sửa lỗi/điểm chưa rõ không hợp lệ.")
+                    _apply_source_edits(part, edits)
+                    review_context = dict(context, proposed_source_repairs=edits)
+                    conflicts = _review(call, part["core"], summary.strip(),
+                                        mode="target_rewrite" if target_language else "summary",
+                                        context=review_context, anchors=anchors,
                                         previous=summaries[-1][-600:] if summaries else "")
+                    report["source_repairs"].extend({"part": index, **edit} for edit in edits)
+                    report["source_conflicts"].extend(note for note in unresolved
+                                                      if note not in report["source_conflicts"])
                     summaries.append(summary.strip())
                     known_names.extend(n for n in names if n not in known_names)
                     report["source_conflicts"].extend(x for x in conflicts if x not in report["source_conflicts"])
+                    progress.publish("optimization_work_json", json.dumps({
+                        "version": OPTIMIZATION_VERSION,
+                        "source_sha256": report["source_sha256"], "targets": targets,
+                        "target_language": target_language, "max_characters": max_characters,
+                        "summaries": summaries, "known_names": known_names,
+                        "source_repairs": report["source_repairs"],
+                        "source_conflicts": report["source_conflicts"],
+                    }, ensure_ascii=False))
                     break
                 except ValueError as exc:
                     errors = str(exc)
             else:
                 raise ValueError(
-                    f"Chưa thể tóm tắt phần {index}/{len(parts)} dưới 10.000 ký tự "
-                    "mà vượt qua đối soát dữ kiện; chưa dùng bản này để dịch. " + errors[:300]
+                    f"Phần {index}/{len(parts)} chưa đạt đối soát dữ kiện và giới hạn "
+                    f"{max_characters + 1:,} ký tự; không dùng bản chưa đạt. " + errors[:300]
                 )
         result = "\n\n".join(summaries)
-        report.update(method="source_grounded_review", reviewed_parts=len(parts))
-    if not result or len(result) > MAX_OPTIMIZED_SCRIPT_CHARS:
-        raise ValueError("Kịch bản chưa đạt giới hạn dưới 10.000 ký tự; không cắt bỏ phần kết.")
+        prepared_parts = [_apply_source_edits(part, [edit for edit in report["source_repairs"]
+                                                   if edit.get("part") == index])
+                          for index, part in enumerate(parts, 1)]
+        report.update(method="direct_target_rewrite" if target_language else "source_grounded_review", reviewed_parts=len(parts),
+                      prepared_source_sha256=source_hash("".join(prepared_parts)))
+    if not result or len(result) > max_characters:
+        raise ValueError(f"Nội dung chưa đạt giới hạn dưới {max_characters + 1:,} ký tự; không cắt bỏ phần kết.")
     report["output_characters"] = len(result)
     report["output_sha256"] = source_hash(result)
     progress.publish("optimization_review_json", json.dumps(report, ensure_ascii=False))
-    progress.update(43, "✅ Kịch bản dưới 10.000 ký tự; đã giữ nguyên hoặc đối soát với bản gốc")
+    progress.publish("optimization_work_json", "")
+    progress.update(67 if target_language else 43,
+                    f"✅ Đã hoàn thành và đối soát; {len(result):,}/{max_characters:,} ký tự")
     return result
+
+
+def rewrite_target_script(source, target_language, call, progress):
+    """One source-to-target rewrite pipeline, capped strictly below 9,000 chars."""
+    if not isinstance(target_language, str) or not target_language.strip():
+        raise ValueError("Chưa chọn ngôn ngữ đích.")
+    return optimize_source_script(
+        source, call, progress, target_language=target_language.strip(),
+        max_characters=MAX_TARGET_SCRIPT_CHARS,
+    )
 
 
 def translate_part_faithfully(part, language, call, *, before="", after="", previous="", check_cancelled=None):
@@ -293,6 +404,8 @@ def translate_part_faithfully(part, language, call, *, before="", after="", prev
         candidate = call(
             f"Dịch chính xác toàn bộ đoạn sang {language}. " + FACT_RULES +
             "Write only in the requested target language, keeping proper names. "
+            "Use fluent native narration, natural dialogue and clear paragraph links, "
+            "preserving the original voice rather than copying source syntax. "
             "Read neighboring context only to resolve references; translate ONLY "
             "the core, without repeating adjacent events. Explicitly name the "
             "actor where pronouns would be ambiguous. CHỈ xuất bản dịch. "

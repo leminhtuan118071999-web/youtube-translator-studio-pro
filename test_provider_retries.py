@@ -1,3 +1,4 @@
+import json
 import unittest
 from unittest.mock import Mock, patch
 
@@ -73,7 +74,9 @@ class DirectProviderRetryTests(unittest.TestCase):
                         raise TransientProviderError("Upstream service temporarily unavailable", 502)
                     if prompt.startswith("FAITHFULNESS_REVIEW"):
                         return '{"ok":true,"issues":[],"source_conflicts":[]}'
-                    return "Nora odwiedza Maisie."
+                    return json.dumps({"summary":"Nora odwiedza Maisie.",
+                        "entities":[],"edits":[],"unresolved":[],
+                        "anchors":[{"fact":"Visit","quote":original}]})
                 with patch("api_clients.generate_text", side_effect=api), patch("provider_retries._sleep") as wait:
                     next(x for x in app.button if x.key == f"translate_{sid}").click().run()
                 self.assertFalse(app.exception, [e.message for e in app.exception])

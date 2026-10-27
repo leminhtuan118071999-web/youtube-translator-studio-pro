@@ -5,7 +5,7 @@ from background_jobs import optimize_source_script, run_full_job, JobProgress, M
 
 
 class OptimizedScriptWorkflowTests(unittest.TestCase):
-    def test_optimizes_before_translation_and_keeps_seo_without_auto_video(self):
+    def test_rewrites_original_directly_and_keeps_seo_without_auto_video(self):
         transcript = "The original tale with characters, events and a conclusion."
         calls = []
         def provider(_p, _b, _m, _k, prompt):
@@ -14,8 +14,10 @@ class OptimizedScriptWorkflowTests(unittest.TestCase):
                 return '{"edits":[],"unresolved":[]}'
             if prompt.startswith("FAITHFULNESS_REVIEW"):
                 return '{"ok":true,"issues":[],"source_conflicts":[]}'
-            if "Viết lại PHẦN" in prompt:
-                return "A concise tale preserving the characters, events and conclusion."
+            if prompt.startswith("SOURCE_GROUNDED_SUMMARY"):
+                return json.dumps({"summary":"Een beknopt verhaal met de personages, gebeurtenissen en afloop.",
+                    "entities":[],"edits":[],"unresolved":[],
+                    "anchors":[{"fact":"Original tale","quote":transcript}]})
             if "CHỈ xuất bản dịch" in prompt:
                 self.assertIn("original tale", prompt)
                 return "Een beknopt verhaal met de personages, gebeurtenissen en afloop."
@@ -34,16 +36,16 @@ class OptimizedScriptWorkflowTests(unittest.TestCase):
              "language":"Tiếng Hà Lan","provider":"Groq",
              "base_url":"https://api.groq.com/openai/v1","model":"test",
              "api_key":"KEY-SECRET","auto_video_forms":False}
-        with patch("background_jobs.generate_text", side_effect=provider),patch(
-            "background_jobs.optimize_source_script",wraps=optimize_source_script
-        ):
+        with patch("background_jobs.generate_text", side_effect=provider):
             result=run_full_job(cfg,JobProgress())
         self.assertTrue(result["ok"],result["error"])
         self.assertLess(len(result["fields"]["optimized_script"]),10000)
         self.assertIn("beknopt",result["fields"]["translated"])
         self.assertNotIn("video_forms", result["fields"])
-        self.assertEqual(result["fields"]["optimized_script"], transcript)
-        self.assertFalse(any("Viết lại PHẦN" in p for p in calls))
+        self.assertEqual(result["fields"]["optimized_script"], result["fields"]["translated"])
+        self.assertEqual(result["fields"]["source"], transcript)
+        self.assertTrue(any("TARGET_STORY_REWRITE" in p for p in calls))
+        self.assertFalse(any("CHỈ xuất bản dịch" in p for p in calls))
         self.assertTrue(any(p.startswith("FAITHFULNESS_REVIEW") for p in calls))
         self.assertTrue(any("CHARACTER/WORLD REFERENCE" in p for p in calls))
         # Character profile creation is now a standard text stage, even
@@ -62,6 +64,9 @@ class OptimizedScriptWorkflowTests(unittest.TestCase):
                 return '{"edits":[],"unresolved":[]}'
             if prompt.startswith("FAITHFULNESS_REVIEW"):
                 return '{"ok":true,"issues":[],"source_conflicts":[]}'
+            if prompt.startswith("SOURCE_GROUNDED_SUMMARY"):
+                return json.dumps({"summary":"Ala meets Ola in the lake.","entities":[],"edits":[],"unresolved":[],
+                    "anchors":[{"fact":"Meeting","quote":source}]})
             if "CHỈ xuất bản dịch" in prompt:
                 return "Ala meets Ola in the lake."
             if "CHARACTER/WORLD REFERENCE" in prompt:

@@ -114,7 +114,7 @@ class FaithfulSummaryTests(unittest.TestCase):
                 "anchors": [{"fact": "Invented event", "quote": "This is not in the original"}]})
         with self.assertRaisesRegex(ValueError, "bằng chứng"):
             optimize_source_script(source, call, JobProgress())
-        self.assertEqual(len(calls), 3)
+        self.assertEqual(len(calls), 2)
 
     def test_review_failure_never_publishes_unchecked_summary(self):
         source = "Nora visits Maisie in the hospital. " * 500
@@ -162,6 +162,11 @@ class FaithfulSummaryTests(unittest.TestCase):
         def call(_provider, _base, _model, _key, prompt):
             if prompt.startswith("FAITHFULNESS_REVIEW"):
                 return accepted()
+            if prompt.startswith("SOURCE_GROUNDED_SUMMARY"):
+                self.assertIn(source, prompt)
+                self.assertNotIn("Old wrong summary", prompt)
+                return json.dumps({"summary":"New checked translation", "entities":[], "edits":[], "unresolved":[],
+                    "anchors":[{"fact":"Original story","quote":source}]})
             if "CHỈ xuất bản dịch" in prompt:
                 self.assertIn(source, prompt)
                 self.assertNotIn("Old wrong summary", prompt)

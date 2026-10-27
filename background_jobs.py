@@ -15,7 +15,8 @@ from youtube_transcript_api import YouTubeTranscriptApi
 from api_clients import RateLimitError, TransientProviderError, generate_text
 from groq_pacing import groq_request_gate
 from faithful_summary import (optimize_source_script, MAX_OPTIMIZED_SCRIPT_CHARS,
-                              OPTIMIZATION_VERSION, source_hash, translate_part_faithfully)
+                              COMPATIBLE_OPTIMIZATION_VERSIONS, source_hash, translate_part_faithfully,
+                              rewrite_target_script, MAX_TARGET_SCRIPT_CHARS)
 from transcript_sources import fetch_with_fallback
 from video_scene_planner import (narration_plan, character_bible_prompt, batch_prompt, parse_json_object, apply_ai_batch)
 from character_images import IMAGE_STORE, character_specs, create_character_png, IMAGE_MODEL
@@ -156,7 +157,7 @@ def run_full_job(snapshot, progress):
     if isinstance(old_fields, dict):
         fields.update({name:value for name,value in old_fields.items()
                        if name in ("source","title","caption_language",
-                                   "optimized_script","optimization_review_json","translation_parts",
+                                   "optimized_script","optimization_review_json","optimization_work_json","translation_parts",
                                    "translation_complete","translated",
                                    "character_bible","character_profile",
                                    "character_images_manifest","character_images_error",
@@ -293,76 +294,44 @@ def run_full_job(snapshot, progress):
         fields["source"] = source
         progress.publish("source", source)
 
-        # Rewrite the entire original story BEFORE translating. Preserve
-        # the unmodified source separately for review and future regeneration.
-        optimized = fields.get("optimized_script")
+        # Rewrite directly from the immutable original into the target language.
+        # The final target text, including spaces/newlines, must be below 9,000.
+        target_text = fields.get("optimized_script")
         try:
             review = json.loads(fields.get("optimization_review_json") or "{}")
         except (TypeError, ValueError):
             review = {}
         verified_checkpoint = (
-            isinstance(optimized, str) and bool(optimized.strip())
-            and len(optimized) <= MAX_OPTIMIZED_SCRIPT_CHARS
-            and isinstance(review, dict) and review.get("version") == OPTIMIZATION_VERSION
+            isinstance(target_text, str) and bool(target_text.strip())
+            and len(target_text) <= MAX_TARGET_SCRIPT_CHARS
+            and isinstance(review, dict)
+            and review.get("version") in COMPATIBLE_OPTIMIZATION_VERSIONS
+            and review.get("method") == "direct_target_rewrite"
+            and review.get("target_language") == language
+            and review.get("max_characters") == MAX_TARGET_SCRIPT_CHARS
             and review.get("source_sha256") == source_hash(source)
-            and review.get("output_sha256") == source_hash(optimized)
+            and review.get("output_sha256") == source_hash(target_text)
         )
         if not verified_checkpoint:
-            # Older or mismatched summaries/translations have not passed the
-            # new factual review. Do not combine them with a regenerated script.
             for field in ("translation_parts", "translation_complete", "translated",
                           "character_bible", "character_profile", "character_profile_json",
                           "character_images_manifest", "character_images_error",
                           "new_title", "new_description", "seo_tags", "metadata"):
                 fields.pop(field, None)
-            optimized = optimize_source_script(source, call, progress)
-            fields["optimized_script"] = optimized
-            review_json = progress.partial_result().get("optimization_review_json", "")
-            if review_json:
-                fields["optimization_review_json"] = review_json
-                progress.publish("optimization_review_json", review_json)
-            progress.publish("optimized_script", optimized)
+            if fields.get("optimization_work_json"):
+                progress.publish("optimization_work_json", fields["optimization_work_json"])
+            target_text = rewrite_target_script(source, language, call, progress)
+            fields["optimization_review_json"] = progress.partial_result().get("optimization_review_json", "")
         else:
-            progress.update(43, "✅ Đã khôi phục kịch bản đã đối soát từ checkpoint")
-
-        # Smaller chunks for Groq Free (8K TPM): each request needs far
-        # fewer input and reserved completion tokens.
-        chunk_size = (
-            2200 if snapshot.get("provider") == "Groq"
-            and snapshot.get("model") in ("openai/gpt-oss-20b", "openai/gpt-oss-120b")
-            else 5500
-        )
-        chunks = list(chunk_text(optimized, chunk_size))
-        translations = fields.get("translation_parts", [])
-        if not isinstance(translations, list) or len(translations) > len(chunks):
-            translations = []
-        translations = [part for part in translations
-                        if isinstance(part, str) and part.strip()]
-        if fields.get("translation_complete") and fields.get("translated"):
-            progress.update(67, "✅ Đã khôi phục bản dịch đầy đủ từ checkpoint")
-        else:
-            for idx, part in enumerate(chunks, 1):
-                if idx <= len(translations):
-                    continue
-                progress.check_cancelled()
-                progress.update(45 + int(22 * (idx - 1) / len(chunks)),
-                                f"🌍 Đang dịch kịch bản phần {idx}/{len(chunks)} sang {language}...")
-                translation = translate_part_faithfully(
-                    part, language, call,
-                    before=chunks[idx - 2][-800:] if idx > 1 else "",
-                    after=chunks[idx][:800] if idx < len(chunks) else "",
-                    previous=translations[-1] if translations else "",
-                    check_cancelled=progress.check_cancelled,
-                )
-                translations.append(translation)
-                fields["translation_parts"] = list(translations)
-                # Persist the index BEFORE publishing visible translation:
-                # after a restart, completed chunks are not charged twice.
-                progress.publish("translation_parts", fields["translation_parts"])
-                fields["translated"] = "\n\n".join(translations)
-                progress.publish("translated", fields["translated"])
-            fields["translation_complete"] = True
-            progress.publish("translation_complete", True)
+            progress.update(67, "✅ Đã khôi phục bản viết lại ngôn ngữ đích đã đối soát")
+        if not target_text.strip() or len(target_text) > MAX_TARGET_SCRIPT_CHARS:
+            raise ValueError("Bản viết lại ngôn ngữ đích phải dưới 9.000 ký tự.")
+        fields.update(optimized_script=target_text, translated=target_text,
+                      optimization_work_json="", translation_parts=[target_text],
+                      translation_complete=True)
+        for name in ("optimization_review_json", "optimization_work_json", "optimized_script",
+                     "translated", "translation_parts", "translation_complete"):
+            progress.publish(name, fields.get(name, ""))
 
         # Character reference images still auto-generate where configured.
         # 8-second form generation is a DIFFERENT step requiring an uploaded
@@ -500,7 +469,10 @@ def run_full_job(snapshot, progress):
         # SEO still needs a concise overview for long transcripts, but do
         # not perform any image-prompt generation or publish prompt fields.
         progress.update(70, "📝 Đang chuẩn bị nội dung SEO...")
-        brief = overview(fields["translated"], call, progress)
+        # The canonical target rewrite is already below 9,000 characters.
+        # Re-summarizing it for SEO costs extra calls and risks losing hooks.
+        brief = (fields["translated"] if len(fields["translated"]) <= MAX_TARGET_SCRIPT_CHARS
+                 else overview(fields["translated"], call, progress))
         progress.check_cancelled()
         progress.update(84, "📝 Đang tạo tiêu đề, mô tả và SEO...")
         metadata = parse_object(call(
@@ -526,6 +498,9 @@ def run_full_job(snapshot, progress):
         result["ok"] = True
         progress.update(100, "✅ Hoàn thành. Đã lưu vào danh sách phiên.")
     except Exception as exc:
+        pending_optimization = progress.partial_result().get("optimization_work_json", "")
+        if pending_optimization:
+            fields["optimization_work_json"] = pending_optimization
         # Redact credentials in provider error messages.
         safe_error = str(exc).replace(api_key, "[API KEY ĐÃ ẨN]")
         extra_key = snapshot.get("supadata_key", "")

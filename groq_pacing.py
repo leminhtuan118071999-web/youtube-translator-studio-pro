@@ -9,6 +9,7 @@ from contextlib import contextmanager
 from hashlib import sha256
 from threading import Lock, local
 import time
+from generation_budgets import task_output_budget
 
 
 TPM_SOFT_BUDGET = 7200  # Headroom below observed Groq GPT-OSS 8K TPM
@@ -18,7 +19,9 @@ MAX_RESERVATION = 6800
 
 def estimated_tokens(prompt):
     """Conservative per-call reservation, including possible output tokens."""
-    if "ĐÚNG 20 prompt" in prompt:
+    if task_output_budget(prompt) is not None:
+        output = task_output_budget(prompt)
+    elif "ĐÚNG 20 prompt" in prompt:
         output = 3600
     elif "Summarize" in prompt or "Condense" in prompt:
         output = 1400

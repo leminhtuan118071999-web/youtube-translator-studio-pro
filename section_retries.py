@@ -7,7 +7,8 @@ import hashlib
 import json
 
 from faithful_summary import (
-    optimize_source_script, OPTIMIZATION_VERSION, source_hash, MAX_OPTIMIZED_SCRIPT_CHARS,
+    optimize_source_script, COMPATIBLE_OPTIMIZATION_VERSIONS, source_hash, MAX_OPTIMIZED_SCRIPT_CHARS,
+    rewrite_target_script,
 )
 
 from character_images import character_specs
@@ -24,13 +25,16 @@ def prepare_reviewed_script(session, call, progress):
         report = json.loads(session.get("optimization_review_json") or "{}")
     except (ValueError, TypeError):
         report = {}
-    if (isinstance(report, dict) and report.get("version") == OPTIMIZATION_VERSION
+    if (isinstance(report, dict) and report.get("version") in COMPATIBLE_OPTIMIZATION_VERSIONS
             and bool(optimized.strip()) and len(optimized) <= MAX_OPTIMIZED_SCRIPT_CHARS
             and report.get("source_sha256") == source_hash(original)
             and report.get("output_sha256") == source_hash(optimized)):
         return {}
+    if session.get("optimization_work_json"):
+        progress.publish("optimization_work_json", session["optimization_work_json"])
     optimized = optimize_source_script(original, call, progress)
     return {"optimized_script": optimized,
+            "optimization_work_json": "",
             "optimization_review_json": progress.partial_result()["optimization_review_json"]}
 
 
@@ -54,6 +58,24 @@ def rerun_translation(session, target_language, translate, *, prepare=None):
         # Do not destroy previous video prompts: their source hash will flag
         # them stale until the user uploads the correct voice audio to rerun.
     return result.strip()
+
+
+def rerun_target_rewrite(session, target_language, call, progress):
+    """Rebuild from the original; commit target text and review atomically."""
+    original = (session.get("source") or "").strip()
+    if not original:
+        raise ValueError("Cần văn bản gốc để viết lại bản ngôn ngữ đích dưới 9.000 ký tự.")
+    if session.get("optimization_work_json"):
+        progress.publish("optimization_work_json", session["optimization_work_json"])
+    result = rewrite_target_script(original, target_language, call, progress)
+    previous = session.get("translated", "")
+    session.update(translated=result, optimized_script=result, language=target_language,
+                   optimization_work_json="",
+                   optimization_review_json=progress.partial_result()["optimization_review_json"])
+    if previous.strip() != result:
+        session["seo_stale"] = bool(session.get("new_title") or session.get("new_description") or session.get("seo_tags"))
+        session["character_bible_stale"] = bool(session.get("character_bible"))
+    return result
 
 
 def rerun_seo(session, language, make_metadata):

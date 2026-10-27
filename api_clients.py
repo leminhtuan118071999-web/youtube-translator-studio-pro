@@ -11,6 +11,7 @@ from urllib.parse import urlsplit
 import requests
 
 from groq_pacing import groq_request_gate
+from generation_budgets import task_output_budget
 
 
 PROVIDERS = {
@@ -476,7 +477,9 @@ def generate_text(
     if kind == "gemini":
         # Native Google API avoids OpenAI compatibility limitations.
         # Keep test requests tiny and translation/prompt budgets bounded.
-        if len(prompt) <= 80:
+        if task_output_budget(prompt) is not None:
+            output_tokens = task_output_budget(prompt)
+        elif len(prompt) <= 80:
             output_tokens = 128
         elif "Summarize" in prompt or "Condense" in prompt:
             output_tokens = 1100
@@ -492,7 +495,9 @@ def generate_text(
         # Claude/Gateway traffic should request only the output budget each
         # operation needs. A simple connectivity check must not reserve 8192
         # tokens on an upstream proxy for a two-letter response.
-        if len(prompt) <= 80:
+        if task_output_budget(prompt) is not None:
+            max_tokens = task_output_budget(prompt)
+        elif len(prompt) <= 80:
             max_tokens = 128
         elif "Summarize" in prompt or "Condense" in prompt:
             max_tokens = 1100
@@ -515,7 +520,9 @@ def generate_text(
             body["reasoning_effort"] = "low"
             # Smaller reserved completions lower TPM cost and reduce 429s.
             # Keep the usual bounded budget for translation and SEO.
-            if "Soạn YouTube tiêu đề" in prompt or "Viết nội dung YouTube" in prompt:
+            if task_output_budget(prompt) is not None:
+                body["max_completion_tokens"] = task_output_budget(prompt)
+            elif "Soạn YouTube tiêu đề" in prompt or "Viết nội dung YouTube" in prompt:
                 body["max_completion_tokens"] = 2200
             elif "Summarize" in prompt:
                 body["max_completion_tokens"] = 1400

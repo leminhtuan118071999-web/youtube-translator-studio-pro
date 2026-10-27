@@ -11,7 +11,7 @@ import streamlit.components.v1 as components
 from streamlit.runtime import exists as streamlit_runtime_exists
 
 import requests
-from faithful_summary import translate_part_faithfully, OPTIMIZATION_VERSION, source_hash
+from faithful_summary import translate_part_faithfully, COMPATIBLE_OPTIMIZATION_VERSIONS, source_hash, MAX_TARGET_SCRIPT_CHARS
 from provider_retries import retry_transient_provider
 from character_profiles import MAX_DETAILED_CHARACTERS
 from server_character_jobs import (
@@ -42,7 +42,7 @@ from browser_session_store import (
 from copy_buttons import copy_all_button
 from video_forms_ui import render_video_forms
 from video_scene_planner import character_bible_prompt, parse_json_object
-from section_retries import rerun_translation, rerun_seo, portrait_retry_specs, prepare_reviewed_script
+from section_retries import rerun_seo, portrait_retry_specs, rerun_target_rewrite
 from character_images import (IMAGE_STORE, IMAGE_MODEL, session_images_zip, create_character_png,
     detailed_character_profiles, character_reference_description, character_profile_text, CHARACTER_PROFILE_FIELDS)
 from session_name_controls import session_name_control, rename_record
@@ -139,7 +139,7 @@ LANGUAGES = [
     "Tiếng Catalan", "Tiếng Basque", "Tiếng Wales", "Tiếng Luxembourg",
     "Tiếng Macedonia", "Tiếng Việt", "Tiếng Nhật", "Tiếng Hàn",
 ]
-FIELDS = ("url", "source", "title", "description", "translated", "prompts", "metadata", "language", "new_title", "new_description", "seo_tags", "video_forms", "optimized_script", "optimization_review_json", "character_images_error", "character_bible", "character_images_manifest", "character_profile_json", "seo_stale", "character_bible_stale")
+FIELDS = ("url", "source", "title", "description", "translated", "prompts", "metadata", "language", "new_title", "new_description", "seo_tags", "video_forms", "optimized_script", "optimization_review_json", "optimization_work_json", "character_images_error", "character_bible", "character_images_manifest", "character_profile_json", "seo_stale", "character_bible_stale")
 FORM_FIELDS = ("url", "language")
 
 
@@ -148,7 +148,7 @@ def blank_session(name):
         "name": name, "url": "", "source": "", "title": "", "description": "",
         "translated": "", "prompts": "", "metadata": "", "language": "Tiếng Ba Lan",
         "saved": False, "processed": False, "saved_order": 0,
-        "new_title": "", "new_description": "", "seo_tags": "", "video_forms": "", "optimized_script": "", "optimization_review_json": "", "character_images_error": "", "character_bible": "", "character_images_manifest": "", "character_profile_json": "", "seo_stale": False, "character_bible_stale": False,
+        "new_title": "", "new_description": "", "seo_tags": "", "video_forms": "", "optimized_script": "", "optimization_review_json": "", "optimization_work_json": "", "character_images_error": "", "character_bible": "", "character_images_manifest": "", "character_profile_json": "", "seo_stale": False, "character_bible_stale": False,
     }
 
 
@@ -1648,6 +1648,7 @@ language = st.selectbox(
 )
 session["language"] = language
 
+st.caption("Bắt đầu: viết lại trực tiếp từ văn bản gốc bằng ngôn ngữ đích, tối đa 8.999 ký tự; giữ hook, cốt truyện, hành động, quan hệ và ý nghĩa số liệu.")
 if st.button("🚀 BẮT ĐẦU TẠO TOÀN BỘ", type="primary",
              use_container_width=True, key=f"run_all_{sid}"):
     sync_form(sid)
@@ -1857,9 +1858,9 @@ with st.container(key="result_tabs"):
     )
 with tab_translate:
     if session.get("optimized_script", "").strip():
-        with st.expander("✍️ Kịch bản đã tối ưu (dưới 10.000 ký tự)", expanded=False):
+        with st.expander("✍️ Bản viết lại ngôn ngữ đích (dưới 9.000 ký tự)", expanded=False):
             st.caption(
-                f"{len(session['optimized_script']):,} ký tự · Giới hạn tối đa 9.999 ký tự. "
+                f"{len(session['optimized_script']):,} ký tự · Quy tắc mới: tối đa 8.999 ký tự. "
                 "Giữ nguyên phụ đề gốc để đối chiếu."
             )
             try:
@@ -1867,15 +1868,13 @@ with tab_translate:
             except (ValueError, TypeError):
                 summary_review = {}
             if (isinstance(summary_review, dict)
-                    and summary_review.get("version") == OPTIMIZATION_VERSION
+                    and summary_review.get("version") in COMPATIBLE_OPTIMIZATION_VERSIONS
+                    and summary_review.get("method") == "direct_target_rewrite"
+                    and summary_review.get("target_language") == language
+                    and len(session["optimized_script"]) <= MAX_TARGET_SCRIPT_CHARS
                     and summary_review.get("source_sha256") == source_hash(session.get("source", ""))
                     and summary_review.get("output_sha256") == source_hash(session["optimized_script"])):
-                if summary_review.get("method") == "verbatim":
-                    st.caption("Đã rà lỗi nguồn; bản xử lý dưới giới hạn được giữ nguyên ở bước tóm tắt.")
-                elif summary_review.get("method") == "repaired_source":
-                    st.caption("Đã sửa lỗi nguồn có căn cứ; văn bản dưới giới hạn nên không cần tóm tắt thêm.")
-                else:
-                    st.caption("Đã rà lỗi nguồn, tóm tắt và đối soát từng phần bằng AI; vẫn có thể còn sai sót.")
+                st.caption("Đã viết lại trực tiếp từ bản gốc bằng ngôn ngữ đích và đối soát hook, hành động, quan hệ, số liệu; không qua bản tóm tắt trung gian.")
                 source_repairs = summary_review.get("source_repairs", [])
                 if source_repairs:
                     with st.expander(f"🛠️ Các sửa đổi trên bản xử lý ({len(source_repairs)})", expanded=False):
@@ -1887,19 +1886,15 @@ with tab_translate:
                 for conflict in summary_review.get("source_conflicts", []):
                     st.warning("Điểm trong bản gốc chưa đủ căn cứ để tự sửa: " + str(conflict))
             else:
-                st.info("Kịch bản cũ chưa có kết quả đối soát mới. Chạy lại tạo toàn bộ để tóm tắt lại từ bản gốc.")
+                st.info("Nội dung phiên cũ chưa theo quy tắc mới. Nhấn Chạy lại riêng — Bản dịch hoặc Bắt đầu để viết lại từ bản gốc dưới 9.000 ký tự.")
             st.code(session["optimized_script"], language=None, wrap_lines=True)
     if st.button(
         "🔄 Chạy lại riêng — Bản dịch", key=f"translate_{sid}",
         disabled=session.get("job_state") == "running",
     ):
         try:
-            with st.spinner(f"Đang dịch lại kịch bản đã tối ưu sang {language}..."):
-                rerun_translation(
-                    session, language,
-                    lambda source, target: translate_full_script(source, target),
-                    prepare=lambda current: prepare_reviewed_script(current, ai, JobProgress()),
-                )
+            with st.spinner(f"Đang viết lại trực tiếp từ bản gốc sang {language}, dưới 9.000 ký tự..."):
+                rerun_target_rewrite(session, language, ai, JobProgress())
             mark_session_processed(session)
             _persist_and_rerun()
         except Exception as exc:
@@ -1914,8 +1909,8 @@ with tab_translate:
         session["translated"],
         key=f"copy_all_translation_{sid}",
     )
-    with st.expander(f"🌍 Bản dịch hoàn chỉnh ({language}) — Nhấn để xem toàn bộ", expanded=False):
-        st.caption("Nội dung đầy đủ; vẫn có thể Copy trong khung hoặc tải TXT.")
+    with st.expander(f"🌍 Bản viết lại hoàn chỉnh ({language}) — Nhấn để xem toàn bộ", expanded=False):
+        st.caption(f"{len(session['translated']):,} ký tự · Quy tắc mới: dưới 9.000 ký tự, giữ cốt truyện và các tình tiết quan trọng. Có thể Copy hoặc tải TXT.")
         output("📋 Copy toàn bộ bản dịch", session["translated"], allow_download=True)
 
 with tab_seo:

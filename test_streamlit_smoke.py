@@ -116,7 +116,7 @@ class StreamlitSmokeTests(unittest.TestCase):
             '"🔄 Chạy lại riêng — Bản dịch"',
             '"🔄 Chạy lại riêng — Tiêu đề • Mô tả • SEO"',
             '"🔄 Chạy lại riêng — Ảnh nhân vật"',
-            'rerun_translation(', 'rerun_seo(', 'portrait_retry_specs(',
+            'rerun_target_rewrite(', 'rerun_seo(', 'portrait_retry_specs(',
         ):
             self.assertIn(snippet, main)
         self.assertIn('"🔄 Chạy lại riêng — Form video 8 giây"', forms)
@@ -901,7 +901,7 @@ class StreamlitSmokeTests(unittest.TestCase):
         self.assertFalse(app.exception, [str(exc.message) for exc in app.exception])
         panels = [
             panel for panel in app.get("expander")
-            if panel.label.startswith(("🌍 Bản dịch hoàn chỉnh", "📝 Mô tả đã dịch"))
+            if panel.label.startswith(("🌍 Bản viết lại hoàn chỉnh", "📝 Mô tả đã dịch"))
         ]
         self.assertEqual(len(panels), 2)
         self.assertTrue(all("Nhấn để xem toàn bộ" in p.label for p in panels))
@@ -910,7 +910,7 @@ class StreamlitSmokeTests(unittest.TestCase):
         from pathlib import Path
         code = Path("streamlit_app.py").read_text(encoding="utf-8")
         self.assertIn(
-            'with st.expander(f"🌍 Bản dịch hoàn chỉnh ({language}) — '
+            'with st.expander(f"🌍 Bản viết lại hoàn chỉnh ({language}) — '
             'Nhấn để xem toàn bộ", expanded=False):', code
         )
         self.assertIn(

@@ -18,7 +18,7 @@ CONTENT_FIELDS = (
     "name", "url", "source", "title", "description", "translated",
     "prompts", "metadata", "language", "new_title", "new_description",
     "seo_tags", "saved_order", "saved", "processed", "job_state",
-    "job_error", "job_percent", "job_stage", "job_run_id", "video_forms", "optimized_script", "optimization_review_json", "character_images_error", "character_bible", "seo_stale", "character_bible_stale", "video_job_run_id", "video_job_state",
+    "job_error", "job_percent", "job_stage", "job_run_id", "video_forms", "optimized_script", "optimization_review_json", "optimization_work_json", "character_images_error", "character_bible", "seo_stale", "character_bible_stale", "video_job_run_id", "video_job_state",
     "video_job_error", "video_job_percent", "video_job_stage", "job_queue_id", "video_queue_id", "character_images_manifest", "character_profile_json",
 )
 API_WIDGET_PREFIXES = ("api_key_", "api_base_", "api_model_id_", "api_format_", "api_auth_mode_")

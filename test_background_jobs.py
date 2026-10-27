@@ -8,24 +8,14 @@ from api_clients import RateLimitError, TransientProviderError
 
 class BackgroundJobsTests(unittest.TestCase):
     def setUp(self):
-        # Previous tests focus on translation, SEO and retry behavior; mock the
-        # newly added upstream condensation step to isolate those semantics.
-        self.optimize_patch = patch(
-            "background_jobs.optimize_source_script",
-            side_effect=lambda source, call, progress: source,
-        )
-        self.optimize_patch.start()
-        self.addCleanup(self.optimize_patch.stop)
-        # Exercise API pacing/retry semantics separately from factual review;
-        # the real reviewed translation path has dedicated integration tests.
-        translator = patch(
-            "background_jobs.translate_part_faithfully",
-            side_effect=lambda part, language, call, **_: call(
+        # Isolate API retry/pacing tests from source-to-target drafting/review.
+        def rewrite(source, language, call, progress):
+            return "\n\n".join(call(
                 f"Dịch sang {language}. CHỈ xuất bản dịch.\n\n" + part
-            ),
-        )
-        translator.start()
-        self.addCleanup(translator.stop)
+            ) for part in chunk_text(source, 2200))
+        worker = patch("background_jobs.rewrite_target_script", side_effect=rewrite)
+        worker.start()
+        self.addCleanup(worker.stop)
         self.config = {
             "url": "https://youtube.com/watch?v=12345678901",
             "source": "",
