@@ -34,7 +34,8 @@ from browser_session_store import (
 from copy_buttons import copy_all_button
 from video_forms_ui import render_video_forms
 from section_retries import rerun_translation, rerun_seo, portrait_retry_specs
-from character_images import IMAGE_STORE, IMAGE_MODEL, session_images_zip, create_character_png
+from character_images import (IMAGE_STORE, IMAGE_MODEL, session_images_zip, create_character_png,
+    detailed_character_profiles, character_reference_description, CHARACTER_PROFILE_FIELDS)
 from session_name_controls import session_name_control, rename_record
 from durable_queue import (queue_available, worker_healthy, submit_job,
     get_owned_jobs, apply_owned_job_results, fetch_portrait_images)
@@ -129,7 +130,7 @@ LANGUAGES = [
     "Tiếng Catalan", "Tiếng Basque", "Tiếng Wales", "Tiếng Luxembourg",
     "Tiếng Macedonia", "Tiếng Việt", "Tiếng Nhật", "Tiếng Hàn",
 ]
-FIELDS = ("url", "source", "title", "description", "translated", "prompts", "metadata", "language", "new_title", "new_description", "seo_tags", "video_forms", "optimized_script", "character_images_error", "character_bible", "character_images_manifest", "seo_stale", "character_bible_stale")
+FIELDS = ("url", "source", "title", "description", "translated", "prompts", "metadata", "language", "new_title", "new_description", "seo_tags", "video_forms", "optimized_script", "character_images_error", "character_bible", "character_images_manifest", "character_profile_json", "seo_stale", "character_bible_stale")
 FORM_FIELDS = ("url", "language")
 
 
@@ -138,7 +139,7 @@ def blank_session(name):
         "name": name, "url": "", "source": "", "title": "", "description": "",
         "translated": "", "prompts": "", "metadata": "", "language": "Tiếng Ba Lan",
         "saved": False, "processed": False, "saved_order": 0,
-        "new_title": "", "new_description": "", "seo_tags": "", "video_forms": "", "optimized_script": "", "character_images_error": "", "character_bible": "", "character_images_manifest": "", "seo_stale": False, "character_bible_stale": False,
+        "new_title": "", "new_description": "", "seo_tags": "", "video_forms": "", "optimized_script": "", "character_images_error": "", "character_bible": "", "character_images_manifest": "", "character_profile_json": "", "seo_stale": False, "character_bible_stale": False,
     }
 
 
