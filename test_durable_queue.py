@@ -110,6 +110,43 @@ class DurableQueueTests(unittest.TestCase):
         self.assertEqual(keys["api_key"],"SECRET_CLIENT_TEXT_KEY")
         self.assertNotIn("api_key",fake_job["snapshot"])
 
+    def test_worker_does_not_claim_online_while_secrets_or_tables_missing(self):
+        from unittest.mock import MagicMock
+        with patch.dict("os.environ", {}, clear=True):
+            with self.assertRaisesRegex(RuntimeError, "DATABASE_URL"):
+                durable_worker.validate_startup_config()
+        with patch.dict("os.environ", {
+            "DATABASE_URL": "postgresql://localhost/app",
+            "SESSION_ENCRYPTION_KEY": "invalid-fernet",
+        }, clear=True):
+            with self.assertRaisesRegex(RuntimeError, "Fernet"):
+                durable_worker.validate_startup_config()
+        with patch.dict("os.environ", {
+            "DATABASE_URL": "postgresql://localhost/app",
+            "SESSION_ENCRYPTION_KEY": self.secrets["SESSION_ENCRYPTION_KEY"],
+            "SUPABASE_URL": "https://example.supabase.co",
+        }, clear=True):
+            with self.assertRaisesRegex(RuntimeError, "SUPABASE_SERVICE_ROLE_KEY"):
+                durable_worker.validate_startup_config()
+        context = MagicMock()
+        context.__enter__.return_value.execute.return_value.fetchone.return_value = {
+            "jobs": True, "health": False,
+        }
+        with patch.dict("os.environ", {
+            "DATABASE_URL": "postgresql://localhost/app",
+            "SESSION_ENCRYPTION_KEY": self.secrets["SESSION_ENCRYPTION_KEY"],
+        }, clear=True), patch("durable_worker.connect", return_value=context):
+            with self.assertRaisesRegex(RuntimeError, "migration"):
+                durable_worker.validate_startup_config()
+        context.__enter__.return_value.execute.return_value.fetchone.return_value = {
+            "jobs": True, "health": True,
+        }
+        with patch.dict("os.environ", {
+            "DATABASE_URL": "postgresql://localhost/app",
+            "SESSION_ENCRYPTION_KEY": self.secrets["SESSION_ENCRYPTION_KEY"],
+        }, clear=True), patch("durable_worker.connect", return_value=context):
+            durable_worker.validate_startup_config()
+
     def test_worker_claim_uses_skip_locked_and_lease_token(self):
         from pathlib import Path
         source = Path("durable_worker.py").read_text(encoding="utf-8")
