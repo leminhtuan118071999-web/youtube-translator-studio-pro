@@ -140,7 +140,7 @@ LANGUAGES = [
     "Tiếng Catalan", "Tiếng Basque", "Tiếng Wales", "Tiếng Luxembourg",
     "Tiếng Macedonia", "Tiếng Việt", "Tiếng Nhật", "Tiếng Hàn",
 ]
-FIELDS = ("wardrobe_lock_enabled", "wardrobe_lock_notes", "url", "source", "pasted_source", "title", "description", "translated", "prompts", "metadata", "language", "new_title", "new_description", "seo_tags", "video_forms", "optimized_script", "optimization_review_json", "optimization_work_json", "character_images_error", "character_bible", "character_images_manifest", "character_profile_json", "seo_stale", "character_bible_stale")
+FIELDS = ("repair_memory_json", "wardrobe_lock_enabled", "wardrobe_lock_notes", "url", "source", "pasted_source", "title", "description", "translated", "prompts", "metadata", "language", "new_title", "new_description", "seo_tags", "video_forms", "optimized_script", "optimization_review_json", "optimization_work_json", "character_images_error", "character_bible", "character_images_manifest", "character_profile_json", "seo_stale", "character_bible_stale")
 FORM_FIELDS = ("url", "language", "pasted_source")
 
 
@@ -608,7 +608,7 @@ def collect_video_background_jobs():
             st.session_state.video_background_jobs.pop(session_id, None)
             continue
         for field, value in job["progress"].partial_result().items():
-            if field in ("video_forms", "character_profile_json", "character_bible") and record.get(field) != value:
+            if field in ("video_forms", "character_profile_json", "character_bible", "repair_memory_json") and record.get(field) != value:
                 record[field] = value
                 changed = True
         percentage, stage = job["progress"].snapshot()
@@ -624,7 +624,7 @@ def collect_video_background_jobs():
             outcome = {"ok": False, "fields": {},
                        "error": "Tác vụ nền kết thúc ngoài dự kiến."}
         for field, value in outcome.get("fields", {}).items():
-            if field in ("video_forms", "character_profile_json", "character_bible"):
+            if field in ("video_forms", "character_profile_json", "character_bible", "repair_memory_json"):
                 record[field] = value
         record["video_job_state"] = "completed" if outcome.get("ok") else "failed"
         record["video_job_error"] = "" if outcome.get("ok") else outcome.get("error", "")
@@ -1866,6 +1866,9 @@ def launch_video_forms_background(duration, audio_hash, audio_name,
             raise ValueError("Phiên này đã có tác vụ form video đang chạy.")
     if not key.strip() or not model.strip():
         raise ValueError("Cần API key và model AI hợp lệ.")
+    from repair_memory import merge_memories
+    repair_memory = merge_memories(record.get("repair_memory_json", "")
+                                   for record in st.session_state.workspaces.values())
     if DURABLE_QUEUE_ENABLED:
         ensure_durable_worker_available()
         _save_cloud_state(force=True)
@@ -1876,6 +1879,7 @@ def launch_video_forms_background(duration, audio_hash, audio_name,
                 "duration_seconds": duration, "audio_hash": audio_hash,
                 "audio_name": audio_name, "style": style,
                 "character_bible": bible, "existing_plan": existing_plan, "verify_form_language": True, "auto_form_language": True,
+                "repair_memory_json": repair_memory,
                 "auto_character_profiles": True,
                 "character_profile_json": session.get("character_profile_json", ""),
                 "wardrobe_lock_enabled": session.get("wardrobe_lock_enabled", True),
@@ -1904,6 +1908,7 @@ def launch_video_forms_background(duration, audio_hash, audio_name,
         "duration_seconds": duration, "audio_hash": audio_hash,
         "audio_name": audio_name, "style": style,
         "character_bible": bible, "existing_plan": existing_plan, "verify_form_language": True, "auto_form_language": True,
+                "repair_memory_json": repair_memory,
                 "auto_character_profiles": True,
                 "character_profile_json": session.get("character_profile_json", ""),
                 "wardrobe_lock_enabled": session.get("wardrobe_lock_enabled", True),

@@ -8,6 +8,7 @@ of uninterrupted processing after a Streamlit Cloud worker restart.
 from character_identity import profile_names, name_contract, apply_name_lock, validate_speaker_spelling
 from wardrobe_lock import apply_wardrobe_lock
 from video_character_profiles import prepare_video_profiles
+from repair_memory import RepairMemory
 import json
 import re
 import threading
@@ -78,7 +79,7 @@ def save_cloud_video_checkpoint(snapshot, encoded, state, error=""):
         if not isinstance(record, dict) or record.get("video_job_run_id") != snapshot["run_id"]:
             raise RuntimeError("Phiên đã được xóa hoặc thay thế; dừng lưu form cũ.")
         for field, value in snapshot.get("profile_checkpoint_fields", {}).items():
-            if field in ("character_profile_json", "character_bible"):
+            if field in ("character_profile_json", "character_bible", "repair_memory_json"):
                 record[field] = value
         if encoded:
             record["video_forms"] = encoded
@@ -103,6 +104,16 @@ def run_video_forms_job(snapshot, progress):
     """Resume or generate all forms; checkpoint after each six-scene API batch."""
     fields = {}
     plan = None
+    memory = RepairMemory(snapshot.get("repair_memory_json", ""))
+
+    def save_memory():
+        if not snapshot.get("verify_form_language"):
+            return
+        encoded = memory.encoded()
+        fields["repair_memory_json"] = encoded
+        progress.publish("repair_memory_json", encoded)
+        snapshot.setdefault("profile_checkpoint_fields", {})["repair_memory_json"] = encoded
+
     def call_with_retry(prompt):
         def wait(seconds):
             remaining = seconds
@@ -122,7 +133,7 @@ def run_video_forms_job(snapshot, progress):
         def request():
             progress.check_cancelled()
             with groq_request_gate.reporting(progress):
-                return _provider_call(snapshot, prompt)
+                return _provider_call(snapshot, prompt + (memory.instructions() if snapshot.get("verify_form_language") else ""))
         return retry_transient_provider(request, report=report, wait=wait)
 
     try:
@@ -283,6 +294,9 @@ def run_video_forms_job(snapshot, progress):
                         original_scene = next((s for s in plan["scenes"] if s["number"] == row.get("number")), None)
                         if original_scene is None:
                             raise ValueError("Sai số thứ tự form.")
+                        for segment in row.get("speech_segments", []) if isinstance(row.get("speech_segments"), list) else []:
+                            if isinstance(segment, dict) and not segment.get("delivery"):
+                                memory.observe("narrator delivery" if segment.get("kind") == "narrator" else "character delivery")
                         row["speech_segments"] = repair_speech_segments(
                             original_scene, row.get("speech_segments"), call_with_retry, require_delivery=True,
                             before=next((s["voiceover"] for s in plan["scenes"] if s["number"] == original_scene["number"]-1), ""),
@@ -334,7 +348,11 @@ def run_video_forms_job(snapshot, progress):
                     except (ValueError, TypeError, AttributeError) as exc:
                         verdict = {"ok":False,"issues":[str(exc)]}
                     else:
+                        memory.confirm()
+                        save_memory()
                         return raw
+                memory.observe(verdict.get("issues", ""))
+                save_memory()
                 errors = str(verdict.get("issues", "Invalid verdict"))[:1200]
                 if attempt == 0:
                     raw = call_with_retry(
@@ -363,6 +381,8 @@ def run_video_forms_job(snapshot, progress):
                     parse_json_object(result, "scenes")
                     return result
                 except InvalidFormJSON:
+                    memory.observe("json")
+                    save_memory()
                     if attempt == 1:
                         raise
                     completed = _completed_count(plan)

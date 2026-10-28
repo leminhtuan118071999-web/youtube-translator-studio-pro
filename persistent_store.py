@@ -15,6 +15,7 @@ from cryptography.fernet import Fernet, InvalidToken
 
 
 CONTENT_FIELDS = (
+    "repair_memory_json",
     "wardrobe_lock_enabled", "wardrobe_lock_notes",
     "name", "url", "source", "pasted_source", "title", "description", "translated",
     "prompts", "metadata", "language", "new_title", "new_description",
