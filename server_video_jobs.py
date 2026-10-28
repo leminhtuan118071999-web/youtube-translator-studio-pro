@@ -310,6 +310,10 @@ def run_video_forms_job(snapshot, progress):
                     f"Speech segment text and subtitles must stay verbatim in {snapshot['language']}. "
                     "Check every scene against the full story and detailed profiles in CONTINUITY DATA: "
                     "reject changed face, age, hair, build, clothes, relationships or swapped character identities. "
+                    "Distinguish fixed clothing from removable props. Story actions override any profile/wardrobe "
+                    "reference about wearing or holding a bag, backpack, phone, cup or drawing. Track set-down, "
+                    "handover and retrieval states across prior scenes. Taking an object out of a bag does not "
+                    "mean putting the bag on. Do not require absent/removed props for wardrobe consistency. "
                     "Quotation marks alone do not imply spoken dialogue. Reported speech, cited sayings and letters "
                     "must remain narration unless explicitly read aloud. Check delivery for each character segment: "
                     "phone/off_screen/on_screen. Never assign a remote caller's words to a visible listener; "
@@ -358,6 +362,9 @@ def run_video_forms_job(snapshot, progress):
                     raw = call_with_retry(
                         "Correct the visual_prompt language into English and fix speech attribution using original input. "
                         "Preserve all scene numbers, events, identities, physical features and numeric meanings. "
+                        "For prop continuity errors, correct the affected image/video descriptions to reflect "
+                        "the latest story action. Remove contradictory wearing/holding statements inherited from "
+                        "the reference. Do not rewrite speech or invent a new action to justify the wrong prop state. "
                         "Add/correct image_prompt as an English opening frame matching the same scene. "
                         "Preserve verbatim voiceover words in speech_segments, order, and transition_to_next values. "
                         'Each speech_segments item MUST be {"kind":"narrator","speaker":"narrator","delivery":"off_screen","text":"exact words"} '

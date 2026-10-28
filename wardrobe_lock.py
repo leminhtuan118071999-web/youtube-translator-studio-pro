@@ -26,7 +26,7 @@ def apply_wardrobe_lock(plan, snapshot, call):
         result = parse_json_object(call(
             "LOCK_CHARACTER_WARDROBE. Return ONLY JSON {\"wardrobe_reference\":\"English reference\"}. "
             "Create one fixed outfit for EACH named character in the supplied reference/story. "
-            "Identify each character by exact name. Specify clothing type, colors, material, footwear and accessories. "
+            "Identify each character by exact name. Specify clothing type, colors, material, footwear and permanently worn accessories. Exclude removable props such as bags, backpacks, phones, drawings and cups. "
             "User wardrobe choices take precedence over conflicting wardrobe details in the reference. "
             "Otherwise retain existing reference clothing; fill only missing visual details conservatively once. "
             "The same outfit must be reused from first to last scene, including flashbacks; no costume variants. "
@@ -46,5 +46,10 @@ def wardrobe_instruction(plan):
         return ""
     return ("\nMANDATORY WARDROBE LOCK (overrides conflicting clothing in character reference):\n" + reference +
             "\nFor every character present, repeat their exact locked outfit in BOTH visual_prompt and image_prompt. "
-            "Keep garment types, colors, material, footwear and accessories identical in EVERY scene. "
+            "Keep garment types, colors, material, footwear and permanently worn accessories identical in EVERY scene. "
+            "PROP CONTINUITY OVERRIDES THIS LOCK: backpacks, bags, phones, cups, drawings and other removable "
+            "objects are NOT clothing, even when listed in the locked reference or profile. Track their location "
+            "and ownership from story actions and previous scenes. Once put down, removed, handed over or stored, "
+            "they remain in that state until an explicit later action changes it. Never force a backpack back "
+            "onto a character merely to match the reference. Retrieving an item from a bag does not imply wearing it. "
             "Do not add absent characters or change narration to describe clothing. Reject/correct any wardrobe drift.\n")

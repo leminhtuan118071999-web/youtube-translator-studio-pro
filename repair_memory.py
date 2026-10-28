@@ -2,6 +2,7 @@
 import json
 
 RULES = {
+    "prop_continuity": "Removable props follow story actions, not wardrobe locks. Put-down bags stay down until picked up; retrieving an item does not mean wearing the bag.",
     "narrator_delivery": "Narrator always has delivery=off_screen; reported speech stays narration.",
     "character_delivery": "Every character segment has on_screen/off_screen/phone delivery grounded in context; callers never use listeners' mouths.",
     "identity_continuity": "Use exact canonical names and fixed profile appearance in every scene; never swap identities.",
@@ -44,6 +45,7 @@ def classify_issue(issue):
         keys.add("narrator_delivery" if "narrator" in text else "character_delivery")
     for key, terms in {
         "identity_continuity": ("identity", "name", "speaker", "face", "age", "hair"),
+        "prop_continuity": ("backpack", "bag", "prop", "sets it down", "set down", "holding", "retrieval"),
         "wardrobe_continuity": ("wardrobe", "clothing", "outfit", "garment", "áo bà ba"),
         "speech_coverage": ("verbatim", "reported speech", "nested", "duplicate", "quotation"),
         "json_format": ("json",),

@@ -217,11 +217,16 @@ def batch_prompt(plan, scenes, *, style):
     from character_identity import name_contract
     continuity = {
         "profiles": plan.get("character_profiles", []),
+        "previous_completed_visuals": [{"number": s["number"], "visual": s["visual_prompt"]}
+                                       for s in plan["scenes"] if s.get("visual_prompt")
+                                       and s["number"] < min((row["number"] for row in scenes), default=1)][-4:],
         "story_in_order": [{"number": s["number"], "text": s["voiceover"]} for s in plan["scenes"]],
     }
     return (instructions + wardrobe_instruction(plan) + name_contract(plan.get("canonical_character_names", []))
             + "\nCONTINUITY DATA: " + json.dumps(continuity, ensure_ascii=False)
-            + "\nUse the full story to resolve pronouns, quoted speech and speakers across scene boundaries. "
+            + "\nTrack removable prop states through the full story: objects put down stay down until explicitly picked up. "
+            "Story actions override prop/accessory descriptions in fixed profiles and wardrobe references. "
+            "Do not put a removed backpack back on a character. Use the full story to resolve pronouns, quoted speech and speakers across scene boundaries. "
             "Quotation marks alone do NOT mean dialogue: cited sayings, remembered text, letters and reported speech "
             "belong to narrator unless the story explicitly says a character speaks them aloud. "
             "Every narrator segment MUST have delivery=off_screen. For each character speech segment add delivery: on_screen, off_screen, or phone. "
