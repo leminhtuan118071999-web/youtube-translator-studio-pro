@@ -215,6 +215,11 @@ def run_video_forms_job(snapshot, progress):
         if not names:
             names = plan.get("canonical_character_names", []) or profile_names({"characters": plan.get("character_profiles", [])})
         apply_name_lock(plan, names)
+        if snapshot.get("verify_form_language") and plan.get("continuity_version") != 2:
+            for scene in plan.get("scenes", []):
+                for field in ("visual_prompt", "image_prompt", "speech_segments", "transition_to_next"):
+                    scene.pop(field, None)
+        plan["continuity_version"] = 2
         plan["prompt_language"] = "English"
 
         if snapshot.get("auto_form_language"):
@@ -282,6 +287,12 @@ def run_video_forms_job(snapshot, progress):
                 verdict = parse_json_object(call_with_retry(
                     "FORM_LANGUAGE_CHECK. Check that ALL scene visual_prompt text and production instructions are in English. "
                     f"Speech segment text and subtitles must stay verbatim in {snapshot['language']}. "
+                    "Check every scene against the full story and detailed profiles in CONTINUITY DATA: "
+                    "reject changed face, age, hair, build, clothes, relationships or swapped character identities. "
+                    "Quotation marks alone do not imply spoken dialogue. Reported speech, cited sayings and letters "
+                    "must remain narration unless explicitly read aloud. Check delivery for each character segment: "
+                    "phone/off_screen/on_screen. Never assign a remote caller's words to a visible listener; "
+                    "remote voices have no visible lip-sync. Require missing delivery fields to be corrected. "
                     "Verify every named identity in video/image descriptions and speaker labels against the canonical "
                     "profile names in ORIGINAL INPUT. Reject translated names, aliases, missing diacritics, shortened "
                     "names or swapped identities; preserve all verbatim spoken text. "

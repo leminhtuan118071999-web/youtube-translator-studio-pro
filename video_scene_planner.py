@@ -215,7 +215,20 @@ def batch_prompt(plan, scenes, *, style):
     )
     from wardrobe_lock import wardrobe_instruction
     from character_identity import name_contract
-    return instructions + wardrobe_instruction(plan) + name_contract(plan.get("canonical_character_names", []))
+    continuity = {
+        "profiles": plan.get("character_profiles", []),
+        "story_in_order": [{"number": s["number"], "text": s["voiceover"]} for s in plan["scenes"]],
+    }
+    return (instructions + wardrobe_instruction(plan) + name_contract(plan.get("canonical_character_names", []))
+            + "\nCONTINUITY DATA: " + json.dumps(continuity, ensure_ascii=False)
+            + "\nUse the full story to resolve pronouns, quoted speech and speakers across scene boundaries. "
+            "Quotation marks alone do NOT mean dialogue: cited sayings, remembered text, letters and reported speech "
+            "belong to narrator unless the story explicitly says a character speaks them aloud. "
+            "For each character speech segment add delivery: on_screen, off_screen, or phone. "
+            "Phone/remote voices belong to the caller, never to the visible listener. The listener keeps mouth closed. "
+            "An off-screen speaker must not be added to the image. Keep each character's age, face, hair, build, "
+            "outfit and voice identical to their profile through the LAST scene; repeat all relevant details "
+            "inside each image and video prompt. No generic substitutes or identity swapping.")
 
 
 def normalize_speech_segments(scene, segments):
@@ -277,7 +290,7 @@ def repair_speech_segments(scene, segments, call, *, before="", after=""):
                         or type(span.get("end")) is not int or span["start"] != position
                         or not position < span["end"] <= len(voice)):
                     raise ValueError("Mốc phân vai phải liền mạch, đúng phạm vi câu gốc.")
-                result.append(dict(kind=span.get("kind"), speaker=span.get("speaker"),
+                result.append(dict(kind=span.get("kind"), speaker=span.get("speaker"), delivery=span.get("delivery", "on_screen"),
                                    text=voice[position:span["end"]]))
                 position = span["end"]
             if position != len(voice):
@@ -412,6 +425,10 @@ def continuous_video_forms_text(plan):
             for item in segments:
                 label = (("Lời dẫn — người kể" if vietnamese else "Narrator (off-screen)") if item["kind"] == "narrator"
                          else ("Lời thoại — " if vietnamese else "Dialogue — ") + item["speaker"])
+                if item["kind"] == "character":
+                    delivery = item.get("delivery", "on_screen")
+                    if delivery in ("phone", "off_screen"):
+                        label += " (" + delivery + "; voice only, visible listeners silent, no lip-sync)"
                 block += f" | {label}: {item['text']}"
         else:
             block += f" | {voice_label}: {voice}"
