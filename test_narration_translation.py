@@ -7,7 +7,7 @@ from faithful_summary import rewrite_target_script
 class NarrationTests(unittest.TestCase):
     def test_all_original_is_translated_without_9000_limit_or_other_tasks(self):
         cores=[]
-        original='Nora pays 268000 USD. Maisie survives.\n'*400
+        original='Nora pays two hundred sixty-eight thousand USD. Maisie survives.\n'*400
         def provider(p,b,m,k,prompt):
             if prompt.startswith('NARRATION_TRANSLATION'):
                 core=json.loads(prompt.split('SOURCE DATA:\n')[1])['core'];cores.append(core)
@@ -51,10 +51,10 @@ class NarrationTests(unittest.TestCase):
         def call(prompt):
             if prompt.startswith('NARRATION_TRANSLATION'):
                 data=json.loads(prompt.split('SOURCE DATA:\n')[1]);drafts.append(data)
-                return 'Wrong actor' if len(drafts)==1 else 'Nora pays 268000 USD.'
+                return 'Wrong actor' if len(drafts)==1 else 'Nora pays two hundred sixty-eight thousand USD.'
             return ('{"ok":false,"issues":["Wrong payer"],"source_conflicts":[]}' if len(drafts)==1
                     else '{"ok":true,"issues":[],"source_conflicts":[]}')
-        self.assertEqual(rewrite_target_script('Nora pays 268000 USD.','English',call,JobProgress()),'Nora pays 268000 USD.')
+        self.assertEqual(rewrite_target_script('Nora pays two hundred sixty-eight thousand USD.','English',call,JobProgress()),'Nora pays two hundred sixty-eight thousand USD.')
         self.assertEqual(drafts[1]['candidate'],'Wrong actor')
         self.assertIn('Wrong payer',drafts[1]['required_corrections'])
 

@@ -303,7 +303,7 @@ def run_full_job(snapshot, progress):
         verified_checkpoint = (
             isinstance(target_text, str) and bool(target_text.strip())
             and isinstance(review, dict)
-            and review.get("version") == 1
+            and review.get("version") == 2
             and review.get("method") == "full_narration_translation"
             and review.get("target_language") == language
             and review.get("source_sha256") == source_hash(source)

@@ -15,14 +15,14 @@ class TranslationPatchTests(unittest.TestCase):
         def call(prompt):
             if prompt.startswith('NARRATION_TRANSLATION_PATCH'):
                 self.assertIn('must not become',prompt)
-                return json.dumps({'edits':[{'find':'alle 22 e 10','replace':'a 22 minuti e 10'}]})
+                return json.dumps({'edits':[{'find':'alle ventidue e dieci','replace':'a ventidue minuti e dieci'}]})
             if prompt.startswith('NARRATION_TRANSLATION'):
                 drafts.append(prompt)
-                return 'È successo alle 22 e 10. Lei uscì.'
+                return 'È successo alle ventidue e dieci. Lei uscì.'
             reviews.append(prompt)
             return json.dumps({'ok':len(reviews)>3,'issues':[] if len(reviews)>3 else ['Ambiguous minutes became a clock hour.'],'source_conflicts':[]})
         result=translate_narration('At 22 minutes 10 it happened. She left.','Italian',call,Progress())
-        self.assertEqual(result,'È successo a 22 minuti e 10. Lei uscì.')
+        self.assertEqual(result,'È successo a ventidue minuti e dieci. Lei uscì.')
         self.assertEqual(len(drafts),3)
         self.assertEqual(len(reviews),4)
 
