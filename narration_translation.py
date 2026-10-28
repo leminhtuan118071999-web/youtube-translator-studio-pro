@@ -1,8 +1,38 @@
 """Full-source narration translation with reviewed, resumable parts."""
 import json
+from video_scene_planner import parse_json_object
 from faithful_summary import source_hash, source_windows, _review, ReviewFormatError, FACT_RULES
 
 METHOD = 'full_narration_translation'
+
+
+def patch_translation(candidate, source, language, errors, call):
+    data = parse_json_object(call(
+        "NARRATION_TRANSLATION_PATCH. Fix ONLY the identified faithfulness errors using exact substring edits. "
+        "Do not rewrite the full translation. Return ONLY JSON {\"edits\":[{\"find\":\"exact unique substring "
+        "from candidate\",\"replace\":\"correct wording in target language\"}]}. "
+        "Each find must occur exactly once in the candidate. Keep all correct surrounding wording unchanged. "
+        + FACT_RULES + "Target language: " + language + "\nSOURCE DATA:\n" +
+        json.dumps(dict(original=source, candidate=candidate, required_corrections=errors), ensure_ascii=False)
+    ), "edits")
+    edits = data["edits"]
+    if not isinstance(edits, list) or not 1 <= len(edits) <= 8:
+        raise ValueError("Bản sửa cần từ 1 đến 8 thay thế cụ thể.")
+    spans = []
+    for edit in edits:
+        if (not isinstance(edit, dict) or not isinstance(edit.get("find"), str) or not edit["find"]
+                or not isinstance(edit.get("replace"), str) or candidate.count(edit["find"]) != 1):
+            raise ValueError("Bản sửa không khớp duy nhất với bản dịch hiện tại.")
+        start = candidate.index(edit["find"])
+        spans.append((start, start + len(edit["find"]), edit["replace"]))
+    spans.sort()
+    if any(spans[i][1] > spans[i+1][0] for i in range(len(spans)-1)):
+        raise ValueError("Các phần sửa bản dịch bị chồng lên nhau.")
+    for start, end, replacement in reversed(spans):
+        candidate = candidate[:start] + replacement + candidate[end:]
+    if not candidate.strip():
+        raise ValueError("Bản sửa làm rỗng bản dịch.")
+    return candidate
 
 
 def translate_narration(source, language, call, progress):
@@ -57,7 +87,24 @@ def translate_narration(source, language, call, progress):
             except ValueError as exc:
                 errors = str(exc)
         else:
-            raise ValueError(f'Phần {index+1}/{len(parts)} chưa đạt sau 3 lần dịch/sửa: '+errors[:400])
+            for patch_attempt in range(2):
+                progress.check_cancelled()
+                progress.update(10 + int(85 * index/len(parts)),
+                                f'🔧 Đang sửa chi tiết phần {index+1}/{len(parts)}')
+                try:
+                    candidate = patch_translation(candidate, part['core'], language, errors, call)
+                    _review(call, part['core'], candidate, mode='translation',
+                            context=dict(before=part['before'],after=part['after'],target_language=language),
+                            previous=outputs[-1][-600:] if outputs else '')
+                    outputs.append(candidate.strip())
+                    progress.publish('optimization_work_json', json.dumps(dict(identity,parts=outputs),ensure_ascii=False))
+                    break
+                except ReviewFormatError:
+                    raise
+                except ValueError as exc:
+                    errors = str(exc)
+            else:
+                raise ValueError(f'Phần {index+1}/{len(parts)} chưa đạt sau khi dịch và sửa chi tiết: '+errors[:400])
     result = '\n\n'.join(outputs)
     progress.publish('optimization_review_json',json.dumps(dict(identity,output_sha256=source_hash(result),
                       output_characters=len(result),reviewed_parts=len(parts)),ensure_ascii=False))

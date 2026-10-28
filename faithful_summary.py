@@ -16,6 +16,10 @@ FACT_RULES = (
     "separate transactions and object counts distinct. Preserve names; merge "
     "aliases only with source evidence. Do not invent explanations for source "
     "contradictions; retain uncertainty neutrally. "
+    "Do not resolve ambiguous numeric expressions into clock times, dates, durations, currency or counts "
+    "without source evidence. For example, 'at 22 minutes 10' must not become 'at 22:10' or 'at ten past "
+    "ten at night': that invents an hour. Preserve the stated numbers, units and uncertainty, using a "
+    "literal but grammatical target-language expression. "
 )
 
 
