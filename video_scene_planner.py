@@ -224,7 +224,7 @@ def batch_prompt(plan, scenes, *, style):
             + "\nUse the full story to resolve pronouns, quoted speech and speakers across scene boundaries. "
             "Quotation marks alone do NOT mean dialogue: cited sayings, remembered text, letters and reported speech "
             "belong to narrator unless the story explicitly says a character speaks them aloud. "
-            "For each character speech segment add delivery: on_screen, off_screen, or phone. "
+            "Every narrator segment MUST have delivery=off_screen. For each character speech segment add delivery: on_screen, off_screen, or phone. "
             "Phone/remote voices belong to the caller, never to the visible listener. The listener keeps mouth closed. "
             "An off-screen speaker must not be added to the image. Keep each character's age, face, hair, build, "
             "outfit and voice identical to their profile through the LAST scene; repeat all relevant details "
@@ -246,10 +246,10 @@ def normalize_speech_segments(scene, segments):
         speaker = item.get("speaker")
         speaker = speaker.strip() if isinstance(speaker, str) else ""
         if kind in narrators:
-            result.append({**item, "kind":"narrator", "speaker":"narrator"})
+            result.append({**item, "kind":"narrator", "speaker":"narrator", "delivery":"off_screen"})
         elif kind in characters:
             if speaker.casefold() in unknown or speaker.casefold() in narrators:
-                result.append({**item, "kind":"narrator", "speaker":"narrator", "speaker_uncertain":True})
+                result.append({**item, "kind":"narrator", "speaker":"narrator", "delivery":"off_screen", "speaker_uncertain":True})
             else:
                 result.append({**item, "kind":"character", "speaker":speaker})
         else:

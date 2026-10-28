@@ -299,7 +299,9 @@ def run_video_forms_job(snapshot, progress):
                     "Quotation marks alone do not imply spoken dialogue. Reported speech, cited sayings and letters "
                     "must remain narration unless explicitly read aloud. Check delivery for each character segment: "
                     "phone/off_screen/on_screen. Never assign a remote caller's words to a visible listener; "
-                    "remote voices have no visible lip-sync. Require missing delivery fields to be corrected. "
+                    "remote voices have no visible lip-sync. Narrator always has delivery=off_screen. "
+                    "Indirect requests/instructions attributed in narration remain narrator; a phone mentioned in the "
+                    "scene does not make reported speech a phone dialogue. "
                     "Verify every named identity in video/image descriptions and speaker labels against the canonical "
                     "profile names in ORIGINAL INPUT. Reject translated names, aliases, missing diacritics, shortened "
                     "names or swapped identities; preserve all verbatim spoken text. "
@@ -340,7 +342,7 @@ def run_video_forms_job(snapshot, progress):
                         "Preserve all scene numbers, events, identities, physical features and numeric meanings. "
                         "Add/correct image_prompt as an English opening frame matching the same scene. "
                         "Preserve verbatim voiceover words in speech_segments, order, and transition_to_next values. "
-                        'Each speech_segments item MUST be {"kind":"narrator","speaker":"narrator","text":"exact words"} '
+                        'Each speech_segments item MUST be {"kind":"narrator","speaker":"narrator","delivery":"off_screen","text":"exact words"} '
                         'or {"kind":"character","speaker":"exact known name","delivery":"on_screen|off_screen|phone","text":"exact words"}. '
                         "Every character segment MUST include delivery, chosen from on_screen/off_screen/phone using context. "
                         "Return a flat speech_segments array; do not duplicate or nest segments. "

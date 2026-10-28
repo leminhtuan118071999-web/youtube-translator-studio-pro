@@ -32,3 +32,13 @@ class DeliveryRepairTests(unittest.TestCase):
         with self.assertRaises(ValueError):
             repair_speech_segments({'voiceover':'Hello'}, [{'kind':'character','speaker':'Lan','text':'Hello'}], call, require_delivery=True)
         self.assertEqual(len(calls),2)
+
+    def test_narrator_delivery_is_always_off_screen(self):
+        for delivery in (None, "phone", "on_screen"):
+            result = repair_speech_segments(
+                {"voiceover": "Mẹ dặn em về nhà."},
+                [{"kind": "narrator", "speaker": "narrator", "text": "Mẹ dặn em về nhà.", "delivery": delivery}],
+                lambda _: self.fail("narrator requires no AI repair"), require_delivery=True,
+            )
+            self.assertEqual(result[0]["delivery"], "off_screen")
+            self.assertEqual(result[0]["text"], "Mẹ dặn em về nhà.")
