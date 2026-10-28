@@ -3,6 +3,7 @@
 Never import Streamlit or touch st.session_state from a worker thread.
 Jobs and API keys exist in process memory, not persistent storage.
 """
+from youtube_metadata import generate_youtube_metadata
 import json
 import re
 import threading
@@ -333,41 +334,15 @@ def run_full_job(snapshot, progress):
         fields["language"] = language
         progress.publish("language", language)
         # Complete metadata in the same target language after narration succeeds.
-        if not all(isinstance(fields.get(k), str) and fields[k].strip()
-                   for k in ("new_title", "new_description", "seo_tags")):
-            progress.update(96, "📝 Đang dịch tiêu đề, mô tả và từ khóa SEO...")
-            brief = overview(target_text, call, progress) if not title or not description else ""
-            errors = ""
-            for attempt in range(2):
-                try:
-                    data = parse_object(call(
-                        f"TARGET_METADATA. Write ONLY in {language}, preserving proper names. "
-                        "Translate the supplied original title and description faithfully; "
-                        "preserve their meaning, factual claims, numbers and existing links. "
-                        "If either is absent, create that missing field from the story context. "
-                        "Also provide 15 relevant SEO keywords in the target language. "
-                        "Do not invent events, exaggerate claims or add commentary. "
-                        'Return ONLY JSON {"title":"...","description":"...","tags":["..."]}. '
-                        "Previous validation errors: " + errors + "\nSOURCE DATA:\n" +
-                        json.dumps({"original_title": title, "original_description": description,
-                                    "story_context": brief}, ensure_ascii=False)
-                    ), "title")
-                    values = (data.get("title"), data.get("description"), data.get("tags"))
-                    if (any(not isinstance(v, str) or not v.strip() for v in values[:2])
-                            or not isinstance(values[2], list) or not values[2]
-                            or any(not isinstance(t, str) or not t.strip() for t in values[2])):
-                        raise ValueError("Tiêu đề, mô tả hoặc danh sách từ khóa SEO bị thiếu/sai định dạng.")
-                    new_title, new_description = (v.strip() for v in values[:2])
-                    tags = ", ".join(t.strip() for t in values[2])
-                    break
-                except ValueError as exc:
-                    errors = str(exc)
-            else:
-                raise ValueError("Chưa dịch được tiêu đề, mô tả và SEO: " + errors)
-            fields.update(new_title=new_title, new_description=new_description,
-                          seo_tags=tags, metadata="\n\n".join((new_title, new_description, tags)))
-            for name in ("new_title", "new_description", "seo_tags", "metadata"):
-                progress.publish(name, fields[name])
+        progress.update(96, "📝 Đang tối ưu tiêu đề, mô tả và tag theo ngôn ngữ đích...")
+        brief = overview(target_text, call, progress)
+        new_title, new_description, tags = generate_youtube_metadata(
+            brief, title, description, language, call,
+        )
+        fields.update(new_title=new_title, new_description=new_description,
+                      seo_tags=tags, metadata="\n\n".join((new_title, new_description, tags)))
+        for name in ("new_title", "new_description", "seo_tags", "metadata"):
+            progress.publish(name, fields[name])
         result["ok"] = True
         progress.update(100, "✅ Hoàn thành bản dịch giọng đọc, tiêu đề, mô tả và SEO")
         return result

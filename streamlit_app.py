@@ -1455,25 +1455,9 @@ def load_json_answer(raw, expected):
 
 
 def create_target_metadata(script, original_title, original_description, target_language):
-    brief = story_overview(script)
-    result = ai(
-        f"Soạn nội dung YouTube chính xác và tự nhiên hoàn toàn bằng {target_language}. "
-        "Tiêu đề: nếu có tiêu đề gốc hãy dịch sát và diễn đạt hấp dẫn, không thêm tình tiết. "
-        "Mô tả: giữ đúng nhân vật, sự kiện, không bịa; dùng icon/emoji phù hợp vừa phải. "
-        "SEO: tạo 15 từ khóa thật liên quan bằng ngôn ngữ đích. "
-        'Chỉ trả JSON: {"title":"...", "description":"...", "tags":["...", "..."]}, '
-        "không markdown.\n"
-        f"Tiêu đề gốc: {original_title}\nMô tả gốc: {original_description}\n"
-        f"Nội dung video:\n{brief}"
-    )
-    data = load_json_answer(result, "title")
-    title = str(data.get("title", "")).strip()
-    description = str(data.get("description", "")).strip()
-    tags = data.get("tags", [])
-    tags = ", ".join(str(item).strip() for item in tags) if isinstance(tags, list) else str(tags).strip()
-    if not title or not description or not tags:
-        raise ValueError("AI trả về thiếu tiêu đề, mô tả hoặc từ khóa SEO.")
-    return title, description, tags
+    from youtube_metadata import generate_youtube_metadata
+    return generate_youtube_metadata(story_overview(script), original_title,
+                                     original_description, target_language, ai)
 
 
 if test_api:

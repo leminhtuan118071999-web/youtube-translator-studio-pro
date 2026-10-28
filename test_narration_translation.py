@@ -14,6 +14,7 @@ class NarrationTests(unittest.TestCase):
                 return core
             if prompt.startswith('Summarize') or prompt.startswith('Condense'):
                 return 'Nora pays to save Maisie.'
+            if prompt.startswith('TARGET_METADATA_REVIEW'): return '{"ok":true,"issues":[]}'
             if prompt.startswith('TARGET_METADATA'):
                 return '{"title":"Rescue","description":"Nora saves Maisie.","tags":["rescue"]}'
             self.assertTrue(prompt.startswith('FAITHFULNESS_REVIEW'))
@@ -33,6 +34,8 @@ class NarrationTests(unittest.TestCase):
             prompts.append(prompt)
             if prompt.startswith('NARRATION_TRANSLATION'): return 'Nora uratowała Maisie.'
             if prompt.startswith('FAITHFULNESS_REVIEW'): return '{"ok":true,"issues":[],"source_conflicts":[]}'
+            if prompt.startswith('TARGET_METADATA_REVIEW'): return '{"ok":true,"issues":[]}'
+            if prompt.startswith('Summarize') or prompt.startswith('Condense'): return 'Nora uratowała Maisie.'
             self.assertTrue(prompt.startswith('TARGET_METADATA'))
             self.assertIn('Polish',prompt)
             data=json.loads(prompt.split('SOURCE DATA:\n')[1])
