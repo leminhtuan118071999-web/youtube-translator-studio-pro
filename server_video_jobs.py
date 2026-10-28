@@ -8,6 +8,7 @@ of uninterrupted processing after a Streamlit Cloud worker restart.
 from character_identity import profile_names, name_contract, apply_name_lock, validate_speaker_spelling
 from wardrobe_lock import apply_wardrobe_lock
 from video_character_profiles import prepare_video_profiles
+from scene_visual_repair import visual_issue_numbers, repair_visuals
 from repair_memory import RepairMemory
 import json
 import re
@@ -280,7 +281,7 @@ def run_video_forms_job(snapshot, progress):
                     row["visual_prompt"] = plan["character_bible"] + "\n\n" + row["visual_prompt"]
             raw = json.dumps(parsed, ensure_ascii=False)
             errors = ""
-            for attempt in range(2):
+            for attempt in range(3):
                 progress.check_cancelled()
                 try:
                     normalized = parse_json_object(raw, "scenes")
@@ -358,7 +359,11 @@ def run_video_forms_job(snapshot, progress):
                 memory.observe(verdict.get("issues", ""))
                 save_memory()
                 errors = str(verdict.get("issues", "Invalid verdict"))[:1200]
-                if attempt == 0:
+                if attempt < 2:
+                    rows = parse_json_object(raw, "scenes")["scenes"]
+                    if visual_issue_numbers(verdict.get("issues"), rows):
+                        raw = json.dumps({"scenes": repair_visuals(rows, verdict["issues"], prompt, call_with_retry)}, ensure_ascii=False)
+                        continue
                     raw = call_with_retry(
                         "Correct the visual_prompt language into English and fix speech attribution using original input. "
                         "Preserve all scene numbers, events, identities, physical features and numeric meanings. "
