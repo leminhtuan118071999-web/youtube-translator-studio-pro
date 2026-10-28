@@ -284,7 +284,7 @@ def run_video_forms_job(snapshot, progress):
                         if original_scene is None:
                             raise ValueError("Sai số thứ tự form.")
                         row["speech_segments"] = repair_speech_segments(
-                            original_scene, row.get("speech_segments"), call_with_retry,
+                            original_scene, row.get("speech_segments"), call_with_retry, require_delivery=True,
                             before=next((s["voiceover"] for s in plan["scenes"] if s["number"] == original_scene["number"]-1), ""),
                             after=next((s["voiceover"] for s in plan["scenes"] if s["number"] == original_scene["number"]+1), ""),
                         )
@@ -324,6 +324,9 @@ def run_video_forms_job(snapshot, progress):
                             if original_scene is None:
                                 raise ValueError("Sai số thứ tự form.")
                             validate_speech_segments(original_scene, row.get("speech_segments"))
+                            for segment in row["speech_segments"]:
+                                if segment["kind"] == "character" and segment.get("delivery") not in ("on_screen", "off_screen", "phone"):
+                                    raise ValueError("Lời thoại còn thiếu delivery hợp lệ.")
                             if not isinstance(row.get("image_prompt"), str) or not row["image_prompt"].strip():
                                 raise ValueError("Missing image_prompt for the matching opening frame.")
                     except (ValueError, TypeError, AttributeError) as exc:
@@ -338,7 +341,9 @@ def run_video_forms_job(snapshot, progress):
                         "Add/correct image_prompt as an English opening frame matching the same scene. "
                         "Preserve verbatim voiceover words in speech_segments, order, and transition_to_next values. "
                         'Each speech_segments item MUST be {"kind":"narrator","speaker":"narrator","text":"exact words"} '
-                        'or {"kind":"character","speaker":"exact known name","text":"exact words"}. '
+                        'or {"kind":"character","speaker":"exact known name","delivery":"on_screen|off_screen|phone","text":"exact words"}. '
+                        "Every character segment MUST include delivery, chosen from on_screen/off_screen/phone using context. "
+                        "Return a flat speech_segments array; do not duplicate or nest segments. "
                         "For an unknown speaker use narrator, never guess a name. Return ONLY JSON. "
                         "Issues: " + errors + "\nDATA:\n" + raw + "\nORIGINAL INPUT:\n" + prompt)
             raise ValueError("Form chưa đạt ngôn ngữ/phân vai lời nói sau khi tự sửa: " + errors)

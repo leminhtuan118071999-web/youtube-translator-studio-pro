@@ -258,10 +258,17 @@ def normalize_speech_segments(scene, segments):
     return result
 
 
-def repair_speech_segments(scene, segments, call, *, before="", after=""):
+def repair_speech_segments(scene, segments, call, *, before="", after="", require_delivery=False):
     """Repair role metadata with source offsets; never ask AI to rewrite speech."""
+    def checked(items):
+        result = normalize_speech_segments(scene, items)
+        if require_delivery:
+            for item in result:
+                if item["kind"] == "character" and item.get("delivery") not in ("on_screen", "off_screen", "phone"):
+                    raise ValueError("Lời thoại thiếu delivery: on_screen, off_screen hoặc phone; xác định từ ngữ cảnh.")
+        return result
     try:
-        return normalize_speech_segments(scene, segments)
+        return checked(segments)
     except ValueError as exc:
         error = str(exc)
     voice = scene.get("voiceover", "")
@@ -277,7 +284,10 @@ def repair_speech_segments(scene, segments, call, *, before="", after=""):
                 "Use character ONLY for explicit direct speech with a named speaker established by original/context. "
                 "A quoted fragment may start in the previous scene; use adjacent context to keep the speaker. "
                 'Return ONLY JSON {"segments":[{"start":0,"end":10,"kind":"narrator","speaker":"narrator"}]}. '
-                "For character use kind=character and the exact name. No guessed names. "
+                "For character use kind=character, exact speaker name and REQUIRED delivery "
+                "(on_screen, off_screen or phone). Infer delivery from source/context: phone voices belong "
+                "to remote callers, never the visible listener. No guessed identities. "
+                "Return a flat segments array, never nest segments inside another segment. "
                 "Previous error: " + error + "\nSOURCE DATA:\n" + json.dumps(
                     dict(source=voice, length=len(voice), before=before, after=after), ensure_ascii=False)
             ), "segments")
@@ -290,12 +300,12 @@ def repair_speech_segments(scene, segments, call, *, before="", after=""):
                         or type(span.get("end")) is not int or span["start"] != position
                         or not position < span["end"] <= len(voice)):
                     raise ValueError("Mốc phân vai phải liền mạch, đúng phạm vi câu gốc.")
-                result.append(dict(kind=span.get("kind"), speaker=span.get("speaker"), delivery=span.get("delivery", "on_screen"),
+                result.append(dict(kind=span.get("kind"), speaker=span.get("speaker"), delivery=span.get("delivery"),
                                    text=voice[position:span["end"]]))
                 position = span["end"]
             if position != len(voice):
                 raise ValueError("Phân vai chưa phủ hết câu gốc.")
-            return normalize_speech_segments(scene, result)
+            return checked(result)
         except ValueError as exc:
             error = str(exc)
     raise ValueError("Chưa sửa được phân vai của form " + str(scene.get("number", "")) + ": " + error)
