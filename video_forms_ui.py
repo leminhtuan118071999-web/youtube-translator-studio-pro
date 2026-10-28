@@ -212,8 +212,6 @@ def render_video_forms(session, sid, language, *, ai, api_key,
         st.progress(ratio, text=label)
     if plan is None or stale:
         return
-    if plan.get("audio_duration_seconds") and plan.get("alignment_warning"):
-        st.warning(plan["alignment_warning"])
     pass
     if plan.get("speech_stats"):
         stats = plan["speech_stats"]
