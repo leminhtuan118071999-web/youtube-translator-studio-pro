@@ -212,7 +212,7 @@ def render_video_forms(session, sid, language, *, ai, api_key,
         st.progress(ratio, text=label)
     if plan is None or stale:
         return
-    if plan.get("alignment_warning"):
+    if plan.get("audio_duration_seconds") and plan.get("alignment_warning"):
         st.warning(plan["alignment_warning"])
     pass
     if plan.get("speech_stats"):
@@ -230,7 +230,7 @@ def render_video_forms(session, sid, language, *, ai, api_key,
         f"Đã viết {done}/{len(scenes)} form • mỗi form 8 giây • "
         f"tổng thời lượng dự kiến: {len(scenes) * 8} giây."
     )
-    if plan.get("end_padding_seconds", 0) > 0:
+    if plan.get("audio_duration_seconds") and plan.get("end_padding_seconds", 0) > 0:
         st.caption(
             f"Dự kiến dư {plan['end_padding_seconds']:.1f} giây ở cuối: "
             "phần hình dài hơn giọng đọc."
