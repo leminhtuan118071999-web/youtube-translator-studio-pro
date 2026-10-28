@@ -17,7 +17,7 @@ from video_scene_planner import InvalidFormJSON, source_fingerprint, validate_sp
 from api_clients import generate_text
 from provider_retries import retry_transient_provider
 from groq_pacing import groq_request_gate
-from video_scene_planner import character_bible_prompt, parse_json_object, add_scene_subtitles
+from video_scene_planner import narration_plan, character_bible_prompt, parse_json_object, add_scene_subtitles
 from voice_alignment import duration_weighted_plan
 from video_forms_ui import _generate_all_remaining, _completed_count
 
@@ -172,11 +172,14 @@ def run_video_forms_job(snapshot, progress):
         if existing:
             plan = existing
         else:
-            progress.update(0, "🎧 Ước tính số form theo thời lượng audio")
-            plan = duration_weighted_plan(
-                snapshot["translated"], snapshot["language"],
-                snapshot["duration_seconds"],
-            )
+            progress.update(0, "🎬 Đang tính số form")
+            if snapshot.get("duration_seconds"):
+                plan = duration_weighted_plan(
+                    snapshot["translated"], snapshot["language"], snapshot["duration_seconds"],
+                )
+            else:
+                plan = narration_plan(snapshot["translated"], snapshot["language"])
+                plan["alignment_warning"] = "Thời lượng và số form được ước tính từ bản dịch, chưa căn theo audio thực tế."
             plan["audio_sha256"] = snapshot["audio_hash"]
             plan["audio_filename"] = snapshot["audio_name"]
             bible = snapshot.get("character_bible", "").strip()

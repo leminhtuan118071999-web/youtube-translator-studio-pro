@@ -38,7 +38,7 @@ class AutomaticProfilesTests(unittest.TestCase):
             self.assertEqual(build.call_args.kwargs["canonical_names"], [])
 
     def test_worker_profiles_precede_forms_and_publish(self):
-        snapshot = dict(self.snapshot, auto_character_profiles=True, duration_seconds=8,
+        snapshot = dict(self.snapshot, auto_character_profiles=True, duration_seconds=None,
                         audio_hash="x", audio_name="voice", existing_plan=None, character_bible="Old", cloud=None)
         events = []
         def build(*args, **kwargs):
@@ -52,5 +52,8 @@ class AutomaticProfilesTests(unittest.TestCase):
             outcome = run_video_forms_job(snapshot, JobProgress())
         self.assertTrue(outcome["ok"], outcome["error"])
         self.assertEqual(events, ["profiles", "forms"])
+        plan = json.loads(outcome["fields"]["video_forms"])
+        self.assertIsNone(plan["audio_duration_seconds"])
+        self.assertIn("ước tính", plan["alignment_warning"])
         self.assertEqual(json.loads(outcome["fields"]["character_profile_json"])["characters"][0]["name"], "Lan")
         self.assertEqual(json.loads(outcome["fields"]["video_forms"])["canonical_character_names"], ["Lan"])

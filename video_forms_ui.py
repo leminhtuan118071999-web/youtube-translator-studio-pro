@@ -105,11 +105,6 @@ def render_video_forms(session, sid, language, *, ai, api_key,
         key=f"video_style_{sid}",
     )
     pass
-    upload = st.file_uploader(
-        "🎧 Tải file giọng đọc cuối cùng (bắt buộc)",
-        type=["mp3", "wav", "m4a", "ogg"],
-        key=f"video_audio_{sid}",
-    )
     character_bible = str(session.get("character_bible") or "").strip()
     raw_plan = session.get("video_forms", "")
     if not character_bible and isinstance(raw_plan, str) and raw_plan:
@@ -151,33 +146,6 @@ def render_video_forms(session, sid, language, *, ai, api_key,
                     st.code(locked, language=None, wrap_lines=True)
             except (ValueError, TypeError, AttributeError):
                 pass
-    seconds = None
-    audio_error = False
-    audio_hash = None
-    if upload is not None:
-        try:
-            if upload.size > MAX_AUDIO_BYTES:
-                raise ValueError("File trên 25 MB. Hãy nén hoặc chia nhỏ audio.")
-            seconds = _audio_duration(upload)
-            audio_hash = hashlib.sha256(upload.getvalue()).hexdigest()
-            st.audio(upload)
-            voice_stats = speech_statistics(translated, seconds)
-            st.info(
-                f"🎞️ Tự tính: {voice_stats['form_count']} form × 8 giây = "
-                f"{voice_stats['video_duration_seconds']} giây. "
-                f"Giọng đọc: {seconds:.2f} giây; "
-                f"bản dịch {voice_stats['translated_word_count']} từ, "
-                f"trung bình {voice_stats['words_per_8s']} từ/form; "
-                f"tốc độ ước tính {voice_stats['average_wpm']} từ/phút; "
-                f"dư {voice_stats['padding_seconds']} giây ở cuối."
-            )
-            if voice_stats["pacing_notice"]:
-                st.warning(voice_stats["pacing_notice"])
-        except (ValueError, TypeError, OSError) as exc:
-            st.error(f"Không đọc được file giọng đọc: {exc}")
-            audio_error = True
-    else:
-        pass
     plan = None
     if session.get("video_forms"):
         try:
@@ -187,16 +155,14 @@ def render_video_forms(session, sid, language, *, ai, api_key,
         except (ValueError, TypeError):
             pass
     source_hash = source_fingerprint(translated, language)
-    stale = plan is not None and (plan.get("source_hash") != source_hash
-            or (audio_hash is not None and plan.get("audio_sha256") != audio_hash))
+    stale = plan is not None and plan.get("source_hash") != source_hash
     if stale:
         st.warning(
-            "Bản dịch, ngôn ngữ hoặc file giọng đọc đã thay đổi. "
+            "Bản dịch hoặc ngôn ngữ đã thay đổi. "
             "Nhấn Tạo form 8 giây theo giọng đọc để tự đồng bộ."
         )
-    saved_audio_available = bool(plan and plan.get("audio_duration_seconds"))
     cannot_generate = (
-        audio_error or (upload is None and not saved_audio_available) or not translated
+        not translated
         or session.get("job_state") == "running"
         or session.get("video_job_state") == "running"
     )
@@ -212,21 +178,13 @@ def render_video_forms(session, sid, language, *, ai, api_key,
             st.error("Tác vụ tạo form trên máy chủ chưa được khởi tạo.")
         else:
             try:
-                # Sending duration and translated text is sufficient. Do not
-                # upload audio or call a speech transcription API.
-                same_audio = plan is not None and (upload is None or plan.get("audio_sha256") == audio_hash)
-                saved_plan = (plan if same_audio and _completed_count(plan) < len(plan["scenes"])
+                saved_plan = (plan if plan is not None and not stale
+                              and _completed_count(plan) < len(plan["scenes"])
                               and plan.get("style") == style else None)
-                if upload is None and saved_audio_available:
-                    seconds = plan["audio_duration_seconds"]
-                    audio_hash = plan.get("audio_sha256", "")
-                    audio_name = plan.get("audio_filename", "speech")
-                else:
-                    audio_name = upload.name if upload is not None else "speech"
                 launch_video_job(
-                    (saved_plan.get("audio_duration_seconds") if saved_plan else seconds),
-                    (saved_plan.get("audio_sha256") if saved_plan else audio_hash),
-                    (saved_plan.get("audio_filename", "") if saved_plan else audio_name),
+                    (saved_plan.get("audio_duration_seconds") if saved_plan else None),
+                    (saved_plan.get("audio_sha256") if saved_plan else ""),
+                    (saved_plan.get("audio_filename", "") if saved_plan else ""),
                     translated, language, style,
                     character_bible,
                     json.dumps(saved_plan, ensure_ascii=False) if saved_plan else None,
