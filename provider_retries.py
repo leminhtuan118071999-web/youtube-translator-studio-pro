@@ -5,6 +5,19 @@ from time import sleep as _sleep
 from api_clients import TransientProviderError
 
 
+def transient_retry_delay(attempt, retry_after=None):
+    """Back off long enough for gateway recovery, with a bounded server hint."""
+    delay = 15.0 * (2 ** min(max(attempt, 0), 3))
+    if retry_after is not None:
+        try:
+            stated = float(retry_after)
+            if math.isfinite(stated) and stated >= 0:
+                delay = max(delay, stated)
+        except (ValueError, TypeError, OverflowError):
+            pass
+    return min(180.0, delay)
+
+
 def retry_transient_provider(operation, *, report=None, wait=None, max_retries=3):
     """Retry only the failed request; leave completed chunks and caller data alone.
 
@@ -28,15 +41,7 @@ def retry_transient_provider(operation, *, report=None, wait=None, max_retries=3
                     "nhà cung cấp/gateway trong Cấu hình API.",
                     status_code=exc.status_code, retry_after=exc.retry_after,
                 ) from exc
-            delay = 3.0 * (2 ** attempt)
-            if exc.retry_after is not None:
-                try:
-                    stated = float(exc.retry_after)
-                    if math.isfinite(stated) and stated >= 0:
-                        delay = stated
-                except (ValueError, TypeError):
-                    pass
-            delay = min(180.0, max(1.0, delay))
+            delay = transient_retry_delay(attempt, exc.retry_after)
             if report:
                 report(
                     f"⏳ API tạm lỗi HTTP {exc.status_code}. "

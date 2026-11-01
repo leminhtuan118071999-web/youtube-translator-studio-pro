@@ -14,6 +14,7 @@ import requests
 from youtube_transcript_api import YouTubeTranscriptApi
 
 from api_clients import RateLimitError, TransientProviderError, generate_text
+from provider_retries import transient_retry_delay
 from groq_pacing import groq_request_gate
 from faithful_summary import (optimize_source_script, MAX_OPTIMIZED_SCRIPT_CHARS,
                               COMPATIBLE_OPTIMIZATION_VERSIONS, source_hash, translate_part_faithfully,
@@ -219,6 +220,8 @@ def run_full_job(snapshot, progress):
                     f"tự thử lại {rate_attempt}/6",
                 )
             except TransientProviderError as exc:
+                if exc.status_code not in (502, 503, 504):
+                    raise
                 # Only retry a temporary upstream failure, not bad credentials,
                 # unsupported models, or client errors. Limit duplicate POSTs
                 # because a failed gateway response may hide a successful billable
@@ -232,15 +235,7 @@ def run_full_job(snapshot, progress):
                         "hãy thử lại sau hoặc chọn API khác. " + str(exc)
                     ) from exc
                 upstream_attempt += 1
-                pause = min(
-                    40.0,
-                    max(
-                        2.0,
-                        float(exc.retry_after)
-                        if exc.retry_after is not None
-                        else 3.0 * (2 ** (upstream_attempt - 1)),
-                    ),
-                )
+                pause = transient_retry_delay(upstream_attempt - 1, exc.retry_after)
                 _wait_for_retry(
                     pause,
                     f"⏳ Gateway HTTP {exc.status_code}: "
