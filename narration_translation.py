@@ -5,6 +5,15 @@ from video_scene_planner import parse_json_object
 from faithful_summary import source_hash, source_windows, _review, ReviewFormatError, FACT_RULES
 
 METHOD = 'full_narration_translation'
+COMPACT_RULES = (
+    'Use concise, natural target-language narration. Translate each source proposition exactly once. '
+    'Do not add explanations, emotional commentary, rhetorical filler, repeated descriptions or recaps. '
+    'Do not expand a short original sentence into several sentences that repeat its meaning. '
+    'Preserve every distinct event, action, relationship, dialogue and numeric meaning; do not summarize. '
+    'Use ordinary pronouns when unambiguous rather than repeatedly expanding names and relationships. '
+    'Allow necessary grammatical differences and number-to-word expansion; do not force equal character counts. '
+)
+
 NUMBER_WORDS_RULE = (
     'Write ALL numeric expressions in words in the target language, with no decimal digits. '
     'This includes quantities, ages, money, percentages, dates, times, decimals, fractions, '
@@ -36,7 +45,7 @@ def patch_translation(candidate, source, language, errors, call):
         "Do not rewrite the full translation. Return ONLY JSON {\"edits\":[{\"find\":\"exact unique substring "
         "from candidate\",\"replace\":\"correct wording in target language\"}]}. "
         "Each find must occur exactly once in the candidate. Keep all correct surrounding wording unchanged. "
-        + FACT_RULES + NUMBER_WORDS_RULE + "Target language: " + language + "\nSOURCE DATA:\n" +
+        + FACT_RULES + NUMBER_WORDS_RULE + COMPACT_RULES + "Target language: " + language + "\nSOURCE DATA:\n" +
         json.dumps(dict(original=source, candidate=candidate, required_corrections=errors), ensure_ascii=False)
     ), "edits")
     edits = data["edits"]
@@ -65,7 +74,7 @@ def translate_narration(source, language, call, progress):
     source = source.strip()
     if len(source) > 350000:
         raise ValueError('Văn bản gốc vượt 350.000 ký tự; hãy chia nhỏ.')
-    identity = dict(method=METHOD, version=2, source_sha256=source_hash(source), target_language=language)
+    identity = dict(method=METHOD, version=2, narration_style='concise_v1', source_sha256=source_hash(source), target_language=language)
     parts = source_windows(source, limit=3500)
     try:
         saved = json.loads(progress.partial_result().get('optimization_work_json') or '{}')
@@ -90,7 +99,7 @@ def translate_narration(source, language, call, progress):
                 'No summarizing, selecting a subplot, abridging, added scenes or character limit. '
                 'Return ONLY the translated narration, without headings, notes, markdown or stage directions. '
                 'Improve grammar, punctuation and clear pronoun references only where original evidence permits. '
-                'Do not invent resolutions of source contradictions. '+FACT_RULES+NUMBER_WORDS_RULE+
+                'Do not invent resolutions of source contradictions. '+FACT_RULES+NUMBER_WORDS_RULE+COMPACT_RULES+
                 'Adjacent text is reference only; translate core exactly once. '
                 'If candidate is supplied, minimally correct ONLY the identified problems, retaining correct wording. '
                 'Keep the same names and narrative tense as the preceding accepted translation.\nSOURCE DATA:\n'+
@@ -102,7 +111,7 @@ def translate_narration(source, language, call, progress):
                     raise ValueError('Bản dịch rỗng; hãy dịch đầy đủ đoạn gốc.')
                 candidate = spell_narration_numbers(candidate, language, call)
                 _review(call,part['core'],candidate,mode='translation',
-                        context=dict(before=part['before'],after=part['after'],target_language=language),
+                        context=dict(before=part['before'],after=part['after'],target_language=language, concision_requirements=COMPACT_RULES),
                         previous=outputs[-1][-600:] if outputs else '')
                 outputs.append(candidate.strip())
                 progress.publish('optimization_work_json', json.dumps(dict(identity,parts=outputs),ensure_ascii=False))
@@ -120,7 +129,7 @@ def translate_narration(source, language, call, progress):
                     candidate = patch_translation(candidate, part['core'], language, errors, call)
                     candidate = spell_narration_numbers(candidate, language, call)
                     _review(call, part['core'], candidate, mode='translation',
-                            context=dict(before=part['before'],after=part['after'],target_language=language),
+                            context=dict(before=part['before'],after=part['after'],target_language=language, concision_requirements=COMPACT_RULES),
                             previous=outputs[-1][-600:] if outputs else '')
                     outputs.append(candidate.strip())
                     progress.publish('optimization_work_json', json.dumps(dict(identity,parts=outputs),ensure_ascii=False))
