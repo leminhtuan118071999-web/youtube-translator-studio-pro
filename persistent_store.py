@@ -9,6 +9,7 @@ import json
 import re
 import time
 import uuid
+from urllib.parse import quote
 
 import requests
 from cryptography.fernet import Fernet, InvalidToken
@@ -139,6 +140,49 @@ def _user_headers(anon, session):
         "Authorization": "Bearer " + session["access_token"],
         "Content-Type": "application/json",
     }
+
+
+def send_password_recovery(secrets, email, redirect_to):
+    """Request a Supabase password-recovery email without revealing account existence."""
+    url, anon, _ = get_config(secrets)
+    normalized_email = str(email or "").strip().lower()
+    if not normalized_email or "@" not in normalized_email:
+        raise ValueError("Hãy nhập địa chỉ email hợp lệ.")
+    redirect = str(redirect_to or "").strip().rstrip("/")
+    if not re.fullmatch(r"https://[A-Za-z0-9.-]+(?::[0-9]+)?", redirect):
+        raise ValueError("Địa chỉ chuyển hướng khôi phục mật khẩu không hợp lệ.")
+    endpoint = url + "/auth/v1/recover?redirect_to=" + quote(redirect, safe="")
+    return _request(
+        "POST", endpoint, _anon_headers(anon),
+        json={"email": normalized_email},
+    )
+
+
+def verify_recovery_token(secrets, token_hash):
+    """Exchange a one-time recovery token hash for a short-lived user session."""
+    url, anon, _ = get_config(secrets)
+    token = str(token_hash or "").strip()
+    if not token or len(token) > 1024:
+        raise ValueError("Liên kết khôi phục mật khẩu không hợp lệ hoặc đã hết hạn.")
+    data = _request(
+        "POST", url + "/auth/v1/verify", _anon_headers(anon),
+        json={"token_hash": token, "type": "recovery"},
+    )
+    if not isinstance(data, dict) or not data.get("access_token"):
+        raise RuntimeError("Không xác minh được liên kết khôi phục mật khẩu.")
+    return _auth_details(data)
+
+
+def update_password(secrets, session, new_password):
+    """Update the password using the verified recovery session's user JWT."""
+    url, anon, _ = get_config(secrets)
+    password = str(new_password or "")
+    if len(password) < 8:
+        raise ValueError("Mật khẩu mới phải có ít nhất 8 ký tự.")
+    return _request(
+        "PUT", url + "/auth/v1/user", _user_headers(anon, session),
+        json={"password": password},
+    )
 
 
 def normalize_sessions(raw):
