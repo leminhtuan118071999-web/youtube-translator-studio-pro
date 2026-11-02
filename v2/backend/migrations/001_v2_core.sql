@@ -275,3 +275,24 @@ comment on table public.lmt_v2_user_settings is
     'Encrypted provider configuration; encrypted_config uses the existing V1 Fernet key until verified rotation.';
 comment on table public.lmt_v2_jobs is
     'Durable V2 job queue; worker mutations occur only through private server-side database credentials.';
+
+-- V2 image import permissions. The bucket remains private. Authenticated users
+-- may upload/replace/delete only objects in their own UUID prefix.
+create policy "lmt_v2_portraits_insert_own" on storage.objects
+    for insert to authenticated with check (
+        bucket_id = 'lmt-character-images'
+        and (storage.foldername(name))[1] = (select auth.uid())::text
+    );
+create policy "lmt_v2_portraits_update_own" on storage.objects
+    for update to authenticated using (
+        bucket_id = 'lmt-character-images'
+        and (storage.foldername(name))[1] = (select auth.uid())::text
+    ) with check (
+        bucket_id = 'lmt-character-images'
+        and (storage.foldername(name))[1] = (select auth.uid())::text
+    );
+create policy "lmt_v2_portraits_delete_own" on storage.objects
+    for delete to authenticated using (
+        bucket_id = 'lmt-character-images'
+        and (storage.foldername(name))[1] = (select auth.uid())::text
+    );
