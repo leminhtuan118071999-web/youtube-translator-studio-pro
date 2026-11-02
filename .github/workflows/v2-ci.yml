@@ -4,6 +4,7 @@ on:
   push:
     branches:
       - "v2/**"
+      - "main"
     paths:
       - "v2/**"
       - ".github/workflows/v2-ci.yml"
@@ -13,7 +14,7 @@ on:
       - ".github/workflows/v2-ci.yml"
 
 permissions:
-  contents: write
+  contents: read
 
 jobs:
   frontend:
@@ -40,21 +41,24 @@ jobs:
           fi
       - run: npm run typecheck
       - run: npm run build
-      - name: Commit generated package lockfile once
-        if: github.event_name == 'push' && github.ref == 'refs/heads/v2/rebuild-foundation'
-        working-directory: .
-        run: |
-          git config user.name "github-actions[bot]"
-          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
-          git add v2/frontend/package-lock.json
-          if ! git diff --cached --quiet; then
-            git commit -m "chore: lock V2 frontend dependencies"
-            git push
-          fi
 
   backend:
     name: Backend tests
     runs-on: ubuntu-latest
+    services:
+      postgres:
+        image: postgres:17
+        env:
+          POSTGRES_USER: postgres
+          POSTGRES_PASSWORD: ci-disposable-password
+          POSTGRES_DB: lmt_test
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd "pg_isready -U postgres"
+          --health-interval 5s --health-timeout 5s --health-retries 10
+    env:
+      TEST_DATABASE_URL: postgresql://postgres:ci-disposable-password@localhost:5432/lmt_test
     defaults:
       run:
         working-directory: v2/backend
@@ -67,3 +71,6 @@ jobs:
           cache-dependency-path: v2/backend/requirements.txt
       - run: pip install -r requirements.txt
       - run: pytest -q
+      - name: Regression tests for shared production engines
+        working-directory: .
+        run: python -m unittest -q test_narration_translation test_narration_numbers test_youtube_metadata test_persistent_store test_durable_queue test_character_profiles test_character_identity test_wardrobe_lock test_speech_roles

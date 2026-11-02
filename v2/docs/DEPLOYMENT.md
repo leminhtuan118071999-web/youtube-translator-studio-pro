@@ -1,41 +1,78 @@
-# V2 deployment guide
+# Deploy and replace V1
 
-V2 is deployed independently from V1. Do not change the V1 Streamlit URL during this stage.
+## Services
 
-## 1. Deploy the FastAPI backend on Render
+Deploy the committed `v2/render.yaml` Blueprint from the existing repository.
+Select the intended branch/commit and set the Blueprint path to `v2/render.yaml`.
+All three services are defined as always-on paid `0.5c-512mb` instances. Review the
+current Render quotation before applying; the repository does not provision or
+charge resources by itself. Reuse the existing Supabase project/database.
 
-1. Open the Render dashboard and create a new Blueprint/Web Service from the GitHub repository.
-2. Select branch `v2/rebuild-foundation` and configuration file `v2/render.yaml`.
-3. Set the environment variables in Render:
-   - `SUPABASE_URL`: the existing Supabase project URL.
-   - `SUPABASE_PUBLISHABLE_KEY`: the existing project's publishable key.
-   - `SESSION_ENCRYPTION_KEY`: the exact Fernet key currently configured in V1 Streamlit Secrets. Copy it directly from the private secret store; do not paste it into chat or GitHub.
-   - `CORS_ORIGINS`: the V2 Vercel domain, without a trailing slash.
-4. Deploy and check `https://<render-service-domain>/health`.
+The API/worker build from the repository root. Do not set their root directory
+to `v2/backend` or the shared V1 engines will be missing. The frontend uses
+`v2/frontend` as its root.
 
-The Render service in the initial blueprint uses the free web-service plan and may sleep when idle. It is sufficient for the initial authentication and migration dry-run API. Durable AI jobs will use a separate worker service in a later phase.
+## Environment
 
-## 2. Deploy the frontend on Vercel
+Frontend (public, baked into build):
 
-1. Import the same GitHub repository into Vercel.
-2. Select branch `v2/rebuild-foundation`.
-3. Set Root Directory to `v2/frontend`.
-4. Add environment variables:
-   - `NEXT_PUBLIC_SUPABASE_URL`: the existing Supabase project URL.
-   - `NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY`: the existing publishable key.
-   - `NEXT_PUBLIC_API_BASE_URL`: the Render API base URL, without a trailing slash.
-5. Deploy the preview URL. Do not assign the V1 production domain yet.
+- `NEXT_PUBLIC_SUPABASE_URL`: existing Supabase URL.
+- `NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY`: existing publishable/anon key.
+- `NEXT_PUBLIC_API_BASE_URL`: the new HTTPS API URL, without trailing slash.
 
-## 3. Verify identity and V1 compatibility
+API (private server environment):
 
-1. Open the V2 preview URL.
-2. Sign in using the existing Supabase account. Do not create a duplicate user.
-3. Confirm the dashboard displays the same account and UID as V1.
-4. Click **Chạy kiểm tra tương thích**.
-5. Confirm the report finds the legacy row, validates all sessions, and decrypts the legacy provider configuration successfully.
+- `SUPABASE_URL`, `SUPABASE_PUBLISHABLE_KEY` for authentication and owner-signed Storage reads.
+- `DATABASE_URL`: private Supabase PostgreSQL/pooler DSN with SSL.
+- `SESSION_ENCRYPTION_KEY`: exact Fernet key from V1; never generate a substitute.
+- `CORS_ORIGINS`: comma-separated exact frontend HTTPS origins.
+- `SUPABASE_SERVICE_ROLE_KEY`: required for reference-image capability checks.
 
-If the report says `legacy_encryption_key_missing` or `legacy_encryption_verification_failed`, stop. Re-check the private Render `SESSION_ENCRYPTION_KEY` value against the V1 Streamlit secret. Never rotate or regenerate it during migration.
+Worker (private server environment):
 
-## 4. Production cutover
+- Same `DATABASE_URL` and `SESSION_ENCRYPTION_KEY`.
+- `SUPABASE_URL`, `SUPABASE_SERVICE_ROLE_KEY` to persist images. No browser token
+  or refresh token is stored in a job; it continues after the user's login expires.
 
-Production cutover is a separate, later approval. It requires a successful data import, image checks, feature regression tests, worker restart tests and a verified rollback procedure. Until then, V1 remains the production app.
+Keep DSNs, service-role keys and Fernet keys out of all frontend env vars, logs
+and source control. Provider credentials are configured by the user after sign-in
+or imported from V1, encrypted at rest and copied encrypted into each job.
+
+Add the actual frontend URL and `/auth/callback` to Supabase Auth redirect URLs.
+Password recovery uses `/auth/callback?next=/reset-password`. The callback permits
+only the dashboard or reset route as its destination. Do not change existing V1
+redirect URLs while V1 is needed.
+
+## Database
+
+Run the V1 compatibility dry-run with the correct Fernet key. Review and apply
+`001_v2_core.sql`, then `002_v2_runtime.sql`. These are additive SQL files; do not
+run them repeatedly or edit/remove V1 migrations. RLS remains enabled and no
+Storage bucket becomes public. Keep the existing private `lmt-character-images`
+bucket and its owner prefix.
+
+`DATABASE_URL` is a privileged **server-only** connection for atomic transactions.
+FastAPI validates the bearer token with Supabase before it issues owner-bound
+queries. Worker methods use job IDs plus owner IDs, revision checks, lease tokens
+and lease expiry. Direct browser access is constrained separately by RLS; encrypted
+settings, raw import snapshots and job ciphertexts are not public-readable.
+
+## Acceptance before switching the public URL
+
+1. API `/health` is live; sign-in uses the same V1 user UUID.
+2. Dry-run succeeds; import session counts/checksums reconcile. Re-run the import
+   and confirm no duplicate sessions or changed V2 edits/settings.
+3. Verify every required image reference. Export any V1 in-memory images before
+   stopping Streamlit. Database import does not import ZIPs downloaded locally.
+4. Use a short real story to check translation, number spelling, SEO, profiles,
+   wardrobe continuity, paired prompts, subtitles and image download.
+5. Close the browser while a job runs. Confirm checkpoint and completion after
+   reopening. Restart the worker mid-job and verify lease recovery.
+6. Edit/delete/cancel a running session and confirm no old result returns.
+7. Point the intended public URL at the V2 frontend only after these pass. Record
+   the live Render deploy IDs and exact commit. Streamlit cannot serve Next.js.
+
+No production deployment or cutover is implied by a passing local build or GitHub
+merge. Rollback: route traffic back to V1; keep V2 tables and snapshots for audit.
+V1 data/Auth/Storage objects remain intact. Do not remove V1 until its rollback
+window and in-memory image preservation have been completed.

@@ -108,3 +108,41 @@ a { color: inherit; text-decoration: none; }
   .migration-result-head { align-items: flex-start; flex-direction: column; }
   .auth-card { padding: 26px; }
 }
+/* V2 production workspace */
+button, a, input, textarea, select { -webkit-tap-highlight-color: transparent; }
+button:focus-visible, a:focus-visible { outline: 2px solid var(--accent); outline-offset: 3px; }
+.studio-shell .sidebar { gap: 12px; }
+.session-search, .editor-panel input, .editor-panel textarea, .editor-panel select { width: 100%; border: 1px solid var(--border); border-radius: 9px; padding: 11px 13px; color: var(--text); background: #0b111b; font: inherit; }
+.editor-panel textarea { resize: vertical; line-height: 1.7; }
+.editor-panel input:focus, .editor-panel textarea:focus, .editor-panel select:focus { outline: 1px solid var(--accent); }
+.session-list { flex: 1; min-height: 60px; overflow-y: auto; }
+.session-item { width: 100%; display: grid; text-align: left; gap: 6px; padding: 13px; border: 1px solid transparent; border-radius: 9px; color: #bcc9db; background: none; cursor: pointer; }
+.session-item span { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.session-item small { color: var(--muted); font-size: 10px; padding-left: 18px; }
+.session-item.active { border-color: #34547d; background: #1b2b40; color: white; }
+.studio-tabs { display: flex; flex-wrap: wrap; gap: 5px; border-bottom: 1px solid var(--border); margin-bottom: 24px; padding-bottom: 12px; }
+.studio-tabs button { padding: 10px 13px; border: 0; border-radius: 8px; background: transparent; color: var(--muted); cursor: pointer; }
+.studio-tabs button.active { color: white; background: #243c5c; }
+.editor-panel { border: 1px solid var(--border); background: var(--panel); border-radius: 16px; padding: clamp(18px,3vw,32px); margin-top: 20px; }
+.editor-panel h2 { margin-top: 0; font-size: 21px; }
+.editor-panel label { display: grid; gap: 9px; margin: 15px 0; color: #c5d2e4; font-size: 13px; }
+.form-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 0 20px; }
+.toolbar { display: flex; align-items: center; gap: 12px; flex-wrap: wrap; margin: 14px 0; }
+.toolbar .primary-button { margin-top: 0; }
+.editor-panel pre { white-space: pre-wrap; overflow-wrap: anywhere; padding: 18px; background: #0b121d; border-radius: 10px; line-height: 1.7; font: 13px/1.8 ui-monospace,monospace; }
+.editor-panel details { margin: 18px 0; }
+.editor-panel summary { cursor: pointer; color: var(--accent); padding: 12px 0; }
+.file-label { max-width: 420px; }
+.save-banner { display: flex; gap: 15px; justify-content: space-between; align-items: center; padding: 15px; background: #3a2e15; border: 1px solid #78602a; border-radius: 10px; font-size: 12px; }
+.worker-hint { font-size: 12px; }
+.job-card { border: 1px solid var(--border); border-radius: 10px; padding: 18px; margin-top: 15px; }
+.job-card progress { width: 100%; accent-color: var(--accent); height: 8px; }
+.job-card small { color: var(--muted); }
+.danger { color: #ff9c9c; }
+.image-grid { display: grid; grid-template-columns: repeat(auto-fill,minmax(180px,1fr)); gap: 15px; }
+.image-grid img { width: 100%; border-radius: 10px; }
+.image-grid span { display: block; padding: 10px 0; font-size: 13px; }
+.ai33-frame { width: 100%; height: 70vh; border: 1px solid var(--border); margin-top: 25px; border-radius: 10px; background: white; }
+@media (max-width:700px) { .form-grid { grid-template-columns: 1fr; } .session-list { max-height: 180px; } .studio-shell .sidebar-footer { display: block; } .save-banner { align-items: flex-start; flex-direction: column; } }
+.thumbnail-preview { display: flex; align-items: center; gap: 20px; padding: 18px 0; flex-wrap: wrap; }
+.thumbnail-preview img { width: 220px; border-radius: 10px; }

@@ -1,11 +1,29 @@
+# Deploy as a Blueprint from the repository root; Blueprint path v2/render.yaml.
+# Configure secrets privately in Render. This file does not create services.
 services:
+  - type: web
+    name: lmt-studio-pro-v2-web
+    runtime: node
+    plan: 0.5c-512mb
+    rootDir: v2/frontend
+    buildCommand: npm ci --no-audit --no-fund && npm run build
+    startCommand: npm run start -- --hostname 0.0.0.0 --port $PORT
+    healthCheckPath: /login
+    envVars:
+      - key: NODE_VERSION
+        value: "22"
+      - key: NEXT_PUBLIC_SUPABASE_URL
+        sync: false
+      - key: NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY
+        sync: false
+      - key: NEXT_PUBLIC_API_BASE_URL
+        sync: false
   - type: web
     name: lmt-studio-pro-v2-api
     runtime: python
-    plan: free
-    rootDir: v2/backend
-    buildCommand: pip install -r requirements.txt
-    startCommand: uvicorn app.main:app --host 0.0.0.0 --port $PORT
+    plan: 0.5c-512mb
+    buildCommand: pip install -r v2/backend/requirements.txt
+    startCommand: uvicorn app.main:app --app-dir v2/backend --host 0.0.0.0 --port $PORT
     healthCheckPath: /health
     envVars:
       - key: PYTHON_VERSION
@@ -16,5 +34,26 @@ services:
         sync: false
       - key: SESSION_ENCRYPTION_KEY
         sync: false
+      - key: DATABASE_URL
+        sync: false
       - key: CORS_ORIGINS
+        sync: false
+      - key: SUPABASE_SERVICE_ROLE_KEY
+        sync: false
+  - type: worker
+    name: lmt-studio-pro-v2-worker
+    runtime: python
+    plan: 0.5c-512mb
+    buildCommand: pip install -r v2/backend/requirements.txt
+    startCommand: cd v2/backend && python -m app.worker
+    envVars:
+      - key: PYTHON_VERSION
+        value: "3.12.15"
+      - key: SESSION_ENCRYPTION_KEY
+        sync: false
+      - key: DATABASE_URL
+        sync: false
+      - key: SUPABASE_URL
+        sync: false
+      - key: SUPABASE_SERVICE_ROLE_KEY
         sync: false

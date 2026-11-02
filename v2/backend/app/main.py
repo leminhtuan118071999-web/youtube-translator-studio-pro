@@ -89,3 +89,20 @@ async def legacy_migration_dry_run(user: AuthenticatedUser = Depends(require_use
         "legacy_updated_at": row.get("updated_at"),
         **report,
     }
+
+# Runtime endpoints are synchronous where they use PostgreSQL/legacy engines;
+# FastAPI runs them in its threadpool, keeping the event loop available.
+from .routes import router
+from fastapi.responses import JSONResponse
+from psycopg import Error as DatabaseError
+app.include_router(router)
+
+@app.exception_handler(DatabaseError)
+async def database_error(request, exc):
+    # Never return connection strings, SQL, encrypted keys or provider content.
+    return JSONResponse(status_code=503, content={'detail': 'Kho dữ liệu V2 chưa sẵn sàng. Kiểm tra kết nối và migration trên máy chủ.'})
+
+from fastapi.exceptions import RequestValidationError
+@app.exception_handler(RequestValidationError)
+async def validation_error(request, exc):
+    return JSONResponse(status_code=422, content={'detail': 'Dữ liệu yêu cầu không hợp lệ. Kiểm tra kiểu và giới hạn các trường.'})

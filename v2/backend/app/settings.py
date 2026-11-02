@@ -7,6 +7,8 @@ class Settings(BaseSettings):
     supabase_url: str = ""
     supabase_publishable_key: str = ""
     session_encryption_key: str = ""
+    database_url: str = ""
+    supabase_service_role_key: str = ""
     cors_origins: str = "http://localhost:3000"
 
     model_config = SettingsConfigDict(
