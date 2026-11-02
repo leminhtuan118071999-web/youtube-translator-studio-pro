@@ -15,6 +15,7 @@ V2 is a clean rebuild alongside V1. It does not replace or modify the existing S
 
 - `frontend/`: Next.js App Router UI and Supabase SSR authentication.
 - `backend/`: FastAPI service for authenticated AI workflows and orchestration.
+- `backend/migrations/`: reviewed, additive V2 SQL drafts. These files are not automatically applied.
 - `docs/`: architecture and migration notes.
 
 ## Local development
@@ -49,7 +50,9 @@ Backend:
 
 ## Migration status
 
-The first V2 commit intentionally contains no production database migration and does not write to the existing Supabase project. Authentication uses the same Supabase Auth service, so an existing user signs in with the same account and receives the same UID.
+The first V2 commits intentionally contain no production database migration execution. The SQL draft is version-controlled only; it has not been run against the existing Supabase project. Authentication uses the same Supabase Auth service, so an existing user signs in with the same account and receives the same UID.
+
+The read-only endpoint `GET /v1/migration/legacy/dry-run` inspects the signed-in user's V1 row through their JWT/RLS and returns counts and validation results only. It does not return session content or decrypted API credentials.
 
 Before importing legacy data, the migration tool must:
 1. Read the signed-in user's V1 `youtube_studio_state` row under that user's JWT/RLS.
@@ -68,7 +71,13 @@ The existing private `lmt-character-images` bucket is retained. V2 must preserve
 - [x] V2 branch created.
 - [x] Initial frontend/backend scaffold.
 - [x] Existing Supabase project and legacy schema audited read-only.
-- [ ] Legacy import adapter and dry-run report.
+- [x] Read-only V1 compatibility audit endpoint.
+- [x] Additive V2 SQL schema draft with owner-scoped RLS policies.
+- [x] CI workflow for frontend typecheck/build and backend tests.
+- [ ] Generate and commit frontend lockfile.
+- [ ] Run CI and fix any build/test findings.
+- [ ] Run dry-run using the existing V1 Fernet key.
+- [ ] Complete import adapter and verify all sessions/settings/images.
 - [ ] Translation, SEO, video-form and character workflows.
 - [ ] Durable queue and independent worker.
 - [ ] End-to-end tests and deployment.
