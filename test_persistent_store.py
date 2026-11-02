@@ -9,7 +9,8 @@ from persistent_store import (
     restore_widget_settings, activate_provider_settings,
     activate_shared_api_settings, remember_widget_settings,
     save_user, settings_from_widgets, snapshot_hash,
-    sign_in, refresh_auth,
+    sign_in, refresh_auth, send_password_recovery,
+    verify_recovery_token, update_password,
 )
 
 
@@ -230,6 +231,52 @@ class PersistentStoreTests(unittest.TestCase):
         self.secrets["SUPABASE_ANON_KEY"] = "sb_secret_must_not_use"
         with self.assertRaises(ValueError):
             get_config(self.secrets)
+
+    @patch("persistent_store._request")
+    def test_password_recovery_request_uses_redirect_and_normalized_email(self, call):
+        send_password_recovery(
+            self.secrets, "  ME@EXAMPLE.COM ",
+            "https://youtube-translator-studio-pro.streamlit.app",
+        )
+        method, endpoint, headers = call.call_args.args
+        self.assertEqual(method, "POST")
+        self.assertIn("/auth/v1/recover?redirect_to=", endpoint)
+        self.assertIn(
+            "https%3A%2F%2Fyoutube-translator-studio-pro.streamlit.app",
+            endpoint,
+        )
+        self.assertEqual(call.call_args.kwargs["json"], {"email": "me@example.com"})
+        self.assertNotIn("Authorization", headers)
+
+    @patch("persistent_store._request")
+    def test_recovery_token_is_exchanged_for_user_session(self, call):
+        call.return_value = {
+            "user": {"id": self.uid, "email": "me@example.com"},
+            "access_token": "recovery-access",
+            "refresh_token": "recovery-refresh",
+            "expires_in": 3600,
+        }
+        identity = verify_recovery_token(self.secrets, "one-time-hash")
+        self.assertEqual(identity["user_id"], self.uid)
+        self.assertEqual(identity["access_token"], "recovery-access")
+        self.assertEqual(call.call_args.args[0], "POST")
+        self.assertTrue(call.call_args.args[1].endswith("/auth/v1/verify"))
+        self.assertEqual(
+            call.call_args.kwargs["json"],
+            {"token_hash": "one-time-hash", "type": "recovery"},
+        )
+
+    @patch("persistent_store._request")
+    def test_password_update_uses_verified_user_jwt(self, call):
+        update_password(self.secrets, self.auth, "new-secure-password")
+        method, endpoint, headers = call.call_args.args
+        self.assertEqual(method, "PUT")
+        self.assertTrue(endpoint.endswith("/auth/v1/user"))
+        self.assertEqual(headers["Authorization"], "Bearer session-jwt")
+        self.assertEqual(
+            call.call_args.kwargs["json"],
+            {"password": "new-secure-password"},
+        )
 
     @patch("persistent_store._request")
     def test_login_uses_auth_endpoint(self, call):
