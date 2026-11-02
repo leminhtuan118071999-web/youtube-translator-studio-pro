@@ -95,7 +95,13 @@ def inspect_legacy_state(
     if not selected_session_valid:
         warnings.append("selected_session_missing_or_invalid")
 
-    encrypted_config = encrypted_config or ""
+    if encrypted_config is None:
+        encrypted_config = ""
+    elif not isinstance(encrypted_config, str):
+        errors.append("legacy_encrypted_config_invalid_type")
+        encrypted_config = ""
+
+    config_hash = hashlib.sha256(encrypted_config.encode("utf-8")).hexdigest()
     encryption_verified = not bool(encrypted_config)
     provider_setting_count = 0
     unknown_setting_count = 0
@@ -141,6 +147,7 @@ def inspect_legacy_state(
         "warnings": warnings,
         "legacy_payload_version": version,
         "legacy_payload_sha256": payload_hash,
+        "legacy_encrypted_config_sha256": config_hash,
         "session_count": session_count,
         "saved_session_count": saved_session_count,
         "invalid_session_id_count": invalid_session_ids,

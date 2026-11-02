@@ -51,10 +51,11 @@ def test_invalid_session_identifier_is_reported():
     payload = {
         "version": 1,
         "workspaces": {"not-a-session-id": {"saved": True}},
-        "selected_session": "not-a-session-id",
+        "selected_session": {"unexpected": "object"},
     }
 
     report = inspect_legacy_state(payload, "", "")
 
     assert report["ready_for_import"] is False
     assert report["invalid_session_id_count"] == 1
+    assert report["selected_session_valid"] is False

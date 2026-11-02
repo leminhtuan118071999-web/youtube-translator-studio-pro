@@ -10,6 +10,7 @@ create table if not exists public.lmt_v2_legacy_imports (
     source_version integer not null default 1,
     source_updated_at timestamptz,
     source_payload_sha256 text not null,
+    source_config_sha256 text not null,
     raw_payload jsonb not null check (jsonb_typeof(raw_payload) = 'object'),
     encrypted_config text not null default '',
     validation_report jsonb not null default '{}'::jsonb,
@@ -17,7 +18,7 @@ create table if not exists public.lmt_v2_legacy_imports (
         check (status in ('inspected', 'ready', 'imported', 'failed')),
     created_at timestamptz not null default now(),
     imported_at timestamptz,
-    unique (user_id, source_payload_sha256)
+    unique (user_id, source_payload_sha256, source_config_sha256)
 );
 
 create table if not exists public.lmt_v2_user_settings (
@@ -145,11 +146,11 @@ begin
     end loop;
 end $$;
 
-grant select, insert, update, delete on public.lmt_v2_legacy_imports to authenticated;
-grant select, insert, update, delete on public.lmt_v2_user_settings to authenticated;
+grant select, insert, update on public.lmt_v2_legacy_imports to authenticated;
+grant select, insert, update on public.lmt_v2_user_settings to authenticated;
 grant select, insert, update, delete on public.lmt_v2_projects to authenticated;
 grant select, insert, update, delete on public.lmt_v2_sessions to authenticated;
-grant select, insert, update, delete on public.lmt_v2_artifacts to authenticated;
+grant select, insert, delete on public.lmt_v2_artifacts to authenticated;
 grant select, insert, update, delete on public.lmt_v2_characters to authenticated;
 grant select, insert on public.lmt_v2_jobs to authenticated;
 grant select on public.lmt_v2_worker_health to authenticated;
@@ -183,10 +184,28 @@ create policy "lmt_v2_projects_delete_own" on public.lmt_v2_projects
 create policy "lmt_v2_sessions_select_own" on public.lmt_v2_sessions
     for select to authenticated using ((select auth.uid()) = user_id);
 create policy "lmt_v2_sessions_insert_own" on public.lmt_v2_sessions
-    for insert to authenticated with check ((select auth.uid()) = user_id);
+    for insert to authenticated with check (
+        (select auth.uid()) = user_id
+        and (
+            project_id is null
+            or exists (
+                select 1 from public.lmt_v2_projects p
+                where p.id = project_id and p.user_id = (select auth.uid())
+            )
+        )
+    );
 create policy "lmt_v2_sessions_update_own" on public.lmt_v2_sessions
     for update to authenticated using ((select auth.uid()) = user_id)
-    with check ((select auth.uid()) = user_id);
+    with check (
+        (select auth.uid()) = user_id
+        and (
+            project_id is null
+            or exists (
+                select 1 from public.lmt_v2_projects p
+                where p.id = project_id and p.user_id = (select auth.uid())
+            )
+        )
+    );
 create policy "lmt_v2_sessions_delete_own" on public.lmt_v2_sessions
     for delete to authenticated using ((select auth.uid()) = user_id);
 
@@ -215,7 +234,13 @@ create policy "lmt_v2_characters_insert_own" on public.lmt_v2_characters
     );
 create policy "lmt_v2_characters_update_own" on public.lmt_v2_characters
     for update to authenticated using ((select auth.uid()) = user_id)
-    with check ((select auth.uid()) = user_id);
+    with check (
+        (select auth.uid()) = user_id
+        and exists (
+            select 1 from public.lmt_v2_sessions s
+            where s.id = session_id and s.user_id = (select auth.uid())
+        )
+    );
 create policy "lmt_v2_characters_delete_own" on public.lmt_v2_characters
     for delete to authenticated using ((select auth.uid()) = user_id);
 
@@ -232,6 +257,13 @@ create policy "lmt_v2_jobs_insert_own" on public.lmt_v2_jobs
         and lease_token is null
         and lease_expires_at is null
         and finished_at is null
+        and (
+            session_id is null
+            or exists (
+                select 1 from public.lmt_v2_sessions s
+                where s.id = session_id and s.user_id = (select auth.uid())
+            )
+        )
     );
 
 create policy "lmt_v2_worker_health_select_authenticated" on public.lmt_v2_worker_health
