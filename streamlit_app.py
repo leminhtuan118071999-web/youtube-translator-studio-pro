@@ -31,6 +31,7 @@ from background_registry import JobRegistry
 from transcript_sources import parse_uploaded_subtitles
 from persistent_store import (
     backup_state, configured, get_config, sign_in, sign_up,
+    send_password_recovery, verify_recovery_token, update_password,
     load_user, refresh_auth, save_user, settings_from_widgets,
     remember_widget_settings, activate_provider_settings,
     activate_shared_api_settings, restore_widget_settings,
@@ -199,8 +200,176 @@ def _refresh_login():
     return updated
 
 
+PASSWORD_RECOVERY_REDIRECT_URL = (
+    "https://youtube-translator-studio-pro.streamlit.app"
+)
+
+
+def _clear_password_recovery_query():
+    # The token hash is one-time and must not remain visible in the address bar.
+    for parameter in ("token_hash", "type"):
+        try:
+            if parameter in st.query_params:
+                del st.query_params[parameter]
+        except Exception:
+            pass
+
+
+def _render_password_recovery():
+    identity = st.session_state.get("_password_recovery_auth")
+    if not identity:
+        return False
+
+    st.subheader("🔐 Đặt lại mật khẩu LMT Studio Pro")
+    st.info("Liên kết khôi phục đã được xác minh. Hãy tạo mật khẩu mới.")
+    with st.form("studio_set_new_password"):
+        new_password = st.text_input(
+            "Mật khẩu mới (tối thiểu 8 ký tự)",
+            type="password", key="recovery_new_password",
+        )
+        confirm_password = st.text_input(
+            "Nhập lại mật khẩu mới",
+            type="password", key="recovery_confirm_password",
+        )
+        submit_new_password = st.form_submit_button(
+            "Cập nhật mật khẩu", use_container_width=True,
+        )
+
+    if submit_new_password:
+        if len(new_password) < 8:
+            st.error("Mật khẩu mới phải có ít nhất 8 ký tự.")
+        elif new_password != confirm_password:
+            st.error("Hai mật khẩu không khớp. Vui lòng nhập lại.")
+        else:
+            try:
+                update_password(_cloud_secrets(), identity, new_password)
+                st.session_state.pop("_password_recovery_auth", None)
+                st.session_state["_password_recovery_completed"] = True
+                st.session_state.pop("recovery_new_password", None)
+                st.session_state.pop("recovery_confirm_password", None)
+                st.rerun()
+            except Exception as exc:
+                st.error(f"Không thể cập nhật mật khẩu: {exc}")
+
+    if st.button("Quay lại đăng nhập", key="cancel_password_recovery"):
+        st.session_state.pop("_password_recovery_auth", None)
+        st.rerun()
+    return True
+
+
 if CLOUD_ENABLED:
+    # Supabase recovery emails are configured to return a one-time token_hash
+    # in the query string. Exchange it once, then immediately remove it from URL.
+    recovery_token_hash = str(st.query_params.get("token_hash", "") or "").strip()
+    recovery_type = str(st.query_params.get("type", "") or "").strip()
+    if recovery_token_hash and recovery_type == "recovery":
+        if not st.session_state.get("_password_recovery_auth"):
+            try:
+                st.session_state["_password_recovery_auth"] = verify_recovery_token(
+                    _cloud_secrets(), recovery_token_hash
+                )
+            except Exception as exc:
+                st.session_state["_password_recovery_error"] = str(exc)
+            finally:
+                _clear_password_recovery_query()
+
+    if _render_password_recovery():
+        st.stop()
+
     if not st.session_state.get("cloud_auth"):
+        st.info(
+            "🔐 Cần đăng nhập để tiếp tục."
+        )
+        if st.session_state.pop("_password_recovery_completed", False):
+            st.success("Mật khẩu đã được cập nhật. Hãy đăng nhập bằng mật khẩu mới.")
+        recovery_error = st.session_state.pop("_password_recovery_error", None)
+        if recovery_error:
+            st.error(f"Không thể xác minh liên kết khôi phục: {recovery_error}")
+
+        sign_in_tab, create_account_tab = st.tabs(
+            ["🔑 Đăng nhập", "➕ Tạo tài khoản"]
+        )
+        with sign_in_tab:
+            with st.form("studio_sign_in"):
+                login_email = st.text_input("Email đăng nhập", key="login_email")
+                login_password = st.text_input(
+                    "Mật khẩu", type="password", key="login_password"
+                )
+                do_login = st.form_submit_button(
+                    "Đăng nhập và mở phiên đã lưu", use_container_width=True
+                )
+            if do_login:
+                try:
+                    identity = sign_in(_cloud_secrets(), login_email, login_password)
+                    profile, api_config = load_user(_cloud_secrets(), identity)
+                    st.session_state.cloud_auth = identity
+                    st.session_state["_cloud_restore"] = {
+                        "profile": profile, "api": api_config
+                    }
+                    st.rerun()
+                except Exception as exc:
+                    st.error(f"Không thể đăng nhập/tải dữ liệu: {exc}")
+
+            with st.expander("🔑 Quên mật khẩu?"):
+                with st.form("studio_password_recovery_request"):
+                    recovery_email = st.text_input(
+                        "Email nhận liên kết khôi phục",
+                        value=st.session_state.get("login_email", ""),
+                        key="recovery_email",
+                    )
+                    request_recovery = st.form_submit_button(
+                        "Gửi liên kết đặt lại mật khẩu",
+                        use_container_width=True,
+                    )
+                if request_recovery:
+                    try:
+                        send_password_recovery(
+                            _cloud_secrets(), recovery_email,
+                            PASSWORD_RECOVERY_REDIRECT_URL,
+                        )
+                        st.success(
+                            "Nếu email tồn tại trong hệ thống, Supabase sẽ gửi "
+                            "liên kết đặt lại mật khẩu. Hãy kiểm tra cả thư mục Spam."
+                        )
+                    except Exception as exc:
+                        st.error(f"Không thể gửi email khôi phục: {exc}")
+
+        with create_account_tab:
+            with st.form("studio_sign_up"):
+                new_email = st.text_input("Email", key="signup_email")
+                new_password = st.text_input(
+                    "Mật khẩu (tối thiểu 8 ký tự)",
+                    type="password", key="signup_password"
+                )
+                register = st.form_submit_button(
+                    "Tạo tài khoản", use_container_width=True
+                )
+            if register:
+                if len(new_password) < 8:
+                    st.error("Mật khẩu phải có ít nhất 8 ký tự.")
+                else:
+                    try:
+                        sign_up(_cloud_secrets(), new_email, new_password)
+                        st.success(
+                            "Đã gửi yêu cầu tạo tài khoản. Nếu Supabase yêu cầu "
+                            "xác nhận email, hãy kiểm tra hộp thư rồi đăng nhập."
+                        )
+                    except Exception as exc:
+                        st.error(str(exc))
+        st.stop()
+    try:
+        _refresh_login()
+    except Exception as exc:
+        st.error(
+            f"Phiên đăng nhập hoặc kết nối lưu trữ có vấn đề: {exc}. "
+            "Hãy đăng xuất rồi đăng nhập lại."
+        )
+        if st.button("Đăng xuất và đăng nhập lại"):
+            st.session_state.clear()
+            st.rerun()
+        st.stop()
+
+
         st.info(
             "🔐 Cần đăng nhập để tiếp tục."
         )
