@@ -88,9 +88,12 @@ def inspect_legacy_state(
         errors.append("legacy_session_records_invalid")
 
     selected_session = payload.get("selected_session")
-    selected_session_valid = selected_session is None or selected_session in workspaces
+    selected_session_valid = (
+        selected_session is None
+        or (isinstance(selected_session, str) and selected_session in workspaces)
+    )
     if not selected_session_valid:
-        warnings.append("selected_session_missing_from_workspaces")
+        warnings.append("selected_session_missing_or_invalid")
 
     encrypted_config = encrypted_config or ""
     encryption_verified = not bool(encrypted_config)
@@ -112,8 +115,11 @@ def inspect_legacy_state(
                 encryption_verified = True
                 for name, value in settings.items():
                     allowed = (
-                        name in ALLOWED_EXACT
-                        or any(name.startswith(prefix) for prefix in ALLOWED_PREFIXES)
+                        isinstance(name, str)
+                        and (
+                            name in ALLOWED_EXACT
+                            or any(name.startswith(prefix) for prefix in ALLOWED_PREFIXES)
+                        )
                     )
                     if not allowed:
                         unknown_setting_count += 1
