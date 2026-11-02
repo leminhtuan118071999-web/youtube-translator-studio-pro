@@ -370,67 +370,6 @@ if CLOUD_ENABLED:
         st.stop()
 
 
-        st.info(
-            "🔐 Cần đăng nhập để tiếp tục."
-        )
-        sign_in_tab, create_account_tab = st.tabs(
-            ["🔑 Đăng nhập", "➕ Tạo tài khoản"]
-        )
-        with sign_in_tab:
-            with st.form("studio_sign_in"):
-                login_email = st.text_input("Email đăng nhập", key="login_email")
-                login_password = st.text_input(
-                    "Mật khẩu", type="password", key="login_password"
-                )
-                do_login = st.form_submit_button(
-                    "Đăng nhập và mở phiên đã lưu", use_container_width=True
-                )
-            if do_login:
-                try:
-                    identity = sign_in(_cloud_secrets(), login_email, login_password)
-                    profile, api_config = load_user(_cloud_secrets(), identity)
-                    st.session_state.cloud_auth = identity
-                    st.session_state["_cloud_restore"] = {
-                        "profile": profile, "api": api_config
-                    }
-                    st.rerun()
-                except Exception as exc:
-                    st.error(f"Không thể đăng nhập/tải dữ liệu: {exc}")
-        with create_account_tab:
-            with st.form("studio_sign_up"):
-                new_email = st.text_input("Email", key="signup_email")
-                new_password = st.text_input(
-                    "Mật khẩu (tối thiểu 8 ký tự)",
-                    type="password", key="signup_password"
-                )
-                register = st.form_submit_button(
-                    "Tạo tài khoản", use_container_width=True
-                )
-            if register:
-                if len(new_password) < 8:
-                    st.error("Mật khẩu phải có ít nhất 8 ký tự.")
-                else:
-                    try:
-                        sign_up(_cloud_secrets(), new_email, new_password)
-                        st.success(
-                            "Đã gửi yêu cầu tạo tài khoản. Nếu Supabase yêu cầu "
-                            "xác nhận email, hãy kiểm tra hộp thư rồi đăng nhập."
-                        )
-                    except Exception as exc:
-                        st.error(str(exc))
-        st.stop()
-    try:
-        _refresh_login()
-    except Exception as exc:
-        st.error(
-            f"Phiên đăng nhập hoặc kết nối lưu trữ có vấn đề: {exc}. "
-            "Hãy đăng xuất rồi đăng nhập lại."
-        )
-        if st.button("Đăng xuất và đăng nhập lại"):
-            st.session_state.clear()
-            st.rerun()
-        st.stop()
-
 
 def _restore_cloud_profile():
     pending = st.session_state.pop("_cloud_restore", None)
