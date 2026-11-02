@@ -300,7 +300,7 @@ def run_full_job(snapshot, progress):
             isinstance(target_text, str) and bool(target_text.strip())
             and isinstance(review, dict)
             and review.get("version") == 2
-            and review.get("narration_style") == "concise_v1"
+            and review.get("narration_style") == "single_narrator_indirect_v1"
             and review.get("method") == "full_narration_translation"
             and review.get("target_language") == language
             and review.get("source_sha256") == source_hash(source)

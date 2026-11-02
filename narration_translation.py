@@ -6,6 +6,19 @@ from video_scene_planner import parse_json_object
 from faithful_summary import source_hash, source_windows, _review, ReviewFormatError, FACT_RULES
 
 METHOD = 'full_narration_translation'
+SINGLE_NARRATOR_RULES = (
+    'Use ONE continuous narrator voice suitable for text-to-speech. Convert ALL character speech '
+    'and quoted inner speech into indirect reported narration in the target language. '
+    'Do not output direct dialogue, speaker-name labels, quoted spoken lines, roleplay or voice/stage instructions. '
+    'Preserve who spoke or thought, whom they addressed, exact intent, emotion supported by the source, '
+    'questions, commands, promises, threats, negation, uncertainty and each revelation or strong hook. '
+    'Adjust pronouns, tense and time/place references naturally without changing their referents or chronology. '
+    'A character claim, lie, suspicion or question must remain attributed and must never become a narrator-confirmed fact. '
+    'Preserve all dialogue content as indirect speech rather than summarizing or deleting it. '
+    'Keep quoted names, document titles or literal evidence only when needed for factual precision; '
+    'these are not permission to retain direct character dialogue. '
+)
+
 COMPACT_RULES = (
     'Use concise, natural target-language narration. Translate each source proposition exactly once. '
     'Do not add explanations, emotional commentary, rhetorical filler, repeated descriptions or recaps. '
@@ -46,7 +59,7 @@ def patch_translation(candidate, source, language, errors, call):
         "Do not rewrite the full translation. Return ONLY JSON {\"edits\":[{\"find\":\"exact unique substring "
         "from candidate\",\"replace\":\"correct wording in target language\"}]}. "
         "Each find must occur exactly once in the candidate. Keep all correct surrounding wording unchanged. "
-        + FACT_RULES + NUMBER_WORDS_RULE + COMPACT_RULES + "Target language: " + language + "\nSOURCE DATA:\n" +
+        + FACT_RULES + NUMBER_WORDS_RULE + COMPACT_RULES + SINGLE_NARRATOR_RULES + "Target language: " + language + "\nSOURCE DATA:\n" +
         json.dumps(dict(original=source, candidate=candidate, required_corrections=errors), ensure_ascii=False)
     ), "edits")
     edits = data["edits"]
@@ -75,7 +88,7 @@ def translate_narration(source, language, call, progress):
     source = source.strip()
     if len(source) > 350000:
         raise ValueError('Văn bản gốc vượt 350.000 ký tự; hãy chia nhỏ.')
-    identity = dict(method=METHOD, version=2, narration_style='concise_v1', source_sha256=source_hash(source), target_language=language)
+    identity = dict(method=METHOD, version=2, narration_style='single_narrator_indirect_v1', source_sha256=source_hash(source), target_language=language)
     parts = source_windows(source, limit=3500)
     try:
         saved = json.loads(progress.partial_result().get('optimization_work_json') or '{}')
@@ -120,11 +133,11 @@ def translate_narration(source, language, call, progress):
                                 f'🌍 Dịch và kiểm tra phần {index+1}/{len(parts)} (lần {attempt+1})')
                 candidate = call(
                     f'NARRATION_TRANSLATION. Translate ALL core text into {language} as natural spoken narration. '
-                    'Preserve the original plot, sequence, dialogue, voice, actions, relationships and numbers. '
+                    'Preserve the original plot, sequence, dialogue meaning, narrative perspective, actions, relationships and numbers. '
                     'No summarizing, selecting a subplot, abridging, added scenes or character limit. '
                     'Return ONLY the translated narration, without headings, notes, markdown or stage directions. '
                     'Improve grammar, punctuation and clear pronoun references only where original evidence permits. '
-                    'Do not invent resolutions of source contradictions. '+FACT_RULES+NUMBER_WORDS_RULE+COMPACT_RULES+
+                    'Do not invent resolutions of source contradictions. '+FACT_RULES+NUMBER_WORDS_RULE+COMPACT_RULES+SINGLE_NARRATOR_RULES+
                     'Adjacent text is reference only; translate core exactly once. '
                     'If candidate is supplied, minimally correct ONLY the identified problems, retaining correct wording. '
                     'Keep the same names and narrative tense as the preceding accepted translation.\nSOURCE DATA:\n'+
@@ -136,7 +149,7 @@ def translate_narration(source, language, call, progress):
                         raise ValueError('Bản dịch rỗng; hãy dịch đầy đủ đoạn gốc.')
                     candidate = spell_narration_numbers(candidate, language, call)
                     _review(call,part['core'],candidate,mode='translation',
-                            context=dict(before=part['before'],after=part['after'],target_language=language, concision_requirements=COMPACT_RULES),
+                            context=dict(before=part['before'],after=part['after'],target_language=language, concision_requirements=COMPACT_RULES, speech_mode='single_narrator_indirect', narration_requirements=SINGLE_NARRATOR_RULES),
                             previous=outputs[-1][-600:] if outputs else '')
                     outputs.append(candidate.strip())
                     checkpoint()
@@ -154,7 +167,7 @@ def translate_narration(source, language, call, progress):
                         candidate = patch_translation(candidate, part['core'], language, errors, call)
                         candidate = spell_narration_numbers(candidate, language, call)
                         _review(call, part['core'], candidate, mode='translation',
-                                context=dict(before=part['before'],after=part['after'],target_language=language, concision_requirements=COMPACT_RULES),
+                                context=dict(before=part['before'],after=part['after'],target_language=language, concision_requirements=COMPACT_RULES, speech_mode='single_narrator_indirect', narration_requirements=SINGLE_NARRATOR_RULES),
                                 previous=outputs[-1][-600:] if outputs else '')
                         outputs.append(candidate.strip())
                         checkpoint()

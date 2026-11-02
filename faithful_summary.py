@@ -198,6 +198,16 @@ def _review_once(call, original, candidate, *, mode, context, anchors=None, prev
          "For a translation, require the requested language and every source "
          "sentence/event, with no additions or omissions. Formatting numbers "
          "differently is allowed only if their value and meaning stay identical. ") +
+        (
+            "The requested speech mode is single_narrator_indirect: require one narrator and ALL "
+            "character dialogue/quoted thoughts converted to indirect reported speech. This conversion "
+            "and its necessary grammatical changes are REQUIRED, not fidelity errors. Reject remaining "
+            "direct character dialogue or speaker labels, lost dialogue meaning or hooks, wrong speakers/"
+            "addressees, and any claim, lie, question or suspicion turned into a confirmed fact. "
+            "Allow literal quoted evidence, names or titles when factually necessary. "
+            if isinstance(context, dict) and context.get("speech_mode") == "single_narrator_indirect"
+            else ""
+        ) +
         'Return concise JSON {"ok":true,"issues":[],"source_conflicts":[]}; '
         "list only material errors, not stylistic preferences. "
         "For target_rewrite, require the requested target language and a faithful "
