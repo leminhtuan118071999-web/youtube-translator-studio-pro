@@ -1,4 +1,4 @@
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 
 import httpx
 from fastapi import Depends, HTTPException
@@ -13,6 +13,7 @@ bearer = HTTPBearer(auto_error=False)
 class AuthenticatedUser:
     id: str
     email: str | None
+    access_token: str = field(repr=False)
 
 
 async def require_user(
@@ -45,4 +46,8 @@ async def require_user(
     if not isinstance(user_id, str) or not user_id:
         raise HTTPException(status_code=401, detail="Invalid authenticated identity.")
 
-    return AuthenticatedUser(id=user_id, email=payload.get("email"))
+    return AuthenticatedUser(
+        id=user_id,
+        email=payload.get("email"),
+        access_token=credentials.credentials,
+    )
