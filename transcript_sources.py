@@ -143,6 +143,27 @@ def fetch_with_fallback(video_id, supadata_key="", progress=None):
     return text, lang, "Supadata"
 
 
+# Copied transcript rows commonly use "0:12 text" or a timestamp on its own.
+# Require multiple timestamp rows before treating plain text as a transcript.
+_COPY_TIMESTAMP = re.compile(
+    r"^\s*(?:\[(?P<bracket>\d{1,3}:\d{2}(?::\d{2})?)\]|"
+    r"(?P<bare>\d{1,3}:\d{2}(?::\d{2})?))(?:\s+|$)(?P<text>.*)$"
+)
+
+
+def clean_copied_transcript(raw):
+    lines = raw.splitlines()
+    matches = [_COPY_TIMESTAMP.match(line) for line in lines]
+    if sum(match is not None for match in matches) < 2:
+        return raw.strip()
+    cleaned = []
+    for line, match in zip(lines, matches):
+        cleaned.append(match.group("text") if match else line)
+    # Do not deduplicate words or remove standalone quantities, speaker labels,
+    # intros or story passages. Only the recognized timestamp prefixes go.
+    return "\n".join(line for line in cleaned if line.strip()).strip()
+
+
 def parse_uploaded_subtitles(filename, data):
     if not data or len(data) > 4 * 1024 * 1024:
         raise ValueError("File rỗng hoặc lớn hơn 4 MB.")
@@ -150,7 +171,7 @@ def parse_uploaded_subtitles(filename, data):
         raise ValueError("Chỉ hỗ trợ tệp .txt, .srt hoặc .vtt.")
     raw = data.decode("utf-8-sig", errors="replace")
     if filename.lower().endswith(".txt"):
-        text = raw.strip()
+        text = clean_copied_transcript(raw)
     else:
         lines = []
         for line in raw.splitlines():
