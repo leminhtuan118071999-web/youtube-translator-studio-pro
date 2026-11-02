@@ -13,6 +13,7 @@ from streamlit.runtime import exists as streamlit_runtime_exists
 import requests
 from faithful_summary import translate_part_faithfully, COMPATIBLE_OPTIMIZATION_VERSIONS, source_hash, MAX_TARGET_SCRIPT_CHARS
 from provider_retries import retry_transient_provider
+from session_notices import session_notice_html
 from character_profiles import MAX_DETAILED_CHARACTERS
 from server_character_jobs import (
     profile_job, start_character_job, collect_character_jobs,
@@ -1497,20 +1498,32 @@ def output(title, text, *, allow_download=False):
 flash = st.session_state.pop("_session_flash", None)
 if flash:
     st.success(flash)
-st.info(f"📂 **Phiên đang mở:** {session['name']}")
+st.markdown(
+    session_notice_html(f"📂 Phiên đang mở: {session['name']}"),
+    unsafe_allow_html=True,
+)
 if DURABLE_QUEUE_ENABLED:
     pass
 elif CLOUD_ENABLED:
     pass
+# Keep the same placeholder and HTML structure across status transitions.
+session_status = st.empty()
 if session.get("job_state") == "running":
-    st.info(
-        f"⏳ Phiên này đang xử lý: {session.get('job_stage', 'Đang chạy')} "
-        f"({session.get('job_percent', 0)}%). "
-
+    session_status.markdown(
+        session_notice_html(
+            f"⏳ Phiên này đang xử lý: {session.get('job_stage', 'Đang chạy')} "
+            f"({session.get('job_percent', 0)}%)."
+        ),
+        unsafe_allow_html=True,
     )
 elif session.get("job_state") in ("failed", "interrupted"):
-    st.error(f"⚠️ Phiên này chưa hoàn tất: {session.get('job_error', 'Không rõ lỗi')}")
-    pass
+    session_status.markdown(
+        session_notice_html(
+            f"⚠️ Phiên này chưa hoàn tất: {session.get('job_error', 'Không rõ lỗi')}",
+            error=True,
+        ),
+        unsafe_allow_html=True,
+    )
 session["url"] = st.text_input(
     "🔗 Dán link video YouTube",
     value=session["url"], key=f"field_{sid}_url",
