@@ -1,6 +1,7 @@
 import { redirect } from "next/navigation";
 import { createClient } from "@/lib/supabase/server";
 import { SignOutButton } from "./sign-out-button";
+import { MigrationCheck } from "./migration-check";
 
 const modules = [
   { icon: "🌍", title: "YouTube Translator", description: "Lấy phụ đề, dịch thuật và chuyển thành lời kể audio.", status: "Đang xây dựng" },
@@ -47,6 +48,8 @@ export default async function DashboardPage() {
           </div>
           <div className="welcome-icon">✦</div>
         </section>
+
+        <MigrationCheck />
 
         <div className="section-heading"><div><h2>Không gian sáng tạo</h2><p className="muted">Các phân hệ sẽ được mở dần sau khi hoàn tất kiểm thử.</p></div><span className="status-pill">Foundation</span></div>
         <section className="module-grid">
