@@ -30,7 +30,7 @@ from server_video_jobs import _persist_lock
 from background_registry import JobRegistry
 from transcript_sources import parse_uploaded_subtitles
 from persistent_store import (
-    backup_state, configured, get_config, sign_in, sign_up, get_user_role,
+    backup_state, configured, get_config, sign_in, sign_up,
     load_user, refresh_auth, save_user, settings_from_widgets,
     remember_widget_settings, activate_provider_settings,
     activate_shared_api_settings, restore_widget_settings,
@@ -219,10 +219,8 @@ if CLOUD_ENABLED:
             if do_login:
                 try:
                     identity = sign_in(_cloud_secrets(), login_email, login_password)
-                    role = get_user_role(_cloud_secrets(), identity)
                     profile, api_config = load_user(_cloud_secrets(), identity)
                     st.session_state.cloud_auth = identity
-                    st.session_state.cloud_role = role
                     st.session_state["_cloud_restore"] = {
                         "profile": profile, "api": api_config
                     }
