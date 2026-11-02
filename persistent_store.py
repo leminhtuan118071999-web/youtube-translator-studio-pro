@@ -141,23 +141,6 @@ def _user_headers(anon, session):
     }
 
 
-def get_user_role(secrets, auth):
-    """Return the signed-in user's database role; deny access when unassigned."""
-    url, anon, _ = get_config(secrets)
-    uid = auth["user_id"]
-    rows = _request(
-        "GET", url + "/rest/v1/lmt_user_roles",
-        _user_headers(anon, auth),
-        params={"select": "role", "user_id": "eq." + uid, "limit": "1"},
-    )
-    if not isinstance(rows, list) or not rows:
-        raise RuntimeError("Tài khoản chưa được Admin cấp quyền sử dụng LMT Studio Pro.")
-    role = rows[0].get("role")
-    if role not in ("admin", "member"):
-        raise RuntimeError("Vai trò tài khoản không hợp lệ. Vui lòng liên hệ Admin.")
-    return role
-
-
 def normalize_sessions(raw):
     if not isinstance(raw, dict) or not isinstance(raw.get("workspaces", {}), dict):
         raise ValueError("Dữ liệu phiên đã lưu không hợp lệ.")
