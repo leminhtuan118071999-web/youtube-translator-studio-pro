@@ -42,6 +42,14 @@ video-planning engines. V1 source and Supabase data remain available for rollbac
 The API and worker must have the **whole repository** available because the
 engines live at its root. The frontend builds independently from its directory.
 
+## Free hosting with a local worker
+
+Keep the existing frontend/API on Render Free and run `python3 v2/start_local_worker.py`
+on a powered-on personal computer. On macOS, `Start-LMT-Worker.command` provides
+a Finder launcher and the worker prevents idle system sleep while it runs.
+See [Vietnamese setup guide](docs/FREE_LOCAL_WORKER.md). No paid Render worker
+is created by this option. The computer must remain awake and online.
+
 ## Deployment and cutover
 
 `v2/render.yaml` defines the frontend, API and independent worker. It uses paid

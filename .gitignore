@@ -22,3 +22,6 @@ out/
 
 # TypeScript incremental cache
 *.tsbuildinfo
+
+# Local worker dependencies (credentials are stored outside the repository)
+.venv-worker/
