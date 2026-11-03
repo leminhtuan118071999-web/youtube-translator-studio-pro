@@ -259,7 +259,11 @@ def run_video_forms_job(snapshot, progress):
             progress.check_cancelled()
             add_scene_subtitles(current)
             encoded = json.dumps(current, ensure_ascii=False)
-            if len(encoded) > 390000:
+            validate_checkpoint = getattr(progress, "validate_form_checkpoint", None)
+            if callable(validate_checkpoint):
+                # External durable stores enforce their own serialized limits.
+                validate_checkpoint(encoded)
+            elif len(encoded) > 390000:
                 raise ValueError("Form video quá lớn để lưu trong phiên.")
             fields["video_forms"] = encoded
             progress.publish("video_forms", encoded)

@@ -8,7 +8,7 @@ import json
 from api_clients import PROVIDERS, generate_text, list_models, validate_base_url, migrate_claude_settings, migrate_free_provider_settings
 from background_jobs import run_full_job, overview
 from server_video_jobs import run_video_forms_job
-from server_character_jobs import run_character_job
+from server_character_jobs import run_character_job, profile_data
 from youtube_metadata import generate_youtube_metadata
 from character_images import create_character_png, detailed_character_profiles, character_reference_description
 from video_scene_planner import continuous_combined_forms_text
@@ -62,6 +62,9 @@ def execute(kind, snapshot, progress, image_sink=None):
     if kind == 'characters':
         snapshot['character_profile_json'] = progress.partial_result().get(
             'character_profile_json', snapshot.get('character_profile_json', ''))
+        data = profile_data(snapshot)
+        data['_profile_job'] = dict(data.get('_profile_job') or {}, state='running', error='')
+        snapshot['character_profile_json'] = json.dumps(data, ensure_ascii=False)
         return run_character_job(snapshot, progress)
     if kind == 'seo':
         progress.check_cancelled()

@@ -105,6 +105,12 @@ class Progress:
         self._write({field: value})
         self.fields[field] = value
 
+    @staticmethod
+    def validate_form_checkpoint(encoded):
+        # Match _write's JSON envelope, including Unicode/quote escaping.
+        if len(json.dumps({'video_forms': encoded})) > 8_000_000:
+            raise ValueError('Checkpoint quá lớn.')
+
     def _write(self, fields):
         self.check_cancelled()
         if len(json.dumps(fields)) > 8_000_000:
