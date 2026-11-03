@@ -81,3 +81,9 @@ Mục Nội dung chỉ cần tên phiên, link YouTube, ngôn ngữ đích và p
 Nhập link rồi đổi ngôn ngữ đích sẽ tự giao tác vụ **Dịch lời kể và YouTube SEO** khi worker sẵn sàng. Lựa chọn được chờ ngắn để tránh gửi tác vụ cho từng lần đổi liên tiếp; không tự chạy khi chỉ mở lại phiên, và không tạo thêm tác vụ khi phiên đang xử lý. Có nút chạy/chạy lại khi cần. Đổi link xóa dữ liệu nguồn cũ trong bản nháp để không dịch nhầm video trước. Không có phụ đề khả dụng thì tác vụ báo lỗi thay vì tự viết nội dung video.
 
 Form 8 giây và nhân vật vẫn chạy riêng theo yêu cầu.
+
+### Tự sửa đoạn dịch chưa đạt
+
+Sau các lần sửa chi tiết, đoạn vẫn lỗi đối soát sẽ được tự chia nhỏ và dịch/kiểm tra tiếp, giữ ngữ cảnh trước–sau để xác định đúng người nói và người được hỏi. Những đoạn đã đạt được giữ trong checkpoint. Việc chia nhỏ có giới hạn; đoạn chưa đạt không được coi là hoàn tất hoặc bỏ qua.
+
+Với tác vụ đã lỗi trước khi cập nhật, khởi động lại worker bằng mã mới rồi chọn **Tác vụ → Tiếp tục từ checkpoint** cho đúng phiên, giữ nguyên đầu vào. Không bấm tạo bản dịch mới nếu muốn tiếp tục các phần đã đạt của tác vụ cũ.

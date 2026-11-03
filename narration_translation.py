@@ -6,6 +6,11 @@ from video_scene_planner import parse_json_object
 from faithful_summary import source_hash, source_windows, _review, ReviewFormatError, FACT_RULES
 
 METHOD = 'full_narration_translation'
+
+
+class NarrationQualityError(ValueError):
+    pass
+
 SINGLE_NARRATOR_RULES = (
     'Use ONE continuous narrator voice suitable for text-to-speech. Convert ALL character speech '
     'and quoted inner speech into indirect reported narration in the target language. '
@@ -53,14 +58,16 @@ def spell_narration_numbers(candidate, language, call):
 
 
 
-def patch_translation(candidate, source, language, errors, call):
+def patch_translation(candidate, source, language, errors, call, *, before="", after="", previous=""):
     data = parse_json_object(call(
         "NARRATION_TRANSLATION_PATCH. Fix ONLY the identified faithfulness errors using exact substring edits. "
+        "Use neighboring source only to resolve references. Verify who asks, answers, acts or thinks and whom they address. "
+        "Use explicit names in indirect speech when necessary. Corrections must be supported by the source, not guessed from the reviewer. "
         "Do not rewrite the full translation. Return ONLY JSON {\"edits\":[{\"find\":\"exact unique substring "
         "from candidate\",\"replace\":\"correct wording in target language\"}]}. "
         "Each find must occur exactly once in the candidate. Keep all correct surrounding wording unchanged. "
         + FACT_RULES + NUMBER_WORDS_RULE + COMPACT_RULES + SINGLE_NARRATOR_RULES + "Target language: " + language + "\nSOURCE DATA:\n" +
-        json.dumps(dict(original=source, candidate=candidate, required_corrections=errors), ensure_ascii=False)
+        json.dumps(dict(original=source, before=before, after=after, previous=previous, candidate=candidate, required_corrections=errors), ensure_ascii=False)
     ), "edits")
     edits = data["edits"]
     if not isinstance(edits, list) or not 1 <= len(edits) <= 8:
@@ -164,7 +171,8 @@ def translate_narration(source, language, call, progress):
                     progress.update(10 + int(85 * index/len(parts)),
                                     f'🔧 Đang sửa chi tiết phần {index+1}/{len(parts)}')
                     try:
-                        candidate = patch_translation(candidate, part['core'], language, errors, call)
+                        candidate = patch_translation(candidate, part['core'], language, errors, call,
+                            before=part['before'],after=part['after'],previous=outputs[-1][-600:] if outputs else '')
                         candidate = spell_narration_numbers(candidate, language, call)
                         _review(call, part['core'], candidate, mode='translation',
                                 context=dict(before=part['before'],after=part['after'],target_language=language, concision_requirements=COMPACT_RULES, speech_mode='single_narrator_indirect', narration_requirements=SINGLE_NARRATOR_RULES),
@@ -177,19 +185,25 @@ def translate_narration(source, language, call, progress):
                     except ValueError as exc:
                         errors = str(exc)
                 else:
-                    raise ValueError(f'Phần {index+1}/{len(parts)} chưa đạt sau khi dịch và sửa chi tiết: '+errors[:400])
-        except ProviderReadTimeout:
+                    raise NarrationQualityError(f'Phần {index+1}/{len(parts)} chưa đạt sau khi dịch và sửa chi tiết: '+errors[:400])
+        except (ProviderReadTimeout,NarrationQualityError) as exc:
             # Never repeat accepted chunks. Smaller requests reduce generation time;
             # stop at a bounded minimum instead of retrying indefinitely.
-            if len(part['core']) <= 900:
+            minimum=450 if isinstance(exc,NarrationQualityError) else 900
+            if len(part['core']) <= minimum:
                 raise
             smaller = source_windows(part['core'], limit=max(450, len(part['core']) // 2))
-            smaller[0]['before'] = part['before']
-            smaller[-1]['after'] = part['after']
+            offset=0
+            for item in smaller:
+                end=offset+len(item['core'])
+                item['before']=(part['before']+part['core'][:offset])[-1200:]
+                item['after']=(part['core'][end:]+part['after'])[:1200]
+                offset=end
             parts[index:index+1] = smaller
             checkpoint()
+            reason='🔧 Tự sửa theo nội dung gốc; chia nhỏ phần lỗi' if isinstance(exc,NarrationQualityError) else '⏳ API phản hồi chậm; chia nhỏ phần'
             progress.update(10 + int(85 * index/len(parts)),
-                            f'⏳ API phản hồi chậm; chia nhỏ phần {index+1} và tiếp tục')
+                            f'{reason} {index+1} và tiếp tục; giữ các phần đã đạt')
             continue
         index += 1
     result = '\n\n'.join(outputs)
