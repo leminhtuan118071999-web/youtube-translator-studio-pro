@@ -12,6 +12,56 @@ type Job = { id: string; session_id: string | null; job_type: string; status: st
 type Provider = { base_url: string; model: string; kind: string; auth?: string };
 type Config = { values: Record<string, string>; configured_keys: string[]; version: number };
 const tabs = ["Nội dung", "Lời kể", "YouTube SEO", "Form 8 giây", "Nhân vật", "Tác vụ", "Cấu hình API", "Chuyển dữ liệu", "AI33"];
+const languages = [
+  "Tiếng Ba Lan",
+  "Tiếng Anh",
+  "Tiếng Pháp",
+  "Tiếng Đức",
+  "Tiếng Tây Ban Nha",
+  "Tiếng Ý",
+  "Tiếng Bồ Đào Nha",
+  "Tiếng Hà Lan",
+  "Tiếng Thụy Điển",
+  "Tiếng Na Uy",
+  "Tiếng Đan Mạch",
+  "Tiếng Phần Lan",
+  "Tiếng Iceland",
+  "Tiếng Séc",
+  "Tiếng Slovakia",
+  "Tiếng Hungary",
+  "Tiếng Romania",
+  "Tiếng Bulgaria",
+  "Tiếng Hy Lạp",
+  "Tiếng Croatia",
+  "Tiếng Serbia",
+  "Tiếng Slovenia",
+  "Tiếng Bosnia",
+  "Tiếng Albania",
+  "Tiếng Lithuania",
+  "Tiếng Latvia",
+  "Tiếng Estonia",
+  "Tiếng Ukraine",
+  "Tiếng Nga",
+  "Tiếng Belarus",
+  "Tiếng Thổ Nhĩ Kỳ",
+  "Tiếng Ireland",
+  "Tiếng Malta",
+  "Tiếng Catalan",
+  "Tiếng Basque",
+  "Tiếng Wales",
+  "Tiếng Luxembourg",
+  "Tiếng Macedonia",
+  "Tiếng Việt",
+  "Tiếng Nhật",
+  "Tiếng Hàn"
+].map(value => ({ label: value, value }));
+const styles = [
+  { label: "Không chọn phong cách", value: "Không áp đặt phong cách hình ảnh cụ thể; bám nội dung gốc và giữ nhân vật, bối cảnh nhất quán." },
+  ...["Hoạt hình 2D", "Hoạt hình 2D vẽ tay", "Hoạt hình 2D điện ảnh, ánh sáng ấm", "Hoạt hình 3D", "Hoạt hình 3D bán hiện thực", "Anime 2D", "Manga đen trắng", "Truyện tranh màu",
+    "Người thật / live action", "Điện ảnh hiện thực", "Phim tài liệu", "Chân dung điện ảnh", "Minh họa tối giản", "Minh họa sách thiếu nhi", "Tranh màu nước", "Tranh sơn dầu",
+    "Tranh thủy mặc", "Tranh dân gian Việt Nam", "Cắt giấy nhiều lớp", "Stop motion đất sét", "Pixel art", "Low poly 3D", "Isometric 3D", "Motion graphics", "Vẽ bảng trắng",
+    "Cổ trang Việt Nam", "Cổ trang Trung Hoa", "Fantasy kỳ ảo", "Khoa học viễn tưởng", "Cyberpunk", "Film noir", "Retro / vintage"].map(value => ({ label: value, value }))
+];
 const active = (job: Job) => ["queued", "running", "retry_wait"].includes(job.status);
 const jobNames: Record<string, string> = { full: "Dịch lời kể và SEO", translation: "Dịch lời kể và SEO", seo: "Dịch tiêu đề, mô tả và tạo tag", forms: "Tạo form 8 giây", characters: "Tạo hồ sơ nhân vật", images: "Tạo ảnh tham chiếu" };
 const statusNames: Record<string, string> = { queued: "Đang chờ", running: "Đang xử lý", retry_wait: "Đang chờ thử lại", succeeded: "Hoàn thành", completed: "Hoàn thành", failed: "Có lỗi", cancelled: "Đã hủy", draft: "Bản nháp", ready: "Sẵn sàng", processing: "Đang xử lý", interrupted: "Đã gián đoạn" };
@@ -182,9 +232,9 @@ export function Studio({ email }: { email: string }) {
       {!selected && !["Cấu hình API", "Chuyển dữ liệu", "Tác vụ", "AI33"].includes(tab) && <section className="welcome-panel"><div><p className="eyebrow">BẮT ĐẦU SÁNG TẠO</p><h2>Từ câu chuyện đến từng khung hình.</h2><p className="muted">Tạo phiên mới hoặc mở “Chuyển dữ liệu” để lấy lại phiên V1. Cấu hình API của bạn được mã hóa trên máy chủ.</p></div><div className="welcome-icon">✦</div></section>}
       {selected && tab === "Nội dung" && <section className="editor-panel">
         <div className="form-grid"><label>Tên phiên<input disabled={busy} value={name} onChange={e => { setName(e.target.value); dirtyRef.current = true; setDirty(true); }} /></label>
-          <label>Ngôn ngữ đích<input disabled={busy} value={str(draft.language)} onChange={e => change("language", e.target.value)} /></label>
+          <ChoiceField key={`${selected.id}:language`} label="Ngôn ngữ đích" options={languages} value={typeof draft.language === "string" ? draft.language : "Tiếng Việt"} disabled={busy} maxLength={80} onChange={value => change("language", value)} />
           <label>Link YouTube<input disabled={busy} value={str(draft.url)} onChange={e => change("url", e.target.value)} placeholder="https://www.youtube.com/watch?v=…" /></label>
-          <label>Phong cách<input disabled={busy} value={str(draft.style)} onChange={e => change("style", e.target.value)} /></label>
+          <ChoiceField key={`${selected.id}:style`} label="Phong cách" options={styles} value={typeof draft.style === "string" ? draft.style : "Hoạt hình 2D"} disabled={busy} maxLength={500} onChange={value => change("style", value)} />
           <label>Tiêu đề gốc<input disabled={busy} value={str(draft.title)} onChange={e => change("title", e.target.value)} /></label>
           <label>Mô tả gốc<input disabled={busy} value={str(draft.description)} onChange={e => change("description", e.target.value)} /></label></div>
         <Thumbnail url={str(draft.url)} download={() => void action(() => download("jpg"))} />
@@ -217,6 +267,21 @@ export function Studio({ email }: { email: string }) {
       {tab === "AI33" && <section className="editor-panel"><h2>AI33 / OpenSpeaker</h2><p className="muted">Tác vụ LMT tiếp tục trên worker khi bạn dùng AI33.</p><a className="secondary-button" href="https://ai33.pro/app" target="_blank" rel="noreferrer">Mở AI33 ↗</a><iframe title="AI33" src="https://ai33.pro/app" className="ai33-frame" referrerPolicy="no-referrer" /></section>}
     </section>
   </main>;
+}
+
+function ChoiceField({ label, options, value, disabled, maxLength, onChange }: {
+  label: string; options: { label: string; value: string }[]; value: string;
+  disabled: boolean; maxLength: number; onChange: (value: string) => void;
+}) {
+  const [custom, setCustom] = useState(false);
+  const isCustom = custom || !options.some(option => option.value === value);
+  return <div className="choice-field"><label>{label}<select disabled={disabled} value={isCustom ? "__custom__" : value} onChange={e => {
+    const next = e.target.value;
+    setCustom(next === "__custom__");
+    if (next !== "__custom__") onChange(next);
+  }}>{options.map(option => <option key={option.value} value={option.value}>{option.label}</option>)}<option value="__custom__">Khác — tự nhập…</option></select></label>
+    {isCustom && <label>{label} tùy chỉnh<input disabled={disabled} maxLength={maxLength} value={value} onChange={e => onChange(e.target.value)} placeholder={`Nhập ${label.toLowerCase()}…`} /></label>}
+  </div>;
 }
 
 function Forms({ raw, onCopy, onEdit, busy, revision }: { raw: unknown; onCopy: (text: string) => void; onEdit: (number: number, field: string, value: string, revision: number) => void; busy: boolean; revision: number }) {
