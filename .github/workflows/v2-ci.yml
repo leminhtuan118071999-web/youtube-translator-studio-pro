@@ -39,6 +39,7 @@ jobs:
           else
             npm install --no-audit --no-fund
           fi
+      - run: npm test
       - run: npm run typecheck
       - run: npm run build
 

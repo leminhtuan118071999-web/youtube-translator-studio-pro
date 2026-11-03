@@ -73,3 +73,11 @@ promise identical characters in external video tools.
 
 V1 images held only in Streamlit process memory must be exported before that
 process is stopped; they cannot be reconstructed by importing database JSON.
+
+### Nhập nội dung từ YouTube
+
+Mục Nội dung chỉ cần tên phiên, link YouTube, ngôn ngữ đích và phong cách. Các ô tiêu đề gốc, mô tả gốc, nội dung gốc/phụ đề và nhập TXT/SRT đã được bỏ khỏi giao diện; dữ liệu nguồn của phiên cũ vẫn được giữ bên trong.
+
+Nhập link rồi đổi ngôn ngữ đích sẽ tự giao tác vụ **Dịch lời kể và YouTube SEO** khi worker sẵn sàng. Lựa chọn được chờ ngắn để tránh gửi tác vụ cho từng lần đổi liên tiếp; không tự chạy khi chỉ mở lại phiên, và không tạo thêm tác vụ khi phiên đang xử lý. Có nút chạy/chạy lại khi cần. Đổi link xóa dữ liệu nguồn cũ trong bản nháp để không dịch nhầm video trước. Không có phụ đề khả dụng thì tác vụ báo lỗi thay vì tự viết nội dung video.
+
+Form 8 giây và nhân vật vẫn chạy riêng theo yêu cầu.

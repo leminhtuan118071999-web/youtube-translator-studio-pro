@@ -1,6 +1,7 @@
 "use client";
 
 import { useCallback, useEffect, useRef, useState } from "react";
+import { autoTranslationReady } from "@/lib/auto-translation";
 import { createClient } from "@/lib/supabase/client";
 import { SignOutButton } from "./sign-out-button";
 import { MigrationCheck } from "./migration-check";
@@ -91,6 +92,7 @@ export function Studio({ email }: { email: string }) {
   const [draft, setDraft] = useState<Data>({});
   const [name, setName] = useState("");
   const [dirty, setDirty] = useState(false);
+  const [autoTranslation, setAutoTranslation] = useState<{ sid: string; language: string } | null>(null);
   const dirtyRef = useRef(false);
   const selectedRef = useRef<string | null>(null);
   const [jobs, setJobs] = useState<Job[]>([]);
@@ -108,6 +110,7 @@ export function Studio({ email }: { email: string }) {
   const [search, setSearch] = useState("");
 
   function accept(session: Session) {
+    setAutoTranslation(null);
     selectedRef.current = session.id;
     setSelected(session); setDraft(session.data); setName(session.name);
     dirtyRef.current = false; setDirty(false); setImages([]);
@@ -145,7 +148,9 @@ export function Studio({ email }: { email: string }) {
     finally { setBusy(false); }
   }
   function change(key: string, value: unknown) {
-    setDraft(old => ({ ...old, [key]: value })); dirtyRef.current = true; setDirty(true);
+    setDraft(old => key === "url" && old.url !== value
+      ? { ...old, url: value, source: "", title: "", description: "" }
+      : { ...old, [key]: value }); dirtyRef.current = true; setDirty(true);
   }
   async function open(sid: string) {
     if (dirtyRef.current) { setError("Hãy lưu thay đổi trước khi chuyển phiên."); return; }
@@ -194,6 +199,15 @@ export function Studio({ email }: { email: string }) {
   const setPref = (key: string, value: string) => setChanges(old => ({ ...old, [key]: value }));
   const selectedJob = selected ? latestJob(jobs, selected.id) : undefined;
   const running = selectedJob ? active(selectedJob) : false;
+  useEffect(() => {
+    if (!autoTranslationReady({ request: autoTranslation, sessionId: selected?.id, language: draft.language,
+      url: str(draft.url), busy, running, healthy })) return;
+    const timer = setTimeout(() => {
+      setAutoTranslation(null);
+      void action(async () => { await run("full"); setTab("Lời kể"); });
+    }, 700);
+    return () => clearTimeout(timer);
+  }, [autoTranslation, selected?.id, selected?.revision, draft, name, busy, running, healthy]);
   const stale = (key: string) => draft[key] === true ? <p className="status-warning">Nội dung này được tạo từ đầu vào cũ. Hãy tạo lại để khớp với phiên hiện tại.</p> : null;
   const generate = (label: string, kind: string) => <button className="primary-button" disabled={busy || !selected || running || !healthy} onClick={() => void action(() => run(kind))}>{label}</button>;
 
@@ -232,16 +246,17 @@ export function Studio({ email }: { email: string }) {
       {!selected && !["Cấu hình API", "Chuyển dữ liệu", "Tác vụ", "AI33"].includes(tab) && <section className="welcome-panel"><div><p className="eyebrow">BẮT ĐẦU SÁNG TẠO</p><h2>Từ câu chuyện đến từng khung hình.</h2><p className="muted">Tạo phiên mới hoặc mở “Chuyển dữ liệu” để lấy lại phiên V1. Cấu hình API của bạn được mã hóa trên máy chủ.</p></div><div className="welcome-icon">✦</div></section>}
       {selected && tab === "Nội dung" && <section className="editor-panel">
         <div className="form-grid"><label>Tên phiên<input disabled={busy} value={name} onChange={e => { setName(e.target.value); dirtyRef.current = true; setDirty(true); }} /></label>
-          <ChoiceField key={`${selected.id}:language`} label="Ngôn ngữ đích" options={languages} value={typeof draft.language === "string" ? draft.language : "Tiếng Việt"} disabled={busy} maxLength={80} onChange={value => change("language", value)} />
+          <ChoiceField key={`${selected.id}:language`} label="Ngôn ngữ đích" options={languages} value={typeof draft.language === "string" ? draft.language : "Tiếng Việt"} disabled={busy || running} maxLength={80} onChange={value => {
+            change("language", value); setAutoTranslation({ sid: selected.id, language: value });
+            setNotice("Đã chọn ngôn ngữ. Khi link YouTube hợp lệ và worker kết nối, app tự dịch lời kể và YouTube SEO.");
+          }} />
           <label>Link YouTube<input disabled={busy} value={str(draft.url)} onChange={e => change("url", e.target.value)} placeholder="https://www.youtube.com/watch?v=…" /></label>
           <ChoiceField key={`${selected.id}:style`} label="Phong cách" options={styles} value={typeof draft.style === "string" ? draft.style : "Hoạt hình 2D"} disabled={busy} maxLength={500} onChange={value => change("style", value)} />
-          <label>Tiêu đề gốc<input disabled={busy} value={str(draft.title)} onChange={e => change("title", e.target.value)} /></label>
-          <label>Mô tả gốc<input disabled={busy} value={str(draft.description)} onChange={e => change("description", e.target.value)} /></label></div>
+        </div>
         <Thumbnail url={str(draft.url)} download={() => void action(() => download("jpg"))} />
-        <label>Nội dung gốc / phụ đề<textarea disabled={busy} rows={15} value={str(draft.source)} onChange={e => change("source", e.target.value)} placeholder="Dán toàn bộ nội dung cần dịch, hoặc nhập link YouTube ở trên." /></label>
-        <div className="toolbar"><label className="file-label">Nhập TXT / SRT<input disabled={busy} type="file" accept=".txt,.srt,.vtt" onChange={e => { const f = e.target.files?.[0]; if (f) void action(async () => { if (f.size > 1400000) throw new Error("Tệp quá lớn."); change("source", await f.text()); }); }} /></label><span className="muted">{str(draft.source).length.toLocaleString()} ký tự</span></div>
+        <p className="muted">Nhập link YouTube rồi chọn ngôn ngữ đích: app tự lấy phụ đề và dịch thành lời kể cùng YouTube SEO. Bạn không cần nhập tiêu đề, mô tả hoặc phụ đề nguồn.</p>
         <p className="muted">Bước này chỉ tạo lời kể và YouTube SEO. Form 8 giây, hồ sơ nhân vật và ảnh tham chiếu được chạy riêng khi bạn yêu cầu.</p>
-        <div className="toolbar">{generate("Chỉ dịch lời kể và YouTube SEO", "full")}<button className="ghost-button" disabled={busy} onClick={() => void action(() => download("json"))}>Xuất phiên JSON</button>
+        <div className="toolbar">{generate("Dịch lời kể và YouTube SEO", "full")}<button className="ghost-button" disabled={busy} onClick={() => void action(() => download("json"))}>Xuất phiên JSON</button>
           <button className="ghost-button danger" disabled={busy} onClick={() => void action(async () => { if (!window.confirm("Xóa phiên này và hủy mọi tác vụ đang chạy?")) return; await api(`/sessions/${selected.id}`, "DELETE"); selectedRef.current = null; setSelected(null); dirtyRef.current = false; setDirty(false); await refresh(); })}>Xóa phiên</button></div>
       </section>}
       {selected && tab === "Lời kể" && <section className="editor-panel">{stale("translation_stale")}<h2>Bản dịch cho giọng đọc AI</h2><p className="muted">Một người dẫn chuyện, lời kể gián tiếp, số viết bằng chữ theo ngôn ngữ đích.</p>
