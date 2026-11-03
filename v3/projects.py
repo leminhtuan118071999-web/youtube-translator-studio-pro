@@ -143,7 +143,7 @@ def choose_folder():
 
 def referenced_assets(project):
     return sorted({scene['file'] for scene in project.get('scenes',[])} |
-                  {project[key] for key in ('voice','music','captions') if project.get(key)})
+                  {project[key] for key in ('voice','music','captions','caption_words') if project.get(key)})
 
 
 def export_run(run, destination, include_assets=True):

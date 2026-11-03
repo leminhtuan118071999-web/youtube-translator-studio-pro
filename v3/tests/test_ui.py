@@ -18,6 +18,8 @@ class EditorUITests(unittest.TestCase):
             self.assertEqual(projects.listing()[0]['name'],'Video thử nghiệm')
             self.assertEqual(len(app.tabs),4)
             self.assertTrue(any(s.label=='Khung hình' for s in app.selectbox))
+            self.assertTrue(next(b for b in app.button if b.label=='🎙️ Nghe giọng đọc và tạo phụ đề').disabled)
+            self.assertTrue(any(s.label=='Cách hiện phụ đề nhận diện' for s in app.selectbox))
             # A fresh browser session reopens the saved project from disk.
             reopened=AppTest.from_file(str(Path(__file__).parents[1]/'studio_app.py'),default_timeout=15).run()
             self.assertFalse(reopened.exception)

@@ -45,7 +45,9 @@ with st.sidebar:
         st.markdown('**Tiến trình từng dự án**')
         names={'queued':'Đang chờ','running':'Đang dựng','completed':'Hoàn thành','cancelled':'Đã hủy','failed':'Có lỗi','interrupted':'Đã gián đoạn'}
         for item in store.listing():
-            status=current(store.project_dir(item['id']))
+            render_status=current(store.project_dir(item['id']))
+            asr_status=current(store.project_dir(item['id']),'transcribe')
+            status=asr_status if asr_status and asr_status['state'] in ('running','queued') else render_status or asr_status
             st.caption(item['name']+' · '+item['id'][:6])
             if status:
                 st.progress(status['progress']/100,text=names.get(status['state'],status['state'])+f" · {status['progress']}%")
@@ -120,9 +122,25 @@ def progress_panel(folder):
                 subprocess.run(['open',str(output.parent)],check=True)
     else:st.warning(status['stage'])
     if st.button('Làm mới trạng thái và các nút'): st.rerun()
+@st.fragment(run_every=2)
+def speech_progress(folder):
+    status=current(folder,'transcribe')
+    if not status:return
+    st.progress(status['progress']/100,text='Phụ đề: '+status['stage'])
+    if status.get('error'):st.error(status['error'])
+    if status['state'] in ('queued','running'):
+        if st.button('Hủy nhận diện giọng đọc',key='cancel_asr_'+status['run_id']):
+            (status['folder']/'cancel').touch()
+    elif status['state']=='completed':
+        key='asr_seen_'+status['run_id']
+        if not st.session_state.get(key):st.session_state[key]=True;st.rerun()
+        st.success('Đã lưu phụ đề cùng ngôn ngữ với giọng đọc. Kiểm tra tên riêng và những đoạn đọc không rõ trước khi xuất.')
+    elif st.button('Làm mới sau khi nhận diện',key='refresh_asr_'+status['run_id']):st.rerun()
+
 progress_panel(folder)
+speech_progress(folder)
 save_completed(folder)
-if locked:st.info('Dự án đang được dựng từ bản đã lưu. Nguyên liệu và cấu hình đang khóa. Sau khi xong, nhấn Làm mới để chỉnh tiếp.')
+if locked:st.info('Dự án đang xử lý từ bản đã lưu. Nguyên liệu và cấu hình đang khóa; tạo hoặc mở dự án khác vẫn được.')
 media_tab,audio_tab,subtitle_tab,output_tab=st.tabs(['01 · Ảnh & video','02 · Âm thanh','03 · Phụ đề','04 · Xuất video'])
 try:
     with media_tab:
@@ -157,10 +175,24 @@ try:
                     if uploaded:
                         name=store.upload(folder,uploaded,store.AUDIO)
                         if not probe(store.asset(folder,name))['audio']:raise ValueError('Tệp cần có âm thanh.')
+                        if field=='voice' and name!=project.get('voice') and project.get('captions_origin')=='asr':
+                            for key in ('captions','caption_words','caption_source_voice','caption_language','captions_origin'):project.pop(key,None)
                         project[field]=name;store.save(project);st.rerun()
             if project.get(field) and st.button('Bỏ '+label.lower()+' khỏi timeline',disabled=locked,key='remove_'+field):
-                project[field]=None;store.save(project);st.rerun()
+                project[field]=None
+                if field=='voice' and project.get('captions_origin')=='asr':
+                    for key in ('captions','caption_words','caption_source_voice','caption_language','captions_origin'):project.pop(key,None)
+                store.save(project);st.rerun()
     with subtitle_tab:
+        st.markdown('### Tự tạo phụ đề từ file giọng đọc')
+        st.caption('Nhận diện ngay trên máy, tự phát hiện ngôn ngữ và mốc từng từ; không dịch sang ngôn ngữ khác. Lần đầu cần Internet để tải model. Sau đó có thể nhận diện offline với model đã lưu.')
+        asr_model=st.selectbox('Model nhận diện',['small','base','tiny'],format_func=lambda x:{'small':'Small — ưu tiên độ chính xác','base':'Base — cân bằng','tiny':'Tiny — thử nhanh, độ chính xác thấp hơn'}[x],disabled=locked,key='asr_model_'+pid)
+        if not project.get('voice'):st.info('Tải và lưu file giọng đọc ở mục Âm thanh trước.')
+        if st.button('🎙️ Nghe giọng đọc và tạo phụ đề',type='primary',disabled=locked or not project.get('voice')):
+            launch(dict(project,asr_model=asr_model),'transcribe');st.rerun()
+        if project.get('captions_origin')=='asr':
+            st.success('Đã nhận diện ngôn ngữ: '+project.get('caption_language',''))
+        st.divider()
         st.caption('SRT có mốc thời gian được ưu tiên. Phụ đề tạo từ văn bản chỉ là ước lượng theo độ dài chữ, cần kiểm tra lại trước khi đăng.')
         with st.form('captions_'+pid,clear_on_submit=True):
             srt=st.file_uploader('Phụ đề SRT (UTF-8)',type=['srt'],disabled=locked)
@@ -179,10 +211,13 @@ try:
                 if srt:
                     if srt.size > 4*1024*1024:raise ValueError('File SRT vượt 4 MB.')
                     project['captions']=store.upload(folder,srt,{'.srt'})
+                    for key in ('caption_words','caption_source_voice','caption_language','captions_origin'):project.pop(key,None)
                 store.save(project);st.rerun()
         if project.get('captions'):
             st.success('Đang dùng file SRT đã lưu.')
-            if st.button('Bỏ SRT để dùng văn bản',disabled=locked):project['captions']=None;store.save(project);st.rerun()
+            if st.button('Bỏ SRT để dùng văn bản',disabled=locked):
+                for key in ('captions','caption_words','caption_source_voice','caption_language','captions_origin'):project.pop(key,None)
+                store.save(project);st.rerun()
     with output_tab:
         cfg=project['settings']
         with st.form('settings_'+pid):
@@ -200,8 +235,9 @@ try:
                 voice=st.slider('Âm lượng giọng đọc (%)',0,200,round(cfg['voice_volume']*100),disabled=locked)
                 duck=st.checkbox('Tự hạ nhạc khi có lời đọc',value=cfg['duck'],disabled=locked)
                 font=st.slider('Cỡ chữ phụ đề',16,64,cfg['font_size'],disabled=locked)
+                subtitle_mode=st.selectbox('Cách hiện phụ đề nhận diện',['words','sentence'],index=0 if cfg.get('subtitle_mode','words')=='words' else 1,format_func=lambda value:'Tô sáng từng từ đang đọc' if value=='words' else 'Theo cụm lời · không tô từng từ',disabled=locked)
             if st.form_submit_button('Lưu cấu hình xuất',disabled=locked):
-                project['settings']=dict(aspect=aspect,resolution=resolution,fit=fit,transition=transition,sync_voice=sync,original_volume=original/100,music_volume=music/100,voice_volume=voice/100,duck=duck,font_size=font)
+                project['settings']=dict(aspect=aspect,resolution=resolution,fit=fit,transition=transition,sync_voice=sync,original_volume=original/100,music_volume=music/100,voice_volume=voice/100,duck=duck,font_size=font,subtitle_mode=subtitle_mode)
                 store.save(project);st.rerun()
         st.caption('Lưu timeline và cấu hình trước khi dựng. Dựng từ các giá trị đã lưu, giữ cả các lần xuất trước.')
         if project['scenes']:

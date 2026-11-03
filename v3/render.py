@@ -201,7 +201,16 @@ def render(project, assets_folder, output_folder, update):
     elif project.get('subtitle_text','').strip(): subtitles=estimated_srt(project['subtitle_text'],total)
     if subtitles:
         (output_folder/'captions.srt').write_text(subtitles,encoding='utf8')
-        filters.append(f"[0:v]subtitles=captions.srt:force_style='PlayResX={width},PlayResY={height},FontName=Arial,FontSize={cfg['font_size']},Outline=2,Shadow=0,MarginV=40,MarginL=32,MarginR=32'[video]")
+        if project.get('caption_words') and project.get('captions_origin')=='asr':
+            from .speech import to_ass
+            data=json.loads(asset(assets_folder,project['caption_words']).read_text(encoding='utf8'))
+            if data.get('source_voice')!=project.get('voice'):
+                raise ValueError('Phụ đề nhận diện thuộc file giọng đọc khác. Hãy nhận diện lại.')
+            ass=to_ass(data,total,width,height,cfg['font_size'],cfg.get('subtitle_mode','words')=='words')
+            (output_folder/'captions.ass').write_text(ass,encoding='utf8')
+            filters.append('[0:v]subtitles=captions.ass[video]')
+        else:
+            filters.append(f"[0:v]subtitles=captions.srt:force_style='PlayResX={width},PlayResY={height},FontName=Arial,FontSize={cfg['font_size']},Outline=2,Shadow=0,MarginV=40,MarginL=32,MarginR=32'[video]")
         video='[video]'
     else: video='0:v:0'
     update(72,'Đang ghép âm thanh, phụ đề và xuất MP4')

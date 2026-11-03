@@ -50,6 +50,22 @@ class RealRenderTests(unittest.TestCase):
         audio=subprocess.run(['ffmpeg','-v','error','-i',str(out/'output.mp4'),'-t','1','-f','s16le','-ac','1','pipe:1'],capture_output=True,check=True).stdout
         self.assertTrue(any(audio))
 
+    def test_real_word_highlight_render(self):
+        from v3.speech import to_srt
+        words=[dict(start=.2,end=.6,text=' Xin'),dict(start=.7,end=1.1,text=' chào.')]
+        projects.atomic(self.folder/'assets'/'words.json',dict(source_voice='voice.wav',language='vi',words=words))
+        (self.folder/'assets'/'speech.srt').write_text(to_srt(words),encoding='utf8')
+        self.p.update(voice='voice.wav',captions='speech.srt',caption_words='words.json',captions_origin='asr')
+        out=self.folder/'word-render'
+        render(self.p,self.folder,out,lambda *a:None)
+        self.assertTrue((out/'captions.ass').exists())
+        # Yellow glyph pixels occur only while a word is spoken, not in the pause.
+        counts=[]
+        for at in (.4,1.6):
+            pixels=subprocess.run(['ffmpeg','-v','error','-ss',str(at),'-i',str(out/'output.mp4'),'-vf','format=rgb24,crop=720:180:0:1100','-frames:v','1','-threads','1','-f','rawvideo','pipe:1'],capture_output=True,check=True).stdout
+            counts.append(sum(r>170 and g>170 and b<100 for r,g,b in zip(pixels[::3],pixels[1::3],pixels[2::3])))
+        self.assertGreater(counts[0],30);self.assertEqual(counts[1],0)
+
     def test_original_audio_and_no_voice_square_pad(self):
         self.p['settings'].update(aspect='1:1',original_volume=.7)
         result=render(self.p,self.folder,self.folder/'no-voice',lambda *a:None)
