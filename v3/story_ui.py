@@ -123,4 +123,4 @@ def panel(project,folder,locked):
                 from .story import layout_preview
                 st.image(layout_preview(project,folder),caption='Xem thử một khung hình · dùng bố cục đã lưu')
             except (ValueError,OSError,RuntimeError) as exc:st.error(str(exc))
-    st.caption('Lưu nguyên liệu trước. Sau đó sang 04 · Xuất video, chọn nơi lưu và bấm Bắt đầu dựng MP4 để chạy toàn bộ quy trình.')
+    st.caption('Chỉnh cấu hình ở mục 04, lưu nguyên liệu tại đây, rồi chọn nơi lưu và bắt đầu dựng ở cuối mục 05.')

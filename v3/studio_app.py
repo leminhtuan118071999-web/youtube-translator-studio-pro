@@ -13,7 +13,7 @@ from v3.render_worker import launch, busy, current
 st.set_page_config(page_title='LMT Video Editor V3',page_icon='🎞️',layout='wide')
 st.markdown('''<style>.stApp{background:#0b1320}h1,h2,h3{color:#e4ecfb}.block-container{max-width:1240px;padding-top:2rem}div.stButton>button[kind=primary]{background:#357cef}section[data-testid=stSidebar]{background:#101c2b}</style>''',unsafe_allow_html=True)
 st.title('🎞️ LMT Video Editor · V3')
-st.caption('Tải nguyên liệu → sắp xếp cảnh → ghép giọng đọc → xuất MP4 trên máy của bạn')
+st.caption('Cấu hình xuất → thêm nguyên liệu và bố cục → chọn nơi lưu → dựng MP4 trên máy của bạn')
 with st.sidebar:
     st.header('Dự án của tôi')
     with st.form('new_project',clear_on_submit=True):
@@ -142,86 +142,8 @@ def speech_progress(folder):
 progress_panel(folder)
 speech_progress(folder)
 if locked:st.info('Dự án đang xử lý từ bản đã lưu. Nguyên liệu và cấu hình đang khóa; tạo hoặc mở dự án khác vẫn được.')
-media_tab,audio_tab,subtitle_tab,output_tab,story_tab=st.tabs(['01 · Ảnh & video','02 · Âm thanh','03 · Phụ đề','04 · Xuất video','05 · Dựng kiểu video mẫu'])
+output_tab,story_tab=st.tabs(['04 · Xuất video','05 · Dựng kiểu video mẫu'])
 try:
-    with story_tab:
-        from v3.story_ui import panel
-        panel(project,folder,locked)
-    with media_tab:
-        with st.form('upload_'+pid,clear_on_submit=True):
-            files=st.file_uploader('Thêm ảnh hoặc video',type=sorted(x[1:] for x in store.MEDIA),accept_multiple_files=True,disabled=locked)
-            if st.form_submit_button('Lưu nguyên liệu',disabled=locked):
-                for file in sorted(files or [],key=lambda f:store.natural(f.name)):
-                    name=store.upload(folder,file,store.MEDIA)
-                    info=probe(store.asset(folder,name))
-                    if not info['video']:raise ValueError('Tệp không có hình ảnh/video hợp lệ.')
-                    project['scenes'].append(dict(id=name,file=name,name=Path(file.name).name[:150],duration=8.0 if Path(name).suffix in store.IMAGES else round(max(.1,info['duration']),2)))
-                store.save(project);st.rerun()
-        if project['scenes']:
-            st.caption('Tên tệp được xếp tự nhiên: SC2 trước SC10. Chỉnh cột Thứ tự và Thời lượng rồi lưu timeline. Video ngắn sẽ lặp lại nếu cần kéo dài.')
-            edited=st.data_editor([{'ID':s['id'],'Thứ tự':i+1,'Tên tệp':s['name'],'Thời lượng (giây)':s['duration'],'Dùng':True} for i,s in enumerate(project['scenes'])],
-                hide_index=True,disabled=locked or ['ID','Tên tệp'],column_config={'ID':None,'Thứ tự':st.column_config.NumberColumn(min_value=1,step=1),'Thời lượng (giây)':st.column_config.NumberColumn(min_value=.1,max_value=3600,step=.1)},key='timeline_'+pid)
-            if st.button('Lưu timeline',disabled=locked):
-                old={s['id']:s for s in project['scenes']}
-                project['scenes']=[dict(old[row['ID']],duration=float(row['Thời lượng (giây)'])) for row in sorted(edited,key=lambda r:r['Thứ tự']) if row['Dùng']]
-                store.save(project);st.rerun()
-            chosen=st.selectbox('Xem nguyên liệu',[s['file'] for s in project['scenes']],format_func=lambda key:next(s['name'] for s in project['scenes'] if s['file']==key))
-            path=store.asset(folder,chosen)
-            if path.suffix in store.IMAGES:st.image(str(path),width=360)
-            else:st.video(str(path))
-        else:st.info('Thêm ảnh hoặc video để tạo timeline.')
-    with audio_tab:
-        for field,label in [('voice','Giọng đọc'),('music','Nhạc nền')]:
-            if project.get(field):st.audio(str(store.asset(folder,project[field])))
-            with st.form(field+'_'+pid,clear_on_submit=True):
-                uploaded=st.file_uploader(label,type=sorted(x[1:] for x in store.AUDIO),key='file_'+field,disabled=locked)
-                if st.form_submit_button('Lưu '+label.lower(),disabled=locked):
-                    if uploaded:
-                        name=store.upload(folder,uploaded,store.AUDIO)
-                        if not probe(store.asset(folder,name))['audio']:raise ValueError('Tệp cần có âm thanh.')
-                        if field=='voice' and name!=project.get('voice') and project.get('captions_origin')=='asr':
-                            for key in ('captions','caption_words','caption_source_voice','caption_language','captions_origin'):project.pop(key,None)
-                        project[field]=name;store.save(project);st.rerun()
-            if project.get(field) and st.button('Bỏ '+label.lower()+' khỏi timeline',disabled=locked,key='remove_'+field):
-                project[field]=None
-                if field=='voice' and project.get('captions_origin')=='asr':
-                    for key in ('captions','caption_words','caption_source_voice','caption_language','captions_origin'):project.pop(key,None)
-                store.save(project);st.rerun()
-    with subtitle_tab:
-        st.markdown('### Tự tạo phụ đề từ file giọng đọc')
-        st.caption('Nhận diện ngay trên máy, tự phát hiện ngôn ngữ và mốc từng từ; không dịch sang ngôn ngữ khác. Lần đầu cần Internet để tải model. Sau đó có thể nhận diện offline với model đã lưu.')
-        asr_model=st.selectbox('Model nhận diện',['small','base','tiny'],format_func=lambda x:{'small':'Small — ưu tiên độ chính xác','base':'Base — cân bằng','tiny':'Tiny — thử nhanh, độ chính xác thấp hơn'}[x],disabled=locked,key='asr_model_'+pid)
-        if not project.get('voice'):st.info('Tải và lưu file giọng đọc ở mục Âm thanh trước.')
-        if st.button('🎙️ Nghe giọng đọc và tạo phụ đề',type='primary',disabled=locked or not project.get('voice')):
-            launch(dict(project,asr_model=asr_model),'transcribe');st.rerun()
-        if project.get('captions_origin')=='asr':
-            st.success('Đã nhận diện ngôn ngữ: '+project.get('caption_language',''))
-        st.divider()
-        st.caption('SRT có mốc thời gian được ưu tiên. Phụ đề tạo từ văn bản chỉ là ước lượng theo độ dài chữ, cần kiểm tra lại trước khi đăng.')
-        with st.form('captions_'+pid,clear_on_submit=True):
-            srt=st.file_uploader('Phụ đề SRT (UTF-8)',type=['srt'],disabled=locked)
-            v2=st.file_uploader('Hoặc lấy lời kể từ file Xuất phiên JSON của V2',type=['json'],disabled=locked)
-            text=st.text_area('Văn bản phụ đề / lời kể',value=project.get('subtitle_text',''),height=180,disabled=locked)
-            if st.form_submit_button('Lưu phụ đề',disabled=locked):
-                if v2:
-                    if v2.size > 32*1024*1024: raise ValueError('File phiên V2 vượt 32 MB.')
-                    imported=json.load(v2)
-                    if not isinstance(imported,dict) or not isinstance(imported.get('data',imported),dict):
-                        raise ValueError('File JSON phải là phiên V2 hợp lệ.')
-                    text=imported.get('data',imported).get('translated','')
-                    if not isinstance(text,str):raise ValueError('File JSON chưa có bản dịch hợp lệ.')
-                if len(text)>350000:raise ValueError('Văn bản phụ đề quá dài.')
-                project['subtitle_text']=text
-                if srt:
-                    if srt.size > 4*1024*1024:raise ValueError('File SRT vượt 4 MB.')
-                    project['captions']=store.upload(folder,srt,{'.srt'})
-                    for key in ('caption_words','caption_source_voice','caption_language','captions_origin'):project.pop(key,None)
-                store.save(project);st.rerun()
-        if project.get('captions'):
-            st.success('Đang dùng file SRT đã lưu.')
-            if st.button('Bỏ SRT để dùng văn bản',disabled=locked):
-                for key in ('captions','caption_words','caption_source_voice','caption_language','captions_origin'):project.pop(key,None)
-                store.save(project);st.rerun()
     with output_tab:
         cfg=project['settings']
         with st.form('settings_'+pid):
@@ -243,7 +165,11 @@ try:
             if st.form_submit_button('Lưu cấu hình xuất',disabled=locked):
                 project['settings']=dict(aspect=aspect,resolution=resolution,fit=fit,transition=transition,sync_voice=sync,original_volume=original/100,music_volume=music/100,voice_volume=voice/100,duck=duck,font_size=font,subtitle_mode=subtitle_mode)
                 store.save(project);st.rerun()
-        st.caption('Lưu timeline và cấu hình trước khi dựng. Dựng từ các giá trị đã lưu, giữ cả các lần xuất trước.')
+    with story_tab:
+        from v3.story_ui import panel
+        panel(project,folder,locked)
+        st.divider()
+        st.caption('Lưu nguyên liệu, bố cục và cấu hình trước khi dựng. Dựng từ các giá trị đã lưu, giữ cả các lần xuất trước.')
         story_mode=project.get('story',{}).get('enabled',False)
         ready=bool(project['scenes'])
         if story_mode:
@@ -256,11 +182,10 @@ try:
             durations=plan(project,folder)
             st.metric('Thời lượng dự kiến',f'{sum(durations):.1f} giây')
         save_completed(folder)
-        if ready:
-            if st.button('🎬 Bắt đầu dựng MP4',type='primary',disabled=locked):
-                project['export_destination']=st.session_state.get('save_folder_'+pid,'').strip()
-                project['export_include_assets']=st.session_state.get('full_'+pid,True)
-                store.save(project)
-                launch(project);st.rerun()
+        if st.button('🎬 Bắt đầu dựng MP4',type='primary',disabled=locked or not ready):
+            project['export_destination']=st.session_state.get('save_folder_'+pid,'').strip()
+            project['export_include_assets']=st.session_state.get('full_'+pid,True)
+            store.save(project)
+            launch(project);st.rerun()
 except (ValueError,OSError,RuntimeError,json.JSONDecodeError) as exc:
     st.error(str(exc))
