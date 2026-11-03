@@ -8,7 +8,7 @@ import sys
 import time
 import threading
 from uuid import uuid4
-from .projects import home, project_dir, atomic, read, save
+from .projects import home, project_dir, atomic, read, save, export_run
 import shutil
 from .render import render, Cancelled
 
@@ -112,6 +112,14 @@ def main(run,fd):
             else:
                 details=render(project,project_dir(project['id']),run,update)
                 stage='Hoàn thành và đã lưu MP4'
+                if project.get('export_destination','').strip():
+                    update(99,'Đang lưu kết quả vào thư mục đã chọn')
+                    try:
+                        details['export_location']=export_run(run,project['export_destination'],project.get('export_include_assets',True))
+                        stage='Hoàn thành và đã lưu vào thư mục đã chọn'
+                    except (ValueError,OSError,KeyError,TypeError) as exc:
+                        details['export_error']=str(exc)
+                        stage='MP4 đã hoàn thành; chưa sao chép được vào nơi đã chọn'
             atomic(run/'status.json',dict(state='completed',task=task,progress=100,stage=stage,details=details,updated=time.time()))
     except Cancelled:
         atomic(run/'status.json',dict(state='cancelled',progress=progress,stage='Đã hủy; dự án gốc vẫn được giữ',updated=time.time()))

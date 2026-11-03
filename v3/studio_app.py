@@ -69,27 +69,28 @@ with st.expander('Tên và thông tin dự án'):
             except ValueError as exc:st.error(str(exc))
 
 
-@st.fragment
 def save_completed(folder):
     status=current(folder)
-    if not status or status['state']!='completed':return
     st.subheader('Lưu video / dự án vào thư mục của bạn')
     key='save_folder_'+str(folder.name)
-    if st.button('📁 Chọn thư mục lưu trên Mac',key='pick_'+folder.name):
+    if key not in st.session_state:st.session_state[key]=project.get('export_destination','')
+    if st.button('📁 Chọn thư mục lưu trên Mac',key='pick_'+folder.name,disabled=locked):
         try:
             chosen=store.choose_folder()
             if chosen:st.session_state[key]=chosen
         except ValueError as exc:st.error(str(exc))
-    destination=st.text_input('Nơi lưu',key=key,placeholder='Ví dụ: ~/Movies/LMT hoặc /Volumes/Ten-o-dia/LMT')
-    complete=st.checkbox('Lưu cả dự án và nguyên liệu để chỉnh sửa lại',value=True,key='full_'+folder.name)
+    destination=st.text_input('Nơi lưu',key=key,placeholder='Ví dụ: ~/Movies/LMT hoặc /Volumes/Ten-o-dia/LMT',disabled=locked)
+    complete=st.checkbox('Lưu cả dự án và nguyên liệu để chỉnh sửa lại',value=project.get('export_include_assets',True),key='full_'+folder.name,disabled=locked)
     st.caption('Mỗi lần lưu tạo một thư mục mới. Bản đầy đủ gồm video, cấu hình và nguyên liệu; cần đủ dung lượng cho bản sao.')
-    if st.button('Lưu vào thư mục đã chọn',type='primary',key='export_'+folder.name):
+    st.caption('Chọn trước khi dựng: hoàn thành sẽ tự lưu vào đây. Để trống nếu chỉ muốn giữ kết quả trong app.')
+    if status and status.get('details',{}).get('export_error'):st.warning('Video đã dựng xong nhưng chưa sao chép được: '+status['details']['export_error'])
+    if status and status['state']=='completed' and st.button('Lưu vào thư mục đã chọn',type='primary',key='export_'+folder.name,disabled=locked):
         try:
             with st.spinner('Đang sao chép kết quả…'):
                 location=store.export_run(status['folder'],destination,complete)
             st.session_state['exported_'+folder.name]=location
         except (ValueError,OSError,KeyError,TypeError) as exc:st.error('Chưa lưu được: '+str(exc))
-    location=st.session_state.get('exported_'+folder.name)
+    location=st.session_state.get('exported_'+folder.name) or (status.get('details',{}).get('export_location') if status else None)
     if location:
         st.success('Đã lưu thành công.')
         st.code(location,language=None)
@@ -139,7 +140,6 @@ def speech_progress(folder):
 
 progress_panel(folder)
 speech_progress(folder)
-save_completed(folder)
 if locked:st.info('Dự án đang xử lý từ bản đã lưu. Nguyên liệu và cấu hình đang khóa; tạo hoặc mở dự án khác vẫn được.')
 media_tab,audio_tab,subtitle_tab,output_tab=st.tabs(['01 · Ảnh & video','02 · Âm thanh','03 · Phụ đề','04 · Xuất video'])
 try:
@@ -243,7 +243,12 @@ try:
         if project['scenes']:
             durations=plan(project,folder)
             st.metric('Thời lượng dự kiến',f'{sum(durations):.1f} giây')
+        save_completed(folder)
+        if project['scenes']:
             if st.button('🎬 Bắt đầu dựng MP4',type='primary',disabled=locked):
+                project['export_destination']=st.session_state.get('save_folder_'+pid,'').strip()
+                project['export_include_assets']=st.session_state.get('full_'+pid,True)
+                store.save(project)
                 launch(project);st.rerun()
 except (ValueError,OSError,RuntimeError,json.JSONDecodeError) as exc:
     st.error(str(exc))

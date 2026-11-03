@@ -103,6 +103,7 @@ class RealRenderTests(unittest.TestCase):
             self.assertFalse((run/'output.mp4').exists())
 
     def test_detached_job_completes_without_browser(self):
+        self.p['export_destination']=str(Path(self.tmp.name)/'chosen-output')
         self.p['scenes']=self.p['scenes'][:1];self.p['scenes'][0]['duration']=.3
         run_id=launch(self.p)
         deadline=time.monotonic()+25
@@ -112,6 +113,9 @@ class RealRenderTests(unittest.TestCase):
             time.sleep(.1)
         self.assertEqual(status['state'],'completed',status)
         self.assertTrue((self.folder/'runs'/run_id/'output.mp4').exists())
+        exported=Path(status['details']['export_location'])
+        self.assertTrue((exported/'video.mp4').exists())
+        self.assertTrue((exported/'project.json').exists())
 
     def test_new_project_does_not_cancel_existing_background_job(self):
         self.p['scenes']=self.p['scenes'][:1];self.p['scenes'][0]['duration']=.3

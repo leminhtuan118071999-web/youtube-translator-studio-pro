@@ -17,6 +17,8 @@ class EditorUITests(unittest.TestCase):
             self.assertFalse(app.exception)
             self.assertEqual(projects.listing()[0]['name'],'Video thử nghiệm')
             self.assertEqual(len(app.tabs),4)
+            self.assertTrue(any(b.label=='📁 Chọn thư mục lưu trên Mac' for b in app.button))
+            self.assertTrue(any(t.label=='Nơi lưu' for t in app.text_input))
             self.assertTrue(any(s.label=='Khung hình' for s in app.selectbox))
             self.assertTrue(next(b for b in app.button if b.label=='🎙️ Nghe giọng đọc và tạo phụ đề').disabled)
             self.assertTrue(any(s.label=='Cách hiện phụ đề nhận diện' for s in app.selectbox))
