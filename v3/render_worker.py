@@ -136,11 +136,11 @@ def main(run,fd):
             else:
                 if project.get('story',{}).get('enabled'):
                     project=prepare_story(run)
-                    details=render(project,project_dir(project['id']),run,lambda p,s:update(50+p*.49,s))
+                    details=render(project,project_dir(project['id']),run,lambda p,s:update(50+p*.49,'Bước 5/6 · '+s))
                 else:details=render(project,project_dir(project['id']),run,update)
                 stage='Hoàn thành và đã lưu MP4'
                 if project.get('export_destination','').strip():
-                    update(99,'Đang lưu kết quả vào thư mục đã chọn')
+                    update(99,'Bước 6/6 · Đang lưu kết quả vào thư mục đã chọn')
                     try:
                         details['export_location']=export_run(run,project['export_destination'],project.get('export_include_assets',True))
                         stage='Hoàn thành và đã lưu vào thư mục đã chọn'

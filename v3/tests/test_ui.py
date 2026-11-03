@@ -59,3 +59,36 @@ class EditorUITests(unittest.TestCase):
 
 
 if __name__=='__main__':unittest.main()
+
+class OneClickTests(unittest.TestCase):
+    def test_start_saves_current_inputs_settings_and_destination_without_save_clicks(self):
+        import io
+        from PIL import Image
+        from v3.tests.test_render import command
+        class Upload(io.BytesIO):pass
+        with tempfile.TemporaryDirectory() as tmp,patch.dict(os.environ,LMT_V3_HOME=str(Path(tmp)/'projects')):
+            p=projects.create('Một lần bấm')
+            picture=Upload();Image.new('RGB',(80,100),'green').save(picture,format='PNG');picture.name='person.png'
+            voice_path=Path(tmp)/'voice.wav';background_path=Path(tmp)/'bg.mp4'
+            command('-f','lavfi','-i','sine=frequency=500:sample_rate=48000','-t','0.5',str(voice_path))
+            command('-f','lavfi','-i','color=blue:s=160x120:r=30','-t','0.3','-c:v','libx264','-threads','1',str(background_path))
+            voice=Upload(voice_path.read_bytes());voice.name='voice.wav'
+            background=Upload(background_path.read_bytes());background.name='bg.mp4'
+            def upload(label,**kwargs):
+                if label.startswith('01 ·'):return picture
+                if label.startswith('02 ·'):return voice
+                if label.startswith('04 ·'):return [background]
+                return None
+            with patch('streamlit.file_uploader',side_effect=upload),patch('v3.render_worker.launch',return_value='mock-run') as start:
+                app=AppTest.from_file(str(Path(__file__).parents[1]/'studio_app.py'),default_timeout=15).run()
+                self.assertFalse(app.exception)
+                next(s for s in app.selectbox if s.label=='Khung hình').set_value('16:9').run()
+                next(t for t in app.text_input if t.label=='Nơi lưu').set_value(str(Path(tmp)/'result')).run()
+                self.assertFalse(next(b for b in app.button if b.label=='🎬 Bắt đầu dựng MP4').disabled)
+                next(b for b in app.button if b.label=='🎬 Bắt đầu dựng MP4').click().run()
+                self.assertFalse(app.exception);start.assert_called_once()
+                snapshot=start.call_args.args[0]
+                self.assertEqual(snapshot['settings']['aspect'],'16:9')
+                self.assertEqual(snapshot['export_destination'],str(Path(tmp)/'result'))
+                self.assertTrue(snapshot['voice']);self.assertTrue(snapshot['story']['image'])
+                self.assertEqual(len(snapshot['story']['backgrounds']),1)

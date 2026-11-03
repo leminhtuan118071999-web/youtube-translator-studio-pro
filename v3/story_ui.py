@@ -44,7 +44,7 @@ def panel(project,folder,locked):
     for hit in list(hits.values())[:6]:
         # Explicit source attribution, no autoplay/hotlink downloads.
         st.markdown(f"[Pixabay · video {hit['id']}]({hit['pageURL']}) · {hit['width']}×{hit['height']} · {hit['duration']} giây")
-    with st.form('story_inputs_'+pid,clear_on_submit=True):
+    with st.container():
         enabled=st.checkbox('Dựng theo kiểu ảnh nhân vật + video nền',value=cfg.get('enabled',True),disabled=locked)
         a,b=st.columns(2)
         with a:
@@ -70,9 +70,10 @@ def panel(project,folder,locked):
         y=e.slider('Vị trí dọc · trên → dưới',0,100,int(cfg.get('y',100)),disabled=locked)
         subtitles=st.checkbox('Tự tạo phụ đề cho cả mở đầu và giọng chính',value=cfg.get('auto_subtitles',True),disabled=locked)
         model=st.selectbox('Model nhận diện cho video kể chuyện',['small','base','tiny'],index=['small','base','tiny'].index(cfg.get('asr_model','small')),disabled=locked)
-        if st.form_submit_button('Lưu nguyên liệu và bố cục kể chuyện',disabled=locked):
+        auto_pixabay=st.checkbox('Tự tìm và chọn nền Pixabay nếu chưa chọn video nền',value=cfg.get('auto_pixabay',True),disabled=locked)
+        def save_inputs():
             try:
-                new=dict(cfg,enabled=enabled,query=query,backgrounds=kept,pixabay_selected=[hits[i] for i in selected],remove_background=remove,
+                new=dict(cfg,enabled=enabled,auto_pixabay=auto_pixabay,query=query,backgrounds=kept,pixabay_selected=[hits[i] for i in selected],remove_background=remove,
                          width=width,x=x,y=y,auto_subtitles=subtitles,asr_model=model,
                          keep_boxes=[[float(row[k]) for k in ('Trái','Trên','Phải','Dưới')] for row in boxes])
                 if len(set(records)|set(selected))>15:raise ValueError('Tổng số video Pixabay khác nhau của dự án vượt 15. Chọn lại video đã tải.')
@@ -96,13 +97,15 @@ def panel(project,folder,locked):
                     name=uploads.get(stamp)
                     if not name:
                         name=store.upload(folder,video,store.MEDIA- store.IMAGES);uploads[stamp]=name
-                    if name not in new['backgrounds']:new['backgrounds'].append(name)
+                    if name not in new['backgrounds'] and stamp not in cfg.get('background_uploads',{}):new['backgrounds'].append(name)
                     names[name]=video.name
                 new.update(background_names=names,background_uploads=uploads)
                 if not enabled and project.get('voice_track'):
                     for derived in ('voice_track','overlay_image','captions','caption_words','captions_origin'):project.pop(derived,None)
-                project['story']=new;store.save(project);st.session_state['restore_story_selection_'+pid]=True;st.rerun()
-            except (ValueError,OSError,TypeError,KeyError) as exc:st.error(str(exc))
+                project['story']=new;store.save(project);return True
+            except (ValueError,OSError,TypeError,KeyError) as exc:st.error(str(exc));return False
+        if st.button('Lưu nguyên liệu và bố cục kể chuyện',disabled=locked):
+            if save_inputs():st.rerun()
     if cfg.get('image'):
         if st.button('Tách nền để xem trước',disabled=locked,key='story_cutout_'+pid):launch(project,'cutout');st.rerun()
     @st.fragment(run_every=2)
@@ -123,4 +126,5 @@ def panel(project,folder,locked):
                 from .story import layout_preview
                 st.image(layout_preview(project,folder),caption='Xem thử một khung hình · dùng bố cục đã lưu')
             except (ValueError,OSError,RuntimeError) as exc:st.error(str(exc))
-    st.caption('Chỉnh cấu hình ở mục 04, lưu nguyên liệu tại đây, rồi chọn nơi lưu và bắt đầu dựng ở cuối mục 05.')
+    st.caption('Điền thông tin, chọn nơi lưu bên dưới rồi bấm Bắt đầu dựng MP4. App tự lưu thông tin và chạy đến khi hoàn tất.')
+    return save_inputs

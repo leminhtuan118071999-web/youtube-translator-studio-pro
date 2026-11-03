@@ -26,6 +26,22 @@ def voice_duration(project,folder):
     return total
 
 
+def validate_start(project,destination):
+    cfg=project.get('story',{})
+    missing=[]
+    if cfg.get('enabled'):
+        if not cfg.get('image'):missing.append('ảnh nhân vật')
+        if not project.get('voice'):missing.append('file giọng đọc chính')
+        if not cfg.get('backgrounds') and not cfg.get('pixabay_selected'):
+            from .pixabay import api_key
+            if not cfg.get('auto_pixabay',True) or not cfg.get('query','').strip() or not api_key():
+                missing.append('video nền hoặc từ khóa và khóa Pixabay để tự tìm nền')
+    elif not project.get('scenes'):missing.append('bật chế độ ảnh nhân vật + video nền và thêm nguyên liệu')
+    if not destination.strip():missing.append('nơi lưu kết quả')
+    elif not Path(destination.strip()).expanduser().is_absolute():missing.append('đường dẫn nơi lưu đầy đủ')
+    if missing:raise ValueError('Chưa thể bắt đầu. Cần bổ sung: '+ '; '.join(missing)+'.')
+
+
 def cutout(folder,config):
     from PIL import Image, ImageOps
     source=asset(folder,config['image'])
@@ -67,15 +83,22 @@ def prepare(run):
         except (ValueError,KeyError):return None
     def remember(key,sig,name):
         cache[key]=dict(signature=sig,file=name);atomic(cache_path,cache)
-    update(2,'Đang tách nền và giữ nhân vật; lần đầu cần tải model')
+    update(2,'Bước 1/6 · Tách nền ảnh; lần đầu cần tải model')
     sig=signature({k:cfg.get(k) for k in ('image','remove_background','keep_boxes')})
     png=cached('cutout',sig)
     if not png:png=cutout(folder,cfg);remember('cutout',sig,png)
     # Make the resulting cutout visible in the project even if a later stage fails.
     current=read(folder/'project.json');current.setdefault('story',{})['cutout']=png;save(current)
-    update(10,'Đang chuẩn bị video nền')
-    from .pixabay import download
-    downloaded=download(folder,cfg.get('pixabay_selected',[]),cancel,lambda p,s:update(10+round(10*p),s))
+    update(10,'Bước 2/6 · Chuẩn bị video nền')
+    from .pixabay import download,search
+    selected=cfg.get('pixabay_selected',[])
+    if not selected and not cfg.get('backgrounds') and cfg.get('auto_pixabay',True):
+        update(10,'Bước 2/6 · Đang tìm và chọn video nền Pixabay')
+        records=read(folder/'pixabay-downloads.json') if (folder/'pixabay-downloads.json').exists() else {}
+        if records:
+            cfg['backgrounds']=[r['file'] for r in records.values()]
+        else:selected=search(cfg.get('query','forest sunlight'))[:15]
+    downloaded=download(folder,selected,cancel,lambda p,s:update(10+round(10*p),s))
     effective['story']['downloaded']=read(folder/'pixabay-downloads.json') if (folder/'pixabay-downloads.json').exists() else {}
     current=read(folder/'project.json');current['story']['downloaded']=effective['story']['downloaded'];save(current)
     backgrounds=list(dict.fromkeys(cfg.get('backgrounds',[])+downloaded))
@@ -86,7 +109,7 @@ def prepare(run):
         media=probe(asset(folder,name))
         if not media['video'] or media['duration']<=0:raise ValueError('Nền phải là video có thời lượng hợp lệ.')
         scenes.append(dict(id=uuid4().hex,file=name,name=name,duration=min(3600,media['duration'])))
-    update(22,'Đang nối giọng mở đầu với giọng đọc chính')
+    update(22,'Bước 3/6 · Nối giọng mở đầu và giọng chính')
     voices=[v for v in (cfg.get('intro'),project['voice']) if v]
     sig=signature(voices);joined=cached('voice',sig)
     if not joined:
@@ -109,7 +132,7 @@ def prepare(run):
             for i,name in enumerate(voices):
                 subrun=run/('speech-'+str(i));subrun.mkdir(exist_ok=True)
                 atomic(subrun/'snapshot.json',dict(project,voice=name,asr_model=cfg.get('asr_model','small')))
-                transcribe(subrun,report=lambda p,s:update(25+round(25*(i+p/100)/len(voices)),s))
+                transcribe(subrun,report=lambda p,s:update(25+round(25*(i+p/100)/len(voices)),'Bước 4/6 · '+s))
                 data=read(subrun/'words.json');languages.append(data['language'])
                 words.extend(dict(w,start=round(w['start']+offset,3),end=round(w['end']+offset,3)) for w in data['words'])
                 offset+=probe(asset(folder,name))['duration']

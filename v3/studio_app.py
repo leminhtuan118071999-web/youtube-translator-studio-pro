@@ -51,7 +51,7 @@ with st.sidebar:
             status=cutout_status if cutout_status and cutout_status['state'] in ('running','queued') else asr_status if asr_status and asr_status['state'] in ('running','queued') else render_status or asr_status
             st.caption(item['name']+' · '+item['id'][:6])
             if status:
-                st.progress(status['progress']/100,text=names.get(status['state'],status['state'])+f" · {status['progress']}%")
+                st.progress(status['progress']/100,text=names.get(status['state'],status['state'])+f" · {status['progress']}% · "+status['stage'])
             else:st.caption('Chưa bắt đầu dựng')
     project_queue()
     st.caption('Tạo hoặc mở dự án khác không dừng video đang dựng. Nếu bấm dựng thêm dự án, dự án đó sẽ chờ đến lượt để tránh quá tải máy.')
@@ -146,7 +146,7 @@ output_tab,story_tab=st.tabs(['04 · Xuất video','05 · Dựng kiểu video m�
 try:
     with output_tab:
         cfg=project['settings']
-        with st.form('settings_'+pid):
+        with st.container():
             a,b=st.columns(2)
             with a:
                 aspect=st.selectbox('Khung hình',['9:16','16:9','1:1'],index=['9:16','16:9','1:1'].index(cfg['aspect']),disabled=locked)
@@ -162,14 +162,14 @@ try:
                 duck=st.checkbox('Tự hạ nhạc khi có lời đọc',value=cfg['duck'],disabled=locked)
                 font=st.slider('Cỡ chữ phụ đề',16,64,cfg['font_size'],disabled=locked)
                 subtitle_mode=st.selectbox('Cách hiện phụ đề nhận diện',['words','sentence'],index=0 if cfg.get('subtitle_mode','words')=='words' else 1,format_func=lambda value:'Tô sáng từng từ đang đọc' if value=='words' else 'Theo cụm lời · không tô từng từ',disabled=locked)
-            if st.form_submit_button('Lưu cấu hình xuất',disabled=locked):
+            if st.button('Lưu cấu hình xuất',disabled=locked):
                 project['settings']=dict(aspect=aspect,resolution=resolution,fit=fit,transition=transition,sync_voice=sync,original_volume=original/100,music_volume=music/100,voice_volume=voice/100,duck=duck,font_size=font,subtitle_mode=subtitle_mode)
                 store.save(project);st.rerun()
     with story_tab:
         from v3.story_ui import panel
-        panel(project,folder,locked)
+        save_inputs=panel(project,folder,locked)
         st.divider()
-        st.caption('Lưu nguyên liệu, bố cục và cấu hình trước khi dựng. Dựng từ các giá trị đã lưu, giữ cả các lần xuất trước.')
+        st.caption('Bấm bắt đầu để tự lưu thông tin vừa nhập, tách nền, chuẩn bị video nền, ghép giọng, tạo phụ đề và xuất vào nơi đã chọn.')
         story_mode=project.get('story',{}).get('enabled',False)
         ready=bool(project['scenes'])
         if story_mode:
@@ -177,12 +177,16 @@ try:
             st.info('Đang dùng chế độ ảnh nhân vật + video nền từ mục 05.')
             ready=bool(project.get('voice') and project['story'].get('image') and (project['story'].get('backgrounds') or project['story'].get('pixabay_selected')))
             if project.get('voice'):st.metric('Thời lượng mở đầu + giọng chính',f'{voice_duration(project,folder):.1f} giây')
-            if not ready:st.warning('Lưu ảnh nhân vật, giọng chính và ít nhất một video nền trong mục 05 trước.')
+
         elif project['scenes']:
             durations=plan(project,folder)
             st.metric('Thời lượng dự kiến',f'{sum(durations):.1f} giây')
         save_completed(folder)
-        if st.button('🎬 Bắt đầu dựng MP4',type='primary',disabled=locked or not ready):
+        if st.button('🎬 Bắt đầu dựng MP4',type='primary',disabled=locked):
+            if not save_inputs():st.stop()
+            project['settings']=dict(aspect=aspect,resolution=resolution,fit=fit,transition=transition,sync_voice=sync,original_volume=original/100,music_volume=music/100,voice_volume=voice/100,duck=duck,font_size=font,subtitle_mode=subtitle_mode)
+            from v3.story import validate_start
+            validate_start(project,st.session_state.get('save_folder_'+pid,''))
             project['export_destination']=st.session_state.get('save_folder_'+pid,'').strip()
             project['export_include_assets']=st.session_state.get('full_'+pid,True)
             store.save(project)

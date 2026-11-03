@@ -120,6 +120,7 @@ def upload(folder, file, allowed):
         raise ValueError('Định dạng tệp chưa được hỗ trợ.')
     name = uuid4().hex + suffix
     path = Path(folder)/'assets'/name
+    file.seek(0)
     with path.open('wb') as target:
         shutil.copyfileobj(file,target,1024*1024)
     if not path.stat().st_size:
