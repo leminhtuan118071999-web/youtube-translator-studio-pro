@@ -54,7 +54,9 @@ class BackgroundJobsTests(unittest.TestCase):
                         "reference_prompt": "Full-body character sheet",
                     }],
                 })
-            if "Soạn YouTube tiêu đề" in prompt:
+            if prompt.startswith("TARGET_METADATA_REVIEW"):
+                return '{"ok":true,"issues":[]}'
+            if prompt.startswith("TARGET_METADATA."):
                 return json.dumps({"title": "Tytuł", "description": "Opis", "tags": ["tag-a","tag-b"]})
             self.fail("Unexpected prompt: " + prompt[:100])
         api.side_effect = mock_ai
@@ -66,7 +68,7 @@ class BackgroundJobsTests(unittest.TestCase):
         self.assertEqual(result["fields"]["new_description"], "Opis")
         self.assertEqual(result["fields"]["seo_tags"], "tag-a, tag-b")
         self.assertNotIn("prompts", result["fields"])
-        self.assertEqual(api.call_count, 3)  # Translation + character profiles + SEO
+        self.assertEqual(api.call_count, 3)  # Translation + metadata generation + metadata review
         self.assertEqual(progress.snapshot()[0], 100)
         self.assertNotIn("api_key", result["fields"])
         self.assertNotIn(self.config["api_key"], repr(result))
@@ -116,7 +118,9 @@ class BackgroundJobsTests(unittest.TestCase):
         def mock_ai(_provider, _url, _model, _key, prompt):
             if "CHỈ xuất bản dịch" in prompt:
                 return "Przetłumaczony tekst."
-            if "Soạn YouTube tiêu đề" in prompt:
+            if prompt.startswith("TARGET_METADATA_REVIEW"):
+                return '{"ok":true,"issues":[]}'
+            if prompt.startswith("TARGET_METADATA."):
                 return json.dumps({"title":"Tytuł","description":"Opis","tags":["a","b"]})
             self.fail("Unexpected text request")
         api.side_effect = mock_ai
@@ -147,7 +151,9 @@ class BackgroundJobsTests(unittest.TestCase):
                 if calls["translate"] == 1:
                     raise RateLimitError("Too many tokens", retry_after=2)
                 return "Tłumaczenie."
-            if "Soạn YouTube tiêu đề" in prompt:
+            if prompt.startswith("TARGET_METADATA_REVIEW"):
+                return '{"ok":true,"issues":[]}'
+            if prompt.startswith("TARGET_METADATA."):
                 return json.dumps({"title":"Tytuł","description":"Opis","tags":["tag1","tag2"]})
             self.fail("Unexpected query")
         api.side_effect = fake_api
@@ -188,7 +194,9 @@ class BackgroundJobsTests(unittest.TestCase):
             if "CHỈ xuất bản dịch" in prompt:
                 prompt_lengths.append(len(prompt))
                 return "Translation."
-            if "Soạn YouTube tiêu đề" in prompt:
+            if prompt.startswith("TARGET_METADATA_REVIEW"):
+                return '{"ok":true,"issues":[]}'
+            if prompt.startswith("TARGET_METADATA."):
                 return json.dumps({"title":"Title","description":"Description","tags":["tag1"]})
             if "Summarize" in prompt or "Condense" in prompt:
                 return "Brief scene events."
@@ -210,7 +218,9 @@ class BackgroundJobsTests(unittest.TestCase):
                 index = len(seen_chunks) + 1
                 seen_chunks.append(prompt)
                 return f"Bản dịch phần {index}"
-            if "Soạn YouTube tiêu đề" in prompt:
+            if prompt.startswith("TARGET_METADATA_REVIEW"):
+                return '{"ok":true,"issues":[]}'
+            if prompt.startswith("TARGET_METADATA."):
                 return json.dumps({"title": "Title", "description": "Description", "tags": ["tag"]})
             if "Summarize" in prompt or "Condense" in prompt:
                 return "Short summary of the whole story."
@@ -246,7 +256,9 @@ class BackgroundJobsTests(unittest.TestCase):
                         status_code=502, retry_after=2
                     )
                 return "Translation done"
-            if "Soạn YouTube tiêu đề" in prompt:
+            if prompt.startswith("TARGET_METADATA_REVIEW"):
+                return '{"ok":true,"issues":[]}'
+            if prompt.startswith("TARGET_METADATA."):
                 return json.dumps({
                     "title": "Title", "description": "Description", "tags": ["tag"]
                 })
@@ -319,7 +331,9 @@ class BackgroundJobsTests(unittest.TestCase):
                         "reference_prompt": "Full-body character sheet",
                     }],
                 })
-            if "Soạn YouTube tiêu đề" in prompt:
+            if prompt.startswith("TARGET_METADATA_REVIEW"):
+                return '{"ok":true,"issues":[]}'
+            if prompt.startswith("TARGET_METADATA."):
                 return json.dumps({
                     "title": "Tiêu đề", "description": "Mô tả",
                     "tags": ["seo"]
@@ -328,7 +342,7 @@ class BackgroundJobsTests(unittest.TestCase):
         api.side_effect = respond
         result = run_full_job(config, JobProgress())
         self.assertTrue(result["ok"], result["error"])
-        self.assertEqual(api.call_count, 3)  # Translation, profiles and SEO
+        self.assertEqual(api.call_count, 3)  # Translation, metadata generation and review
         self.assertEqual(result["fields"]["translated"], "Dịch xong")
 
     def test_cancel_does_not_touch_provider(self):
