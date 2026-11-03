@@ -54,7 +54,7 @@ def execute(kind, snapshot, progress, image_sink=None):
         snapshot.update(existing_plan=progress.partial_result().get('video_forms', snapshot.get('video_forms', '')),
                         audio_hash=snapshot.get('audio_hash', ''), audio_name=snapshot.get('audio_name', ''),
                         auto_form_language=True, known_translation_language=snapshot['language'],
-                        auto_character_profiles=True, verify_form_language=True)
+                        auto_character_profiles=False, lightweight_form_reference=True, verify_form_language=True)
         for field in ('character_profile_json', 'character_bible', 'repair_memory_json'):
             if field in progress.partial_result():
                 snapshot[field] = progress.partial_result()[field]
