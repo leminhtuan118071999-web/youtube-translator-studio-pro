@@ -1,0 +1,22 @@
+name: LMT Video Editor V3 CI
+on:
+  push:
+    branches: ['v3/**']
+    paths: ['v3/**', '.github/workflows/v3-ci.yml']
+  pull_request:
+    paths: ['v3/**', '.github/workflows/v3-ci.yml']
+permissions:
+  contents: read
+jobs:
+  editor:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+          cache: pip
+          cache-dependency-path: v3/requirements.txt
+      - run: sudo apt-get update && sudo apt-get install -y ffmpeg
+      - run: pip install -r v3/requirements.txt
+      - run: python -m unittest -v v3.tests.test_render v3.tests.test_ui

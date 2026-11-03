@@ -1,0 +1,215 @@
+"""Real FFmpeg renderer: local assets, normalized scenes and a narration-led mix."""
+from __future__ import annotations
+import json
+from functools import lru_cache
+import math
+from pathlib import Path
+import re
+import select
+import shutil
+import subprocess
+import time
+from .projects import asset, IMAGES
+
+FPS = 30
+
+
+class Cancelled(Exception): pass
+
+
+def probe(path):
+    path=Path(path).resolve();stat=path.stat()
+    return dict(_probe(str(path),stat.st_mtime_ns,stat.st_size))
+
+
+@lru_cache(maxsize=2048)
+def _probe(path, modified, size):
+    p = subprocess.run(['ffprobe','-v','error','-protocol_whitelist','file,pipe','-show_streams','-show_format','-of','json',str(path)], capture_output=True, text=True, timeout=40)
+    if p.returncode:
+        raise ValueError('Không đọc được tệp media: '+Path(path).name)
+    data = json.loads(p.stdout)
+    streams = data.get('streams',[])
+    durations = [float(s.get('duration') or 0) for s in [data.get('format',{}),*streams]]
+    duration = max(durations, default=0)
+    if not math.isfinite(duration) or duration > 14400:
+        raise ValueError('Thời lượng media không hợp lệ hoặc vượt 4 giờ.')
+    return dict(duration=duration, video=any(s.get('codec_type')=='video' for s in streams),
+                audio=any(s.get('codec_type')=='audio' for s in streams))
+
+
+def plan(project, folder):
+    scenes = project.get('scenes',[])
+    if not 1 <= len(scenes) <= 300:
+        raise ValueError('Cần từ 1 đến 300 cảnh.')
+    settings = project['settings']
+    if settings['aspect'] not in ('9:16','16:9','1:1') or settings['resolution'] not in (720,1080):
+        raise ValueError('Khung hình hoặc độ phân giải không hợp lệ.')
+    if settings['fit'] not in ('contain','cover') or settings['transition'] not in ('cut','fade'):
+        raise ValueError('Cách căn hình hoặc chuyển cảnh không hợp lệ.')
+    for key in ('music_volume','voice_volume','original_volume'):
+        if not isinstance(settings[key],(int,float)) or not 0 <= settings[key] <= 2:
+            raise ValueError('Âm lượng không hợp lệ.')
+    if not 16 <= settings.get('font_size',32) <= 64:
+        raise ValueError('Cỡ chữ phải từ 16 đến 64.')
+    weights=[]
+    for scene in scenes:
+        media=probe(asset(folder,scene['file']))
+        if not media['video']: raise ValueError('Cảnh phải là video hoặc ảnh.')
+        duration=float(scene['duration'])
+        if not math.isfinite(duration) or not 0.1 <= duration <= 3600:
+            raise ValueError('Thời lượng mỗi cảnh phải từ 0,1 đến 3600 giây.')
+        weights.append(duration)
+    voice = project.get('voice')
+    target=sum(weights)
+    if voice:
+        audio=probe(asset(folder,voice))
+        if not audio['audio'] or audio['duration'] <= 0:
+            raise ValueError('File giọng đọc phải có âm thanh hợp lệ.')
+        if settings['sync_voice']: target=audio['duration']
+        elif audio['duration'] > target + 0.1:
+            raise ValueError('Giọng đọc dài hơn timeline. Bật tự khớp thời lượng để tránh cắt lời.')
+    if project.get('music') and not probe(asset(folder,project['music']))['audio']:
+        raise ValueError('File nhạc nền không có âm thanh.')
+    if not 0 < target <= 14400 or round(target*FPS) < len(scenes):
+        raise ValueError('Timeline quá ngắn hoặc vượt 4 giờ.')
+    # Distribute integer frames, preserving exact total duration without drift.
+    total_frames=round(target*FPS)
+    exact=[w/sum(weights)*(total_frames-len(scenes)) for w in weights]
+    frames=[1+math.floor(v) for v in exact]
+    for i in sorted(range(len(frames)),key=lambda i:exact[i]%1,reverse=True)[:total_frames-sum(frames)]:
+        frames[i]+=1
+    return [f/FPS for f in frames]
+
+
+def timestamp(seconds):
+    ms=round(seconds*1000); seconds,ms=divmod(ms,1000); minutes,seconds=divmod(seconds,60); hours,minutes=divmod(minutes,60)
+    return f'{hours:02}:{minutes:02}:{seconds:02},{ms:03}'
+
+
+def estimated_srt(text,duration):
+    # Estimated subtitles are explicitly labelled in the UI, never speech alignment.
+    chunks=[]
+    for sentence in re.split(r'(?<=[.!?。！？])\s+|\n+',text.strip()):
+        words=sentence.split(); line=''
+        for word in words:
+            if line and len(line)+len(word)+1>78:
+                chunks.append(line); line=''
+            line=(line+' '+word).strip()
+        if line: chunks.append(line)
+    weight=sum(max(1,len(c)) for c in chunks)
+    out=[]; cursor=0
+    for i,chunk in enumerate(chunks):
+        end=duration if i==len(chunks)-1 else cursor+duration*max(1,len(chunk))/weight
+        if end-cursor < .001: continue
+        out.append(f'{len(out)+1}\n{timestamp(cursor)} --> {timestamp(end)}\n{chunk}\n')
+        cursor=end
+    return '\n'.join(out)
+
+
+def validate_srt(text,duration):
+    cues=re.findall(r'(\d{2,}:\d{2}:\d{2}[,.]\d{3})\s*-->\s*(\d{2,}:\d{2}:\d{2}[,.]\d{3})\s*\n([^\n]+(?:\n(?!\s*\n)[^\n]+)*)',text.strip())
+    if not cues: raise ValueError('Phụ đề SRT chưa có mốc thời gian hợp lệ.')
+    def secs(t):
+        h,m,s,ms=map(int,re.split('[:,.]',t))
+        if m>=60 or s>=60: raise ValueError('Mốc thời gian SRT không hợp lệ.')
+        return h*3600+m*60+s+ms/1000
+    previous=0; out=[]
+    for start,end,body in cues:
+        a,b=secs(start),secs(end)
+        if a<previous or b<=a or b>duration+0.15:
+            raise ValueError('Mốc SRT bị chồng lấn hoặc vượt thời lượng video.')
+        # Escape ASS override sequences while retaining plain Unicode text.
+        body=re.sub(r'<[^>]*>','',body).replace('{','(').replace('}',')')
+        out.append(f'{len(out)+1}\n{timestamp(a)} --> {timestamp(b)}\n{body}\n');previous=b
+    return '\n'.join(out)
+
+
+def run_ffmpeg(args, folder, cancel, progress=None, duration=1):
+    if cancel.exists(): raise Cancelled()
+    base=['ffmpeg','-hide_banner','-loglevel','error','-nostdin','-y','-filter_threads','1','-filter_complex_threads','1']
+    with (folder/'ffmpeg.log').open('a') as log:
+        process=subprocess.Popen(base+args+['-progress','pipe:1','-nostats'],stdout=subprocess.PIPE,stderr=log,text=True,cwd=folder)
+        try:
+            while process.poll() is None:
+                if cancel.exists(): raise Cancelled()
+                if select.select([process.stdout],[],[],0.2)[0]:
+                    line=process.stdout.readline().strip()
+                    if progress and line.startswith('out_time_us='):
+                        try: progress(min(1,float(line.split('=')[1])/1e6/duration))
+                        except ValueError: pass
+            if process.returncode:
+                tail=(folder/'ffmpeg.log').read_text(errors='replace')[-2500:]
+                raise RuntimeError('FFmpeg chưa dựng được video. Chi tiết: '+tail)
+        finally:
+            if process.poll() is None:
+                process.terminate()
+                try: process.wait(timeout=3)
+                except subprocess.TimeoutExpired: process.kill();process.wait()
+            process.stdout.close()
+    if cancel.exists(): raise Cancelled()
+
+
+def render(project, assets_folder, output_folder, update):
+    if not shutil.which('ffmpeg') or not shutil.which('ffprobe'):
+        raise ValueError('Cần cài FFmpeg và ffprobe trên máy Mac.')
+    output_folder=Path(output_folder);output_folder.mkdir(parents=True,exist_ok=True)
+    cancel=output_folder/'cancel'
+    durations=plan(project,assets_folder); total=sum(durations); cfg=project['settings']
+    if project.get('captions') or project.get('subtitle_text','').strip():
+        capabilities=subprocess.run(['ffmpeg','-hide_banner','-filters'],capture_output=True,text=True,timeout=10).stdout
+        if ' subtitles ' not in capabilities:
+            raise ValueError('FFmpeg hiện tại chưa có bộ lọc phụ đề libass. Hãy dùng bản FFmpeg hỗ trợ libass hoặc bỏ phụ đề.')
+    if project.get('captions'):
+        validate_srt(asset(assets_folder,project['captions']).read_text(encoding='utf-8-sig'),total)
+    short=cfg['resolution']
+    width,height={'9:16':(short,round(short*16/9)), '16:9':(round(short*16/9),short),'1:1':(short,short)}[cfg['aspect']]
+    width+=width%2;height+=height%2
+    encode=['-c:v','libx264','-preset','veryfast','-crf','20','-threads','2','-pix_fmt','yuv420p','-c:a','aac','-ar','48000','-ac','2']
+    for i,(scene,seconds) in enumerate(zip(project['scenes'],durations)):
+        update(5+65*i/len(durations),f'Đang dựng cảnh {i+1}/{len(durations)}')
+        path=asset(assets_folder,scene['file']); media=probe(path)
+        image=path.suffix.lower() in IMAGES
+        args=(['-loop','1','-framerate',str(FPS)] if image else ['-stream_loop','-1'])+['-i',str(path)]
+        if image or not media['audio']:
+            args+=['-f','lavfi','-i','anullsrc=r=48000:cl=stereo'];audio='1:a:0'
+        else: audio='0:a:0'
+        vf=f'fps={FPS},scale={width}:{height}:force_original_aspect_ratio='+('increase' if cfg['fit']=='cover' else 'decrease')
+        vf+=f',crop={width}:{height}' if cfg['fit']=='cover' else f',pad={width}:{height}:(ow-iw)/2:(oh-ih)/2:color=black'
+        vf+=',setsar=1,setpts=PTS-STARTPTS'
+        if cfg['transition']=='fade':
+            fade=min(.25,seconds/3);vf+=f',fade=t=in:st=0:d={fade},fade=t=out:st={seconds-fade}:d={fade}'
+        run_ffmpeg(args+['-map','0:v:0','-map',audio,'-vf',vf,'-af',f'aresample=48000,apad,atrim=duration={seconds},asetpts=PTS-STARTPTS','-t',str(seconds),*encode,f'scene-{i:04}.mp4'],output_folder,cancel)
+    concat=''.join(f"file 'scene-{i:04}.mp4'\nduration {d:.9f}\n" for i,d in enumerate(durations))
+    (output_folder/'scenes.txt').write_text(concat)
+    args=['-f','concat','-safe','1','-i','scenes.txt']; filters=[f'[0:a]volume={cfg["original_volume"]}[base]'];mix=['[base]'];index=1
+    if project.get('voice'):
+        args+=['-i',str(asset(assets_folder,project['voice']))]
+        filters.append(f'[{index}:a]aresample=48000,apad,atrim=duration={total},asetpts=PTS-STARTPTS,volume={cfg["voice_volume"]}[voice]');index+=1
+        if project.get('music') and cfg['duck']:
+            filters.append('[voice]asplit=2[voiceout][side]');mix.append('[voiceout]')
+        else: mix.append('[voice]')
+    if project.get('music'):
+        args+=['-stream_loop','-1','-i',str(asset(assets_folder,project['music']))]
+        filters.append(f'[{index}:a]aresample=48000,atrim=duration={total},asetpts=PTS-STARTPTS,volume={cfg["music_volume"]}[music]')
+        if project.get('voice') and cfg['duck']:
+            filters.append('[music][side]sidechaincompress=threshold=0.03:ratio=8:attack=20:release=300[duck]');mix.append('[duck]')
+        else: mix.append('[music]')
+    filters.append(''.join(mix)+f'amix=inputs={len(mix)}:duration=longest:normalize=0,alimiter=limit=0.95:latency=1[audio]')
+    subtitles=''
+    if project.get('captions'):
+        subtitles=validate_srt(asset(assets_folder,project['captions']).read_text(encoding='utf-8-sig'),total)
+    elif project.get('subtitle_text','').strip(): subtitles=estimated_srt(project['subtitle_text'],total)
+    if subtitles:
+        (output_folder/'captions.srt').write_text(subtitles,encoding='utf8')
+        filters.append(f"[0:v]subtitles=captions.srt:force_style='PlayResX={width},PlayResY={height},FontName=Arial,FontSize={cfg['font_size']},Outline=2,Shadow=0,MarginV=40,MarginL=32,MarginR=32'[video]")
+        video='[video]'
+    else: video='0:v:0'
+    update(72,'Đang ghép âm thanh, phụ đề và xuất MP4')
+    run_ffmpeg(args+['-filter_complex',';'.join(filters),'-map',video,'-map','[audio]','-t',str(total),'-r',str(FPS),*encode,'-movflags','+faststart','output.pending.mp4'],output_folder,cancel,
+               lambda fraction:update(72+27*fraction,'Đang xuất MP4'),total)
+    result=probe(output_folder/'output.pending.mp4')
+    if not result['video'] or not result['audio'] or abs(result['duration']-total)>.3:
+        raise ValueError('Video xuất chưa đạt kiểm tra thời lượng/âm thanh.')
+    (output_folder/'output.pending.mp4').replace(output_folder/'output.mp4')
+    update(100,'Hoàn thành và đã lưu MP4')
+    return dict(duration=total,width=width,height=height,scenes=len(durations))
