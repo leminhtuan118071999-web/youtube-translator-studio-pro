@@ -60,8 +60,8 @@ def panel(project,folder,locked):
             kept=st.multiselect('Video nền đã lưu muốn dùng',existing,default=cfg.get('backgrounds',[]),format_func=lambda n:cfg.get('background_names',{}).get(n,'Video đã tải · '+n[:8]),disabled=locked)
             selected=st.multiselect('Chọn video Pixabay để tải khi dựng (tối đa 15)',list(hits),key=selection_key,format_func=lambda i:f"Pixabay {i} · {hits[i]['tags']} · {hits[i]['duration']} giây",max_selections=15,disabled=locked)
         remove=st.checkbox('Tự động xóa nền ảnh',value=cfg.get('remove_background',True),disabled=locked)
-        st.caption('Bỏ chọn nếu đã dùng PNG trong suốt. Tách nền giữ ảnh gốc, không vẽ lại nhân vật; tóc/vật thể nhỏ cần xem trước.')
-        with st.expander('Giữ thêm chi tiết ngoài nhân vật'):
+        st.caption('Bỏ chọn nếu đã dùng PNG trong suốt. Tách nền chất lượng cao, quét toàn ảnh và hai vùng chồng lấn để hạn chế bỏ sót người. Lần đầu tải model lớn; xử lý chậm hơn. Không khôi phục phần cơ thể đã bị cắt trong ảnh gốc.')
+        with st.expander('Khôi phục vùng nhân vật hoặc chi tiết bị thiếu'):
             st.caption('Thêm vùng chữ nhật theo % ảnh gốc: trái, trên, phải, dưới (0–100). Vùng này giữ cả chi tiết và nền bên trong vùng; dùng PNG đã chỉnh sẵn nếu cần đường viền chính xác.')
             boxes=st.data_editor(pd.DataFrame(cfg.get('keep_boxes',[]),columns=['Trái','Trên','Phải','Dưới']),num_rows='dynamic',disabled=locked,key='story_boxes_'+pid).to_dict('records')
         c,d,e=st.columns(3)
@@ -107,7 +107,8 @@ def panel(project,folder,locked):
         if st.button('Lưu nguyên liệu và bố cục kể chuyện',disabled=locked):
             if save_inputs():st.rerun()
     if cfg.get('image'):
-        if st.button('Tách nền để xem trước',disabled=locked,key='story_cutout_'+pid):launch(project,'cutout');st.rerun()
+        if st.button('Tách nền để xem trước',disabled=locked,key='story_cutout_'+pid):
+            if save_inputs():launch(project,'cutout');st.rerun()
     @st.fragment(run_every=2)
     def preview_status():
         status=current(folder,'cutout')

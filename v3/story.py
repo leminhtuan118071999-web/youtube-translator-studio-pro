@@ -42,6 +42,42 @@ def validate_start(project,destination):
     if missing:raise ValueError('Chưa thể bắt đầu. Cần bổ sung: '+ '; '.join(missing)+'.')
 
 
+# Version the cache whenever segmentation changes; never reuse the old u2netp mask.
+CUTOUT_VERSION = 'birefnet-multiview-v1'
+
+
+def cutout_signature(config):
+    return signature(dict(version=CUTOUT_VERSION, **{k:config.get(k) for k in
+        ('image','remove_background','keep_boxes')}))
+
+
+def group_cutout(original):
+    """Union full-frame and overlapping regional masks, preserving source pixels."""
+    from PIL import Image, ImageChops
+    from rembg import remove, new_session
+    session = new_session('birefnet-general', providers=['CPUExecutionProvider'])
+    rgb = original.convert('RGB')
+    def predict(image):
+        mask = remove(image, session=session, only_mask=True).convert('L')
+        if mask.size != image.size:
+            mask = mask.resize(image.size, Image.Resampling.LANCZOS)
+        return mask
+    alpha = predict(rgb)
+    w, h = rgb.size
+    # Overlap avoids splitting people at the center; full-frame mask stays intact.
+    if w >= h and w >= 600:
+        for left, right in ((0, round(w*.65)), (round(w*.35), w)):
+            box = (left, 0, right, h)
+            regional = Image.new('L', rgb.size)
+            regional.paste(predict(rgb.crop(box)), (left, 0))
+            alpha = ImageChops.lighter(alpha, regional)
+    # Respect existing transparency. Do not synthesize hidden body parts or pixels.
+    alpha = ImageChops.multiply(alpha, original.getchannel('A'))
+    result = original.copy()
+    result.putalpha(alpha)
+    return result
+
+
 def cutout(folder,config):
     from PIL import Image, ImageOps
     source=asset(folder,config['image'])
@@ -51,8 +87,7 @@ def cutout(folder,config):
     if config.get('remove_background',True):
         os.environ.setdefault('U2NET_HOME',str(home()/'models'/'rembg'))
         os.environ.setdefault('OMP_NUM_THREADS','2')
-        from rembg import remove,new_session
-        result=remove(original,session=new_session('u2netp',providers=['CPUExecutionProvider']))
+        result=group_cutout(original)
     else:result=original.copy()
     # Optional keep boxes restore original details, without regenerating the image.
     for box in config.get('keep_boxes',[]):
@@ -84,7 +119,7 @@ def prepare(run):
     def remember(key,sig,name):
         cache[key]=dict(signature=sig,file=name);atomic(cache_path,cache)
     update(2,'Bước 1/6 · Tách nền ảnh; lần đầu cần tải model')
-    sig=signature({k:cfg.get(k) for k in ('image','remove_background','keep_boxes')})
+    sig=cutout_signature(cfg)
     png=cached('cutout',sig)
     if not png:png=cutout(folder,cfg);remember('cutout',sig,png)
     # Make the resulting cutout visible in the project even if a later stage fails.
@@ -173,7 +208,7 @@ def layout_preview(project,folder):
 def preview_cutout(run):
     run=Path(run);project=read(run/'snapshot.json');folder=project_dir(project['id'])
     cfg=project['story'];cache_path=folder/'story-cache.json';cache=read(cache_path) if cache_path.exists() else {}
-    sig=signature({k:cfg.get(k) for k in ('image','remove_background','keep_boxes')})
+    sig=cutout_signature(cfg)
     atomic(run/'status.json',dict(state='running',task='cutout',progress=5,stage='Đang tách nền ảnh; lần đầu tải model',updated=time.time()))
     image=cutout(folder,cfg)
     cache['cutout']=dict(signature=sig,file=image);atomic(cache_path,cache)

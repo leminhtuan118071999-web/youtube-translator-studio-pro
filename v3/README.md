@@ -80,3 +80,9 @@ Các test thực sự chạy FFmpeg: ghép ảnh/video, kiểm tra pixel/thứ t
 Launcher trên Mac tự ưu tiên ffmpeg-full đã cài bằng Homebrew. Chưa kiểm tra trực tiếp trên Mac M2; chất lượng tách tóc/vật thể mảnh và nhận diện tên riêng cần xem lại. Bản xuất đầy đủ giữ ảnh gốc, ảnh tách nền, hai giọng gốc, giọng đã nối, nền và phụ đề để mở lại. Chưa có khóa Pixabay trong môi trường kiểm thử nên tải trực tiếp với tài khoản người dùng chưa được xác minh; kiểm thử tải/cache/giới hạn dùng phản hồi mô phỏng và media thật.
 
 Tiến trình hiển thị theo từng dự án: 1/6 tách nền, 2/6 chuẩn bị nền Pixabay/local, 3/6 nối giọng, 4/6 nhận diện phụ đề, 5/6 dựng MP4, 6/6 sao chép vào nơi lưu. Có thể hủy. Nếu thiếu đầu vào, nút bắt đầu báo tên phần cần bổ sung thay vì bị mờ theo thông tin lưu cũ.
+
+## Tách nền ảnh nhiều nhân vật
+
+Dùng BiRefNet General thay model nhẹ u2netp. Ảnh ngang từ 600 pixel được quét toàn ảnh và hai vùng chồng lấn, hợp nhất alpha để hạn chế bỏ sót người nhỏ hoặc ở rìa. Giữ RGB gốc, độ trong suốt đầu vào và mọi thành phần mask, không chỉ thành phần lớn nhất. Cache cũ tự hết hiệu lực ở lần dựng tiếp theo. Lần đầu cần mạng tải model; CPU/RAM và thời gian xử lý cao hơn.
+
+Không bảo đảm nhận ra mọi người bị che khuất, không tạo phần cơ thể ngoài ảnh. Xem trước trước khi dựng; dùng vùng khôi phục nếu còn thiếu (vùng khôi phục giữ cả nền trong hình chữ nhật) hoặc PNG trong suốt đã chỉnh. Không dùng model nhẹ làm dự phòng âm thầm nếu tải model lỗi.
