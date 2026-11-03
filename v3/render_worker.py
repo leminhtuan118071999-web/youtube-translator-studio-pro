@@ -10,6 +10,7 @@ import threading
 from uuid import uuid4
 from .projects import home, project_dir, atomic, read, save, export_run
 import shutil
+import signal
 from .render import render, Cancelled
 
 
@@ -23,7 +24,7 @@ def busy(folder):
 
 
 def launch(project, task="render"):
-    if task not in ("render","transcribe"):raise ValueError("Tác vụ không hợp lệ.")
+    if task not in ("render","transcribe","cutout"):raise ValueError("Tác vụ không hợp lệ.")
     if task=="transcribe" and not project.get("voice"):raise ValueError("Hãy tải file giọng đọc trước.")
     folder=project_dir(project['id'])
     with (folder/'render.lock').open('a') as lock:
@@ -40,7 +41,7 @@ def launch(project, task="render"):
                     cwd=Path(__file__).resolve().parents[1],stdout=log,stderr=log,
                     start_new_session=True,pass_fds=(lock.fileno(),))
             threading.Thread(target=process.wait,daemon=True).start()
-            atomic(folder/('latest-asr.json' if task=='transcribe' else 'latest.json'),dict(run_id=run_id,pid=process.pid))
+            atomic(folder/('latest-asr.json' if task=='transcribe' else 'latest-cutout.json' if task=='cutout' else 'latest.json'),dict(run_id=run_id,pid=process.pid))
         except Exception as exc:
             atomic(run/'status.json',dict(state='failed',progress=0,stage='Chưa khởi động được renderer',error=str(exc),updated=time.time()))
             raise
@@ -49,7 +50,7 @@ def launch(project, task="render"):
 
 def current(folder, task="render"):
     folder=Path(folder)
-    reference=folder/("latest-asr.json" if task=="transcribe" else "latest.json")
+    reference=folder/("latest-asr.json" if task=="transcribe" else "latest-cutout.json" if task=="cutout" else "latest.json")
     if not reference.exists(): return None
     ref=read(reference);run=folder/'runs'/ref['run_id'];status=read(run/'status.json')
     if status['state'] in ('queued','running') and not busy(folder):
@@ -86,6 +87,27 @@ def recognize(project,run,cancel):
     return dict(language=data['language'],words=len(data['words']),source_voice=project['voice'])
 
 
+def prepare_story(run,task='render'):
+    args=[sys.executable,'-m','v3.story',str(run)]
+    if task=='cutout':args.append('cutout')
+    with (run/'prepare.log').open('a') as log:
+        process=subprocess.Popen(args,cwd=Path(__file__).resolve().parents[1],stdout=log,stderr=log,start_new_session=True)
+        try:
+            while process.poll() is None:
+                if (run/'cancel').exists():raise Cancelled()
+                time.sleep(.2)
+            if (run/'cancel').exists():raise Cancelled()
+            if process.returncode:
+                error=read(run/'prepare-error.json')['error'] if (run/'prepare-error.json').exists() else 'Chưa chuẩn bị được nguyên liệu; xem prepare.log.'
+                raise ValueError(error)
+        finally:
+            if process.poll() is None:
+                os.killpg(process.pid,signal.SIGTERM)
+                try:process.wait(timeout=3)
+                except subprocess.TimeoutExpired:os.killpg(process.pid,signal.SIGKILL);process.wait()
+    return read(run/('cutout-result.json' if task=='cutout' else 'render-project.json'))
+
+
 def main(run,fd):
     run=Path(run).resolve();lock=os.fdopen(int(fd),'a')
     # Keep fd alive for the whole run, including cancellation/error cleanup.
@@ -106,11 +128,16 @@ def main(run,fd):
                 try: fcntl.flock(global_lock,fcntl.LOCK_EX|fcntl.LOCK_NB);break
                 except BlockingIOError: time.sleep(.3)
             project=read(run/'snapshot.json')
-            if task=='transcribe':
+            if task=='cutout':
+                details=prepare_story(run,'cutout');stage='Đã tách nền; kiểm tra ảnh và bố cục trước khi dựng'
+            elif task=='transcribe':
                 details=recognize(project,run,cancel)
                 stage='Đã tạo phụ đề theo giọng đọc · '+details['language']
             else:
-                details=render(project,project_dir(project['id']),run,update)
+                if project.get('story',{}).get('enabled'):
+                    project=prepare_story(run)
+                    details=render(project,project_dir(project['id']),run,lambda p,s:update(50+p*.49,s))
+                else:details=render(project,project_dir(project['id']),run,update)
                 stage='Hoàn thành và đã lưu MP4'
                 if project.get('export_destination','').strip():
                     update(99,'Đang lưu kết quả vào thư mục đã chọn')

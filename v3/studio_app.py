@@ -47,7 +47,8 @@ with st.sidebar:
         for item in store.listing():
             render_status=current(store.project_dir(item['id']))
             asr_status=current(store.project_dir(item['id']),'transcribe')
-            status=asr_status if asr_status and asr_status['state'] in ('running','queued') else render_status or asr_status
+            cutout_status=current(store.project_dir(item['id']),'cutout')
+            status=cutout_status if cutout_status and cutout_status['state'] in ('running','queued') else asr_status if asr_status and asr_status['state'] in ('running','queued') else render_status or asr_status
             st.caption(item['name']+' · '+item['id'][:6])
             if status:
                 st.progress(status['progress']/100,text=names.get(status['state'],status['state'])+f" · {status['progress']}%")
@@ -141,8 +142,11 @@ def speech_progress(folder):
 progress_panel(folder)
 speech_progress(folder)
 if locked:st.info('Dự án đang xử lý từ bản đã lưu. Nguyên liệu và cấu hình đang khóa; tạo hoặc mở dự án khác vẫn được.')
-media_tab,audio_tab,subtitle_tab,output_tab=st.tabs(['01 · Ảnh & video','02 · Âm thanh','03 · Phụ đề','04 · Xuất video'])
+media_tab,audio_tab,subtitle_tab,output_tab,story_tab=st.tabs(['01 · Ảnh & video','02 · Âm thanh','03 · Phụ đề','04 · Xuất video','05 · Dựng kiểu video mẫu'])
 try:
+    with story_tab:
+        from v3.story_ui import panel
+        panel(project,folder,locked)
     with media_tab:
         with st.form('upload_'+pid,clear_on_submit=True):
             files=st.file_uploader('Thêm ảnh hoặc video',type=sorted(x[1:] for x in store.MEDIA),accept_multiple_files=True,disabled=locked)
@@ -240,11 +244,19 @@ try:
                 project['settings']=dict(aspect=aspect,resolution=resolution,fit=fit,transition=transition,sync_voice=sync,original_volume=original/100,music_volume=music/100,voice_volume=voice/100,duck=duck,font_size=font,subtitle_mode=subtitle_mode)
                 store.save(project);st.rerun()
         st.caption('Lưu timeline và cấu hình trước khi dựng. Dựng từ các giá trị đã lưu, giữ cả các lần xuất trước.')
-        if project['scenes']:
+        story_mode=project.get('story',{}).get('enabled',False)
+        ready=bool(project['scenes'])
+        if story_mode:
+            from v3.story import voice_duration
+            st.info('Đang dùng chế độ ảnh nhân vật + video nền từ mục 05.')
+            ready=bool(project.get('voice') and project['story'].get('image') and (project['story'].get('backgrounds') or project['story'].get('pixabay_selected')))
+            if project.get('voice'):st.metric('Thời lượng mở đầu + giọng chính',f'{voice_duration(project,folder):.1f} giây')
+            if not ready:st.warning('Lưu ảnh nhân vật, giọng chính và ít nhất một video nền trong mục 05 trước.')
+        elif project['scenes']:
             durations=plan(project,folder)
             st.metric('Thời lượng dự kiến',f'{sum(durations):.1f} giây')
         save_completed(folder)
-        if project['scenes']:
+        if ready:
             if st.button('🎬 Bắt đầu dựng MP4',type='primary',disabled=locked):
                 project['export_destination']=st.session_state.get('save_folder_'+pid,'').strip()
                 project['export_include_assets']=st.session_state.get('full_'+pid,True)

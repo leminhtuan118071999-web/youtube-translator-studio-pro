@@ -59,7 +59,7 @@ def plan(project, folder):
         if not math.isfinite(duration) or not 0.1 <= duration <= 3600:
             raise ValueError('Thời lượng mỗi cảnh phải từ 0,1 đến 3600 giây.')
         weights.append(duration)
-    voice = project.get('voice')
+    voice = (project.get('voice_track') if project.get('story',{}).get('enabled') else None) or project.get('voice')
     target=sum(weights)
     if voice:
         audio=probe(asset(folder,voice))
@@ -72,6 +72,12 @@ def plan(project, folder):
         raise ValueError('File nhạc nền không có âm thanh.')
     if not 0 < target <= 14400 or round(target*FPS) < len(scenes):
         raise ValueError('Timeline quá ngắn hoặc vượt 4 giờ.')
+    if project.get('story',{}).get('enabled'):
+        remaining=max(1,round(target*FPS));frames=[]
+        for weight in weights:
+            count=min(remaining,max(1,round(weight*FPS)));frames.append(count);remaining-=count
+            if not remaining:break
+        return [count/FPS for count in frames]
     # Distribute integer frames, preserving exact total duration without drift.
     total_frames=round(target*FPS)
     exact=[w/sum(weights)*(total_frames-len(scenes)) for w in weights]
@@ -155,10 +161,13 @@ def render(project, assets_folder, output_folder, update):
     output_folder=Path(output_folder);output_folder.mkdir(parents=True,exist_ok=True)
     cancel=output_folder/'cancel'
     durations=plan(project,assets_folder); total=sum(durations); cfg=project['settings']
+    story=project.get('story',{}).get('enabled',False)
+    voice_name=(project.get('voice_track') if story else None) or project.get('voice')
+    if story:total=probe(asset(assets_folder,voice_name))['duration']
     if project.get('captions') or project.get('subtitle_text','').strip():
         capabilities=subprocess.run(['ffmpeg','-hide_banner','-filters'],capture_output=True,text=True,timeout=10).stdout
         if ' subtitles ' not in capabilities:
-            raise ValueError('FFmpeg hiện tại chưa có bộ lọc phụ đề libass. Hãy dùng bản FFmpeg hỗ trợ libass hoặc bỏ phụ đề.')
+            raise ValueError('FFmpeg hiện tại chưa có bộ lọc phụ đề libass. Trên Mac: brew install ffmpeg-full, sau đó khởi động lại V3.')
     if project.get('captions'):
         validate_srt(asset(assets_folder,project['captions']).read_text(encoding='utf-8-sig'),total)
     short=cfg['resolution']
@@ -181,9 +190,9 @@ def render(project, assets_folder, output_folder, update):
         run_ffmpeg(args+['-map','0:v:0','-map',audio,'-vf',vf,'-af',f'aresample=48000,apad,atrim=duration={seconds},asetpts=PTS-STARTPTS','-t',str(seconds),*encode,f'scene-{i:04}.mp4'],output_folder,cancel)
     concat=''.join(f"file 'scene-{i:04}.mp4'\nduration {d:.9f}\n" for i,d in enumerate(durations))
     (output_folder/'scenes.txt').write_text(concat)
-    args=['-f','concat','-safe','1','-i','scenes.txt']; filters=[f'[0:a]volume={cfg["original_volume"]}[base]'];mix=['[base]'];index=1
-    if project.get('voice'):
-        args+=['-i',str(asset(assets_folder,project['voice']))]
+    args=(['-stream_loop','-1'] if story else [])+['-f','concat','-safe','1','-i','scenes.txt']; filters=[f'[0:a]volume={cfg["original_volume"]}[base]'];mix=['[base]'];index=1
+    if voice_name:
+        args+=['-i',str(asset(assets_folder,voice_name))]
         filters.append(f'[{index}:a]aresample=48000,apad,atrim=duration={total},asetpts=PTS-STARTPTS,volume={cfg["voice_volume"]}[voice]');index+=1
         if project.get('music') and cfg['duck']:
             filters.append('[voice]asplit=2[voiceout][side]');mix.append('[voiceout]')
@@ -191,10 +200,19 @@ def render(project, assets_folder, output_folder, update):
     if project.get('music'):
         args+=['-stream_loop','-1','-i',str(asset(assets_folder,project['music']))]
         filters.append(f'[{index}:a]aresample=48000,atrim=duration={total},asetpts=PTS-STARTPTS,volume={cfg["music_volume"]}[music]')
-        if project.get('voice') and cfg['duck']:
+        if voice_name and cfg['duck']:
             filters.append('[music][side]sidechaincompress=threshold=0.03:ratio=8:attack=20:release=300[duck]');mix.append('[duck]')
         else: mix.append('[music]')
     filters.append(''.join(mix)+f'amix=inputs={len(mix)}:duration=longest:normalize=0,alimiter=limit=0.95:latency=1[audio]')
+    source_video='0:v'
+    if story and project.get('overlay_image'):
+        overlay=project.get('story',{})
+        size=float(overlay.get('width',75));x=float(overlay.get('x',50));y=float(overlay.get('y',100))
+        if not 10<=size<=100 or not 0<=x<=100 or not 0<=y<=100:raise ValueError('Vị trí hoặc kích thước nhân vật không hợp lệ.')
+        args+=['-loop','1','-framerate',str(FPS),'-i',str(asset(assets_folder,project['overlay_image']))]
+        filters.append(f'[{index}:v]scale={round(width*size/100)}:{round(height*.95)}:force_original_aspect_ratio=decrease,format=rgba[character]')
+        filters.append(f'[0:v][character]overlay=x=(W-w)*{x/100}:y=(H-h)*{y/100}:shortest=1[composite]')
+        source_video='composite'
     subtitles=''
     if project.get('captions'):
         subtitles=validate_srt(asset(assets_folder,project['captions']).read_text(encoding='utf-8-sig'),total)
@@ -204,15 +222,15 @@ def render(project, assets_folder, output_folder, update):
         if project.get('caption_words') and project.get('captions_origin')=='asr':
             from .speech import to_ass
             data=json.loads(asset(assets_folder,project['caption_words']).read_text(encoding='utf8'))
-            if data.get('source_voice')!=project.get('voice'):
+            if data.get('source_voice')!=voice_name:
                 raise ValueError('Phụ đề nhận diện thuộc file giọng đọc khác. Hãy nhận diện lại.')
             ass=to_ass(data,total,width,height,cfg['font_size'],cfg.get('subtitle_mode','words')=='words')
             (output_folder/'captions.ass').write_text(ass,encoding='utf8')
-            filters.append('[0:v]subtitles=captions.ass[video]')
+            filters.append(f'[{source_video}]subtitles=captions.ass[video]')
         else:
-            filters.append(f"[0:v]subtitles=captions.srt:force_style='PlayResX={width},PlayResY={height},FontName=Arial,FontSize={cfg['font_size']},Outline=2,Shadow=0,MarginV=40,MarginL=32,MarginR=32'[video]")
+            filters.append(f"[{source_video}]subtitles=captions.srt:force_style='PlayResX={width},PlayResY={height},FontName=Arial,FontSize={cfg['font_size']},Outline=2,Shadow=0,MarginV=40,MarginL=32,MarginR=32'[video]")
         video='[video]'
-    else: video='0:v:0'
+    else: video='[composite]' if source_video=='composite' else '0:v:0'
     update(72,'Đang ghép âm thanh, phụ đề và xuất MP4')
     run_ffmpeg(args+['-filter_complex',';'.join(filters),'-map',video,'-map','[audio]','-t',str(total),'-r',str(FPS),*encode,'-movflags','+faststart','output.pending.mp4'],output_folder,cancel,
                lambda fraction:update(72+27*fraction,'Đang xuất MP4'),total)

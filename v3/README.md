@@ -7,7 +7,7 @@ App dựng video từ ảnh/video của bạn, chạy trong trình duyệt tại
 Cần Python 3.12 trở lên và FFmpeg/ffprobe. Nếu đã dùng Homebrew:
 
 ```bash
-brew install ffmpeg
+brew install ffmpeg-full
 ```
 
 Nếu đã có worktree riêng `~/lmt-video-editor-v3`, cập nhật trong Terminal V3 (Ctrl+C và đợi dấu nhắc shell trước):
@@ -67,3 +67,14 @@ python3 -m unittest discover -s v3/tests -p 'test_*.py' -v
 ```
 
 Các test thực sự chạy FFmpeg: ghép ảnh/video, kiểm tra pixel/thứ tự cảnh, độ dài theo giọng đọc, audio, Unicode/SRT, khung hình, hủy và chạy process độc lập. AppTest xác minh tạo và mở lại dự án không cần cấu hình tài khoản.
+
+## Dựng kể chuyện như video mẫu (mục 05)
+
+1. Tải ảnh nhân vật, giọng chính, giọng mở đầu riêng (tùy chọn) và nhiều video nền. Ảnh nhân vật là lớp phía trước, không phải một cảnh thay thế nền. Lưu nguyên liệu và bố cục.
+2. Có thể tìm video Pixabay bằng từ khóa, chọn tối đa 15 clip khác nhau cho **toàn bộ dự án**. Khóa API nhập trong mục cấu hình Pixabay, chỉ lưu trên máy và không vào bundle. Tìm kiếm do người dùng bấm, kết quả cache 24 giờ; không quét hoặc tải hàng loạt nền. Clip đã tải được giữ để dựng lại; giới hạn không đặt lại khi thử lại/đổi từ khóa. Chưa có khóa vẫn dùng video nền tải lên được.
+3. Bấm **Tách nền để xem trước**. Model rembg u2netp chạy CPU trên máy; lần đầu tải model. PNG trong suốt có thể bỏ tách nền. Các vùng chữ nhật “Giữ thêm chi tiết” khôi phục nguyên ảnh trong vùng đó (bao gồm nền trong vùng), không phải cọ chỉnh mặt nạ. Có thể dùng PNG đã chỉnh bên ngoài khi cần đường viền chính xác. Xem thử bố cục từ một video nền đã lưu, chỉnh kích thước và vị trí rồi lưu lại.
+4. Sang **04 · Xuất video**, chọn nơi lưu trước nút bắt đầu. Khi chế độ kể chuyện được bật, tác vụ tự tách nền → tải clip đã chọn → nối mở đầu và giọng chính → nhận diện từng file giọng → dựng MP4 và lưu kết quả. Tắt chế độ trong mục 05 để quay lại timeline thủ công.
+5. Nền giữ tốc độ thật, nối theo thứ tự rồi lặp **cả danh sách**, cắt vừa tổng thời lượng hai file giọng. Không sao chép video thành nhiều tệp. Âm thanh gốc của nền bị tắt; nhạc nền tùy chọn vẫn dùng từ mục 02.
+6. Phụ đề giữ ngôn ngữ của từng file, thời điểm giọng chính được cộng đúng thời lượng phần mở đầu. Tách nền, giọng đã nối và phụ đề được cache theo đầu vào. Có nút hủy; đổi/tạo dự án không hủy tác vụ cũ. Mỗi máy xử lý một tác vụ nặng một lần để hạn chế quá tải.
+
+Launcher trên Mac tự ưu tiên ffmpeg-full đã cài bằng Homebrew. Chưa kiểm tra trực tiếp trên Mac M2; chất lượng tách tóc/vật thể mảnh và nhận diện tên riêng cần xem lại. Bản xuất đầy đủ giữ ảnh gốc, ảnh tách nền, hai giọng gốc, giọng đã nối, nền và phụ đề để mở lại. Chưa có khóa Pixabay trong môi trường kiểm thử nên tải trực tiếp với tài khoản người dùng chưa được xác minh; kiểm thử tải/cache/giới hạn dùng phản hồi mô phỏng và media thật.

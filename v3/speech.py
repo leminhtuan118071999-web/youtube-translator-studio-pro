@@ -93,7 +93,7 @@ Format: Layer, Start, End, Style, Name, MarginL, MarginR, MarginV, Effect, Text
     return header+'\n'.join(events)+'\n'
 
 
-def transcribe(run):
+def transcribe(run,report=None):
     from faster_whisper import WhisperModel
     run=Path(run);project=read(run/'snapshot.json');folder=home()/project['id']
     if not project.get('voice'):raise ValueError('Hãy tải và lưu file giọng đọc trước.')
@@ -102,6 +102,7 @@ def transcribe(run):
     model_name=project.get('asr_model','small')
     if model_name not in ('tiny','base','small'):raise ValueError('Model phụ đề không hợp lệ.')
     def update(progress,stage):
+        if report:report(progress,stage)
         atomic(run/'status.json',dict(state='running',task='transcribe',progress=progress,stage=stage,updated=__import__('time').time()))
     update(2,'Đang nạp model nhận diện; lần đầu cần tải model qua Internet')
     model=WhisperModel(model_name,device='cpu',compute_type='int8',cpu_threads=min(4,os.cpu_count() or 2),

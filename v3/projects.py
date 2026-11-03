@@ -109,6 +109,11 @@ def asset(folder, name):
     return path
 
 
+def signature_upload(uploaded):
+    import hashlib
+    return hashlib.sha256(uploaded.getbuffer()).hexdigest()
+
+
 def upload(folder, file, allowed):
     suffix = Path(file.name).suffix.lower()
     if suffix not in allowed:
@@ -142,8 +147,13 @@ def choose_folder():
 
 
 def referenced_assets(project):
+    story=project.get('story',{})
     return sorted({scene['file'] for scene in project.get('scenes',[])} |
-                  {project[key] for key in ('voice','music','captions','caption_words') if project.get(key)})
+                  {project[key] for key in ('voice','music','captions','caption_words','voice_track','overlay_image') if project.get(key)} |
+                  {story[key] for key in ('image','intro','cutout') if story.get(key)} |
+                  set(story.get('backgrounds',[])) |
+                  {item['file'] for item in story.get('downloaded',{}).values()})
+
 
 
 def export_run(run, destination, include_assets=True):
@@ -157,7 +167,7 @@ def export_run(run, destination, include_assets=True):
     if not target.is_absolute():raise ValueError('Hãy nhập đường dẫn đầy đủ, ví dụ ~/Movies/LMT.')
     target.mkdir(parents=True,exist_ok=True)
     target=target.resolve()
-    project=read(run/'snapshot.json')
+    project=read(run/('render-project.json' if (run/'render-project.json').exists() else 'snapshot.json'))
     source=project_dir(project['id'])
     # A metadata rename after rendering should also name the saved bundle correctly.
     project=dict(project,name=read(source/'project.json').get('name',project['name']))
@@ -175,6 +185,8 @@ def export_run(run, destination, include_assets=True):
             for filename in referenced_assets(project):
                 shutil.copy2(asset(source,filename),temporary/'assets'/filename)
             atomic(temporary/'project.json',dict(project,bundle_version=1))
+            if project.get('story',{}).get('downloaded'):
+                atomic(temporary/'pixabay-downloads.json',project['story']['downloaded'])
         (temporary/'README.txt').write_text(
             'Video thành phẩm: video.mp4\n'+
             ('Mở lại: vào LMT V3, chọn Nhập dự án từ thư mục và chọn thư mục này.\n'
@@ -198,6 +210,8 @@ def import_bundle(directory):
     target=project_dir(imported['id'])
     try:
         for name,path in paths.items():shutil.copy2(path,target/'assets'/name)
+        if project.get('story',{}).get('downloaded'):
+            atomic(target/'pixabay-downloads.json',project['story']['downloaded'])
         project=dict(project,id=imported['id'],name=imported['name'])
         project.pop('bundle_version',None)
         save(project)

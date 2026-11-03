@@ -13,8 +13,12 @@ ENV=ROOT/'.venv-editor'
 
 def main():
     if sys.version_info<(3,12):raise SystemExit('Cần Python 3.12 trở lên.')
+    if sys.platform=='darwin':
+        for candidate in ('/opt/homebrew/opt/ffmpeg-full/bin','/usr/local/opt/ffmpeg-full/bin'):
+            if (Path(candidate)/'ffmpeg').is_file() and (Path(candidate)/'ffprobe').is_file():
+                os.environ['PATH']=candidate+os.pathsep+os.environ.get('PATH','');break
     if not shutil.which('ffmpeg') or not shutil.which('ffprobe'):
-        raise SystemExit('Chưa có FFmpeg. Trên Mac có Homebrew, chạy: brew install ffmpeg\nSau đó mở lại V3.')
+        raise SystemExit('Chưa có FFmpeg. Trên Mac có Homebrew, chạy: brew install ffmpeg-full\nSau đó mở lại V3.')
     if not (ENV/'bin/python').exists():venv.create(ENV,with_pip=True)
     python=str(ENV/'bin/python');requirements=ROOT/'requirements.txt'
     marker=ENV/'installed.txt'
