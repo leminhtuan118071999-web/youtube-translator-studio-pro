@@ -146,3 +146,10 @@ button:focus-visible, a:focus-visible { outline: 2px solid var(--accent); outlin
 @media (max-width:700px) { .form-grid { grid-template-columns: 1fr; } .session-list { max-height: 180px; } .studio-shell .sidebar-footer { display: block; } .save-banner { align-items: flex-start; flex-direction: column; } }
 .thumbnail-preview { display: flex; align-items: center; gap: 20px; padding: 18px 0; flex-wrap: wrap; }
 .thumbnail-preview img { width: 220px; border-radius: 10px; }
+
+.session-item progress { width: calc(100% - 18px); margin-left: 18px; height: 6px; accent-color: var(--accent); }
+.session-item .session-stage { white-space: normal; overflow-wrap: anywhere; display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical; overflow: hidden; }
+.session-progress { margin: 18px 0; padding: 16px 20px; border: 1px solid var(--border); border-radius: 10px; background: #142238; }
+.session-progress p { margin: 8px 0; }
+.session-progress progress { width: 100%; height: 9px; accent-color: var(--accent); }
+.session-progress.has-error { border-color: #b75b65; }

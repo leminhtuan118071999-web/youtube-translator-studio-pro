@@ -69,7 +69,9 @@ def execute(kind, snapshot, progress, image_sink=None):
     if kind == 'seo':
         progress.check_cancelled()
         call = lambda prompt: request_text(snapshot, prompt)
+        progress.update(10, 'Đang đọc ngữ cảnh để dịch tiêu đề và mô tả gốc')
         brief = overview(snapshot['translated'], call, progress)
+        progress.update(50, 'Đang dịch sát nghĩa và đối chiếu với tiêu đề, mô tả gốc')
         title, description, tags = generate_youtube_metadata(
             brief, snapshot.get('title', ''), snapshot.get('description', ''), snapshot['language'], call)
         fields = dict(new_title=title, new_description=description, seo_tags=tags,

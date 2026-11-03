@@ -308,3 +308,23 @@ def test_api_rejects_forged_owner_and_no_auth():
             response=client.post('/v1/sessions',json=dict(user_id=str(uuid4())))
             assert response.status_code==422
     finally: app.dependency_overrides.clear()
+
+
+def test_jobs_keep_each_session_latest_and_old_active_jobs_beyond_recent_window(db):
+    from app.routes import jobs
+    owner, other = db
+    older, busy, foreign = session(owner), session(owner), session(other)
+    with connect() as c:
+        def insert(sid, uid, status, age):
+            return c.execute("""insert into lmt_v2_jobs(user_id,session_id,job_type,status,input,input_revision,request_id,created_at)
+                values (%s,%s,'seo',%s,'{}',1,%s,now()-(%s * interval '1 minute')) returning id""",
+                (uid,sid,status,uuid4(),age)).fetchone()['id']
+        latest_older = insert(older['id'], owner, 'completed', 1000)
+        old_active = insert(busy['id'], owner, 'running', 999)
+        foreign_id = insert(foreign['id'], other, 'running', 0)
+        recent = [insert(busy['id'], owner, 'completed', age) for age in range(151)]
+    rows = jobs(AuthenticatedUser(id=owner, email='owner@example.com', access_token='test'))
+    ids = {row['id'] for row in rows}
+    assert latest_older in ids and old_active in ids
+    assert recent[0] in ids and foreign_id not in ids
+    assert all('encrypted_keys' not in row and 'input' not in row for row in rows)

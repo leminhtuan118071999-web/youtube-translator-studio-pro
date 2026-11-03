@@ -92,7 +92,17 @@ def submit_job(sid: UUID, body: JobInput, user: AuthenticatedUser = Depends(requ
 @router.get('/jobs')
 def jobs(user: AuthenticatedUser = Depends(require_user)):
     with connect() as conn:
-        return conn.execute(f'select {store.JOB_PUBLIC} from public.lmt_v2_jobs where user_id=%s order by created_at desc limit 150', (user.id,)).fetchall()
+        # Keep the latest result for every session and every active job visible,
+        # even when one busy session has filled the recent history window.
+        return conn.execute(f'''with owned as (
+                select {store.JOB_PUBLIC} from public.lmt_v2_jobs where user_id=%s
+            ), latest as (
+                select distinct on (session_id) id from owned where session_id is not null
+                order by session_id,created_at desc,id desc
+            ) select * from owned where status in ('queued','running','retry_wait')
+                or id in (select id from latest)
+                or id in (select id from owned order by created_at desc,id desc limit 150)
+            order by created_at desc,id desc''', (user.id,)).fetchall()
 
 @router.post('/jobs/{jid}/cancel', status_code=204)
 def cancel_job(jid: UUID, user: AuthenticatedUser = Depends(require_user)):

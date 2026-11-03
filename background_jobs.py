@@ -330,7 +330,7 @@ def run_full_job(snapshot, progress):
         fields["language"] = language
         progress.publish("language", language)
         # Complete metadata in the same target language after narration succeeds.
-        progress.update(96, "📝 Đang tối ưu tiêu đề, mô tả và tag theo ngôn ngữ đích...")
+        progress.update(96, "📝 Đang dịch sát nghĩa tiêu đề, mô tả gốc và tạo thẻ tag...")
         brief = overview(target_text, call, progress)
         new_title, new_description, tags = generate_youtube_metadata(
             brief, title, description, language, call,
