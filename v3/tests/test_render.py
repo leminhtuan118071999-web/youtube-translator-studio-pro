@@ -97,5 +97,24 @@ class RealRenderTests(unittest.TestCase):
         self.assertEqual(status['state'],'completed',status)
         self.assertTrue((self.folder/'runs'/run_id/'output.mp4').exists())
 
+    def test_new_project_does_not_cancel_existing_background_job(self):
+        self.p['scenes']=self.p['scenes'][:1];self.p['scenes'][0]['duration']=.3
+        with (projects.home()/'renderer.lock').open('a') as global_lock:
+            fcntl.flock(global_lock,fcntl.LOCK_EX)
+            run_id=launch(self.p)
+            second=projects.create('Dự án thứ hai')
+            second['subtitle_text']='Nội dung riêng';projects.save(second)
+            self.assertIn(current(self.folder)['state'],('queued','running'))
+            self.assertFalse((self.folder/'runs'/run_id/'cancel').exists())
+            fcntl.flock(global_lock,fcntl.LOCK_UN)
+        deadline=time.monotonic()+25
+        while time.monotonic()<deadline:
+            status=current(self.folder)
+            if status['state'] in ('completed','failed','interrupted'):break
+            time.sleep(.1)
+        self.assertEqual(status['state'],'completed',status)
+        self.assertEqual(projects.read(self.folder/'runs'/run_id/'snapshot.json')['name'],self.p['name'])
+        self.assertEqual(projects.read(projects.project_dir(second['id'])/'project.json')['subtitle_text'],'Nội dung riêng')
+
 
 if __name__=='__main__':unittest.main()

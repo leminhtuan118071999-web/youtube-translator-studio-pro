@@ -16,19 +16,83 @@ st.title('🎞️ LMT Video Editor · V3')
 st.caption('Tải nguyên liệu → sắp xếp cảnh → ghép giọng đọc → xuất MP4 trên máy của bạn')
 with st.sidebar:
     st.header('Dự án của tôi')
-    with st.form('new_project'):
+    with st.form('new_project',clear_on_submit=True):
         title=st.text_input('Tên dự án mới',placeholder='Ví dụ: Câu chuyện hôm nay')
         if st.form_submit_button('＋ Tạo dự án',type='primary'):
-            st.session_state['project_id']=store.create(title)['id'];st.rerun()
+            try:
+                st.session_state['project_id']=store.create(title)['id'];st.rerun()
+            except ValueError as exc:st.error(str(exc))
+    with st.expander('Nhập dự án từ thư mục'):
+        import_path=st.text_input('Thư mục dự án đã lưu',key='import_path',placeholder='~/Movies/LMT/Tên-dự-án')
+        if st.button('Chọn thư mục dự án'):
+            try:
+                chosen=store.choose_folder()
+                if chosen:st.session_state['import_chosen']=chosen
+            except ValueError as exc:st.error(str(exc))
+        if st.session_state.get('import_chosen'):st.caption(st.session_state['import_chosen'])
+        if st.button('Nhập bản dự án'):
+            try:
+                imported=store.import_bundle(import_path.strip() or st.session_state.get('import_chosen',''))
+                st.session_state['project_id']=imported['id'];st.rerun()
+            except (ValueError,OSError,KeyError,TypeError) as exc:st.error('Chưa nhập được dự án: '+str(exc))
     rows=store.listing();by_id={p['id']:p for p in rows}
     if not rows:
         st.info('Tạo dự án đầu tiên để bắt đầu.');st.stop()
     if st.session_state.get('project_id') not in by_id:st.session_state['project_id']=rows[0]['id']
-    pid=st.selectbox('Mở dự án',list(by_id),format_func=lambda key:by_id[key]['name'],key='project_id')
+    pid=st.selectbox('Mở dự án',list(by_id),format_func=lambda key:by_id[key]['name']+' · '+key[:6],key='project_id')
+    @st.fragment(run_every=2)
+    def project_queue():
+        st.markdown('**Tiến trình từng dự án**')
+        names={'queued':'Đang chờ','running':'Đang dựng','completed':'Hoàn thành','cancelled':'Đã hủy','failed':'Có lỗi','interrupted':'Đã gián đoạn'}
+        for item in store.listing():
+            status=current(store.project_dir(item['id']))
+            st.caption(item['name']+' · '+item['id'][:6])
+            if status:
+                st.progress(status['progress']/100,text=names.get(status['state'],status['state'])+f" · {status['progress']}%")
+            else:st.caption('Chưa bắt đầu dựng')
+    project_queue()
+    st.caption('Tạo hoặc mở dự án khác không dừng video đang dựng. Nếu bấm dựng thêm dự án, dự án đó sẽ chờ đến lượt để tránh quá tải máy.')
     st.caption('Dự án và nguyên liệu lưu trên máy Mac. Giữ máy mở trong lúc dựng; có thể đóng tab trình duyệt.')
 project=store.read(store.project_dir(pid)/'project.json');folder=store.project_dir(pid)
 locked=busy(folder)
 st.subheader(project['name'])
+
+with st.expander('Tên và thông tin dự án'):
+    st.caption('Mã dự án: '+pid)
+    with st.form('rename_'+pid):
+        new_name=st.text_input('Tên riêng của dự án',value=project['name'],max_chars=120,disabled=locked)
+        if st.form_submit_button('Lưu tên dự án',disabled=locked):
+            try:
+                store.rename(pid,new_name);st.rerun()
+            except ValueError as exc:st.error(str(exc))
+
+
+@st.fragment
+def save_completed(folder):
+    status=current(folder)
+    if not status or status['state']!='completed':return
+    st.subheader('Lưu video / dự án vào thư mục của bạn')
+    key='save_folder_'+str(folder.name)
+    if st.button('📁 Chọn thư mục lưu trên Mac',key='pick_'+folder.name):
+        try:
+            chosen=store.choose_folder()
+            if chosen:st.session_state[key]=chosen
+        except ValueError as exc:st.error(str(exc))
+    destination=st.text_input('Nơi lưu',key=key,placeholder='Ví dụ: ~/Movies/LMT hoặc /Volumes/Ten-o-dia/LMT')
+    complete=st.checkbox('Lưu cả dự án và nguyên liệu để chỉnh sửa lại',value=True,key='full_'+folder.name)
+    st.caption('Mỗi lần lưu tạo một thư mục mới. Bản đầy đủ gồm video, cấu hình và nguyên liệu; cần đủ dung lượng cho bản sao.')
+    if st.button('Lưu vào thư mục đã chọn',type='primary',key='export_'+folder.name):
+        try:
+            with st.spinner('Đang sao chép kết quả…'):
+                location=store.export_run(status['folder'],destination,complete)
+            st.session_state['exported_'+folder.name]=location
+        except (ValueError,OSError,KeyError,TypeError) as exc:st.error('Chưa lưu được: '+str(exc))
+    location=st.session_state.get('exported_'+folder.name)
+    if location:
+        st.success('Đã lưu thành công.')
+        st.code(location,language=None)
+        if sys.platform=='darwin' and st.button('Mở nơi vừa lưu',key='open_export_'+folder.name):
+            subprocess.run(['open',location],check=True)
 
 @st.fragment(run_every=2)
 def progress_panel(folder):
@@ -40,6 +104,10 @@ def progress_panel(folder):
         if st.button('Hủy dựng video',key='cancel_'+status['run_id']):
             (status['folder']/'cancel').touch();st.info('Đã gửi yêu cầu hủy.')
     elif status['state']=='completed':
+        completion_key='completed_seen_'+status['run_id']
+        if not st.session_state.get(completion_key):
+            st.session_state[completion_key]=True
+            st.rerun()
         st.success('Video đã dựng xong. Dự án và file xuất được giữ trên máy.')
         output=status['folder']/'output.mp4'
         if output.exists():
@@ -53,6 +121,7 @@ def progress_panel(folder):
     else:st.warning(status['stage'])
     if st.button('Làm mới trạng thái và các nút'): st.rerun()
 progress_panel(folder)
+save_completed(folder)
 if locked:st.info('Dự án đang được dựng từ bản đã lưu. Nguyên liệu và cấu hình đang khóa. Sau khi xong, nhấn Làm mới để chỉnh tiếp.')
 media_tab,audio_tab,subtitle_tab,output_tab=st.tabs(['01 · Ảnh & video','02 · Âm thanh','03 · Phụ đề','04 · Xuất video'])
 try:
