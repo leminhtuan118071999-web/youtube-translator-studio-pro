@@ -30,6 +30,25 @@ def validate_metadata(data):
 
 def generate_youtube_metadata(script, original_title, original_description, language, call):
     inputs=dict(original_title=original_title,original_description=original_description,story_context=script)
+    has_description = bool((original_description or '').strip())
+    description_rule = (
+        'Description: translate all original information faithfully, preserving paragraph structure, lists, '
+        'tone, calls to action, supplied links, timestamps, credits and factual numbers. Do not add an '
+        'introduction, summary, SEO keywords or story details that the original description does not contain. '
+        if has_description else
+        'Description: the original description is absent. Create a new engaging, factual description in the '
+        'target language from the translated narration in story_context. Summarize the central situation and '
+        'themes in short readable paragraphs; never invent events, relationships, outcomes or other facts. '
+    )
+    description_review = (
+        'Compare the description directly against original_description: it must be a faithful translation, '
+        'preserving paragraphs, lists, calls to action, links, timestamps and credits. Decorative emoji are allowed '
+        'when they do not alter meaning or tone. '
+        if has_description else
+        'The original description is absent: accept a newly written description based on the translated narration '
+        'in story_context. Verify every factual claim against that context; do not reject it merely for lacking '
+        'an original description. '
+    )
     errors='';candidate=None
     for attempt in range(3):
         try:
@@ -41,9 +60,10 @@ def generate_youtube_metadata(script, original_title, original_description, lang
                 'details absent from the original title. Preserve proper names. Keep the title strictly UNDER 100 characters '
                 '(maximum 99 including spaces and punctuation). No invented twists, false promises, exaggerated facts, '
                 'keyword stuffing or unnecessary ALL CAPS. Do not truncate an overlong title; rewrite it coherently. '
-                'Description: translate all original information faithfully, preserving paragraph structure, lists, '
-                'tone, calls to action, supplied links, timestamps, credits and factual numbers. Do not add an '
-                'introduction, summary, SEO keywords or story details that the original description does not contain. '
+                + description_rule +
+                'You may add a few relevant emoji or simple bullet symbols to the description, preferably at paragraph '
+                'or list openings (about 2-4 when suitable). Keep it tasteful and readable; do not decorate the title, '
+                'overload the text, or trivialize violence, grief or other serious topics. '
                 'Never invent links, timestamps or channel names. Maximum 5000 characters. If platform length limits '
                 'require shortening, minimally rephrase while preserving meaning; do not add or change claims. '
                 'Tags: around 15 distinct relevant target-language search phrases ordered by relevance; mix topic and '
@@ -58,10 +78,11 @@ def generate_youtube_metadata(script, original_title, original_description, lang
             result=validate_metadata(candidate)
             verdict=parse_json_object(call(
                 f'TARGET_METADATA_REVIEW. Check every field is natural {language}, except proper names and links. '
-                'Compare the title directly against original_title and the description directly against original_description. '
+                'Compare the title directly against original_title when it is present. '
                 'Reject added hooks, SEO embellishments, invented details, changed tone/emphasis, omitted information '
-                'or wrong actors, relationships and numbers. Both fields must be faithful translations, not creative '
-                'rewrites. Description must preserve paragraphs, lists, calls to action, links, timestamps and credits. '
+                'or wrong actors, relationships and numbers in translations of supplied originals. Supplied fields must be '
+                'faithful translations, not creative rewrites. ' + description_review +
+                'Check emoji and bullet symbols are relevant, restrained and do not change facts or tone. '
                 'Allow only minimal meaning-preserving shortening for platform length limits. Only a missing original '
                 'field may be derived from story context. Tags may be optimized but must be relevant and non-spammy. '
                 'Return ONLY JSON {"ok":true,"issues":[]}.\nSOURCE DATA:\n'+

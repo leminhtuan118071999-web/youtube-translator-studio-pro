@@ -60,3 +60,23 @@ class MetadataTests(unittest.TestCase):
         self.assertEqual(result[0], 'Một người bà nhận được bức tranh')
         self.assertIn('\n\nCredits: Anna\nhttps://example.com/source', result[1])
         self.assertEqual(len(calls), 4)
+
+    def test_missing_description_uses_translated_narration_and_allows_relevant_emoji(self):
+        calls = []
+        description = '🎨 Người cháu tặng bà một bức tranh.\n\n💛 Một món quà thể hiện tình cảm gia đình.'
+        def call(prompt):
+            calls.append(prompt)
+            data = json.loads(prompt.split('SOURCE DATA:\n', 1)[1])
+            self.assertEqual(data['story_context'], 'Người cháu tặng bà một bức tranh.')
+            self.assertEqual(data['original_title'], 'A painting for grandma')
+            if prompt.startswith('TARGET_METADATA_REVIEW'):
+                self.assertIn('accept a newly written description', prompt)
+                self.assertEqual(data['candidate']['description'], description)
+                return '{"ok":true,"issues":[]}'
+            self.assertIn('original description is absent', prompt)
+            self.assertIn('few relevant emoji', prompt)
+            self.assertNotIn('Do not add an introduction', prompt)
+            return json.dumps({'title':'Bức tranh dành cho bà','description':description,'tags':['tình cảm gia đình']})
+        result = generate_youtube_metadata('Người cháu tặng bà một bức tranh.', 'A painting for grandma', '  ', 'Tiếng Việt', call)
+        self.assertEqual(result[1], description)
+        self.assertEqual(len(calls), 2)
