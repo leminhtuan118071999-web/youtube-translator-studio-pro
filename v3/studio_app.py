@@ -8,7 +8,7 @@ if str(ROOT) not in sys.path: sys.path.insert(0,str(ROOT))
 import streamlit as st
 from v3 import projects as store
 from v3.render import probe, plan
-from v3.render_worker import launch, busy, current
+from v3.render_worker import launch, busy, current, delete_all_projects
 
 st.set_page_config(page_title='LMT Video Editor V3',page_icon='🎞️',layout='wide')
 st.markdown('''<style>.stApp{background:#0b1320}h1,h2,h3{color:#e4ecfb}.block-container{max-width:1240px;padding-top:2rem}div.stButton>button[kind=primary]{background:#357cef}section[data-testid=stSidebar]{background:#101c2b}</style>''',unsafe_allow_html=True)
@@ -18,46 +18,49 @@ with st.sidebar:
     st.header('Dự án của tôi')
     with st.form('new_project',clear_on_submit=True):
         title=st.text_input('Tên dự án mới',placeholder='Ví dụ: Câu chuyện hôm nay')
-        if st.form_submit_button('＋ Tạo dự án',type='primary'):
+        if st.form_submit_button('＋ Tạo dự án',type='primary',disabled=st.session_state.get('delete_all_pending',False)):
             try:
                 st.session_state['project_id']=store.create(title)['id'];st.rerun()
             except ValueError as exc:st.error(str(exc))
-    with st.expander('Nhập dự án từ thư mục'):
-        import_path=st.text_input('Thư mục dự án đã lưu',key='import_path',placeholder='~/Movies/LMT/Tên-dự-án')
-        if st.button('Chọn thư mục dự án'):
-            try:
-                chosen=store.choose_folder()
-                if chosen:st.session_state['import_chosen']=chosen
-            except ValueError as exc:st.error(str(exc))
-        if st.session_state.get('import_chosen'):st.caption(st.session_state['import_chosen'])
-        if st.button('Nhập bản dự án'):
-            try:
-                imported=store.import_bundle(import_path.strip() or st.session_state.get('import_chosen',''))
-                st.session_state['project_id']=imported['id'];st.rerun()
-            except (ValueError,OSError,KeyError,TypeError) as exc:st.error('Chưa nhập được dự án: '+str(exc))
     rows=store.listing();by_id={p['id']:p for p in rows}
-    if not rows:
-        st.info('Tạo dự án đầu tiên để bắt đầu.');st.stop()
-    if st.session_state.get('project_id') not in by_id:st.session_state['project_id']=rows[0]['id']
-    pid=st.selectbox('Mở dự án',list(by_id),format_func=lambda key:by_id[key]['name']+' · '+key[:6],key='project_id')
+    if st.session_state.get('project_id') not in by_id and rows:st.session_state['project_id']=rows[0]['id']
     @st.fragment(run_every=2)
     def project_queue():
-        st.markdown('**Tiến trình từng dự án**')
+        st.markdown('**Các dự án đã tạo**')
+        if st.session_state.get('delete_all_pending'):
+            try:
+                result=delete_all_projects()
+                if result['waiting']:st.info('Đang dừng tác vụ trước khi xóa tất cả phiên…')
+                else:
+                    st.session_state['delete_all_pending']=False
+                    st.session_state.pop('project_id',None)
+                    st.rerun()
+            except (ValueError,OSError) as exc:
+                st.session_state['delete_all_pending']=False;st.error('Chưa xóa được: '+str(exc))
         names={'queued':'Đang chờ','running':'Đang dựng','completed':'Hoàn thành','cancelled':'Đã hủy','failed':'Có lỗi','interrupted':'Đã gián đoạn'}
         for item in store.listing():
             render_status=current(store.project_dir(item['id']))
             asr_status=current(store.project_dir(item['id']),'transcribe')
             cutout_status=current(store.project_dir(item['id']),'cutout')
             status=cutout_status if cutout_status and cutout_status['state'] in ('running','queued') else asr_status if asr_status and asr_status['state'] in ('running','queued') else render_status or asr_status
-            st.caption(item['name']+' · '+item['id'][:6])
+            if st.button(item['name'],key='open_project_'+item['id'],type='primary' if st.session_state.get('project_id')==item['id'] else 'secondary',disabled=st.session_state.get('delete_all_pending',False),use_container_width=True):
+                st.session_state['project_id']=item['id'];st.rerun()
             if status:
                 st.progress(status['progress']/100,text=names.get(status['state'],status['state'])+f" · {status['progress']}% · "+status['stage'])
             else:st.caption('Chưa bắt đầu dựng')
     project_queue()
-    st.caption('Tạo hoặc mở dự án khác không dừng video đang dựng. Nếu bấm dựng thêm dự án, dự án đó sẽ chờ đến lượt để tránh quá tải máy.')
-    st.caption('Dự án và nguyên liệu lưu trên máy Mac. Giữ máy mở trong lúc dựng; có thể đóng tab trình duyệt.')
+    if rows:
+        if st.button('Xóa tất cả phiên',disabled=st.session_state.get('delete_all_pending',False),use_container_width=True):st.session_state['confirm_delete_all']=True
+        if st.session_state.get('confirm_delete_all'):
+            st.warning('Xóa toàn bộ dự án, nguyên liệu và kết quả nội bộ V3. Tác vụ đang chạy sẽ bị hủy. Các bản đã lưu vào thư mục bạn chọn và khóa Pixabay vẫn được giữ.')
+            yes,no=st.columns(2)
+            if yes.button('Xác nhận xóa tất cả',type='primary'):
+                st.session_state['confirm_delete_all']=False;st.session_state['delete_all_pending']=True;st.rerun()
+            if no.button('Giữ lại'):st.session_state['confirm_delete_all']=False;st.rerun()
+    if not rows:st.info('Tạo dự án đầu tiên để bắt đầu.');st.stop()
+    pid=st.session_state['project_id']
 project=store.read(store.project_dir(pid)/'project.json');folder=store.project_dir(pid)
-locked=busy(folder)
+locked=busy(folder) or st.session_state.get('delete_all_pending',False)
 st.subheader(project['name'])
 
 with st.expander('Tên và thông tin dự án'):

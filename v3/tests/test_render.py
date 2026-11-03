@@ -136,5 +136,24 @@ class RealRenderTests(unittest.TestCase):
         self.assertEqual(projects.read(self.folder/'runs'/run_id/'snapshot.json')['name'],self.p['name'])
         self.assertEqual(projects.read(projects.project_dir(second['id'])/'project.json')['subtitle_text'],'Nội dung riêng')
 
+    def test_bulk_delete_cancels_active_jobs_and_preserves_external_exports_and_key(self):
+        from v3.render_worker import delete_all_projects,busy
+        second=projects.create('Dự án khác')
+        exports=Path(self.tmp.name)/'external-exports';exports.mkdir();(exports/'video.mp4').write_bytes(b'keep')
+        projects.atomic(projects.home()/'pixabay-key.json',{'key':'keep-key'})
+        with (projects.home()/'renderer.lock').open('a') as global_lock:
+            fcntl.flock(global_lock,fcntl.LOCK_EX)
+            run_id=launch(self.p)
+            self.assertTrue(delete_all_projects()['waiting'])
+            self.assertTrue((self.folder/'runs'/run_id/'cancel').exists())
+            self.assertTrue((self.folder/'project.json').exists())
+        deadline=time.monotonic()+15
+        while busy(self.folder) and time.monotonic()<deadline:time.sleep(.1)
+        result=delete_all_projects()
+        self.assertFalse(result['waiting']);self.assertEqual(result['deleted'],2)
+        self.assertEqual(projects.listing(),[])
+        self.assertTrue((exports/'video.mp4').exists())
+        self.assertEqual(projects.read(projects.home()/'pixabay-key.json')['key'],'keep-key')
+
 
 if __name__=='__main__':unittest.main()

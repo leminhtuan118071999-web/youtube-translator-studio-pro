@@ -158,3 +158,28 @@ def main(run,fd):
 
 
 if __name__=='__main__': main(sys.argv[1],sys.argv[2])
+
+
+def delete_all_projects():
+    """Cancel active jobs first, then delete only managed project directories."""
+    from contextlib import ExitStack
+    from .projects import listing
+    with (home()/'.project-names.lock').open('a') as registry,ExitStack() as locks:
+        fcntl.flock(registry,fcntl.LOCK_EX)
+        projects=listing();waiting=False
+        for project in projects:
+            folder=project_dir(project['id'])
+            lock=locks.enter_context((folder/'render.lock').open('a'))
+            try:fcntl.flock(lock,fcntl.LOCK_EX|fcntl.LOCK_NB)
+            except BlockingIOError:
+                waiting=True
+                for run in (folder/'runs').glob('*'):
+                    status=run/'status.json'
+                    if status.exists() and read(status).get('state') in ('queued','running'):(run/'cancel').touch()
+        if waiting:return {'waiting':True,'deleted':0}
+        trash=home()/'.deleted-projects';trash.mkdir(exist_ok=True)
+        for project in projects:
+            folder=project_dir(project['id']);target=trash/project['id']
+            folder.rename(target)
+            shutil.rmtree(target)
+        return {'waiting':False,'deleted':len(projects)}

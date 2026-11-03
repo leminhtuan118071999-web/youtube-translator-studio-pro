@@ -57,6 +57,21 @@ class EditorUITests(unittest.TestCase):
             self.assertEqual(len(exported),1)
             self.assertTrue(exported[0].with_name('video.mp4').exists())
 
+    def test_sidebar_project_buttons_and_confirmed_bulk_delete(self):
+        with tempfile.TemporaryDirectory() as tmp,patch.dict(os.environ,LMT_V3_HOME=tmp):
+            first=projects.create('Dự án một');projects.create('Dự án hai')
+            app=AppTest.from_file(str(Path(__file__).parents[1]/'studio_app.py'),default_timeout=15).run()
+            self.assertFalse(app.exception)
+            self.assertFalse(any(s.label=='Mở dự án' for s in app.selectbox))
+            self.assertFalse(any(e.label=='Nhập dự án từ thư mục' for e in app.expander))
+            next(b for b in app.button if b.label=='Dự án một').click().run()
+            self.assertTrue(any(h.value=='Dự án một' for h in app.subheader))
+            next(b for b in app.button if b.label=='Xóa tất cả phiên').click().run()
+            self.assertEqual(len(projects.listing()),2)
+            next(b for b in app.button if b.label=='Xác nhận xóa tất cả').click().run()
+            self.assertFalse(app.exception);self.assertEqual(projects.listing(),[])
+            self.assertTrue(any(t.label=='Tên dự án mới' for t in app.text_input))
+
 
 if __name__=='__main__':unittest.main()
 

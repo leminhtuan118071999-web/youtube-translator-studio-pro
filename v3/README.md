@@ -38,7 +38,7 @@ Giao diện chỉ giữ hai mục **04 · Xuất video** và **05 · Dựng ki�
 2. Trong **04**, chọn khung hình, độ phân giải, chuyển cảnh, âm lượng, cỡ chữ và cách hiện phụ đề ; cấu hình hiện tại tự được lưu khi bấm bắt đầu.
 3. Trong **05**, thêm ảnh nhân vật, giọng mở đầu, giọng chính và video nền trên máy hoặc chọn Pixabay. Có thể tách nền/xem trước nếu cần; không bắt buộc bấm lưu riêng.
 4. Ở **cuối mục 05**, chọn thư mục lưu, chọn lưu cả dự án/nguyên liệu nếu cần, rồi bấm **Bắt đầu dựng MP4**. Nút này tự lưu nguyên liệu, bố cục và cấu hình hiện tại, kiểm tra phần còn thiếu rồi chạy đến khi kết quả được sao chép vào nơi đã chọn. Cần chọn nơi lưu trước khi bắt đầu.
-5. Có thể lưu thêm bản hoàn tất vào thư mục khác bằng **Lưu vào thư mục đã chọn**, hoặc nhập lại bản đầy đủ từ thanh bên. Mỗi lần lưu tạo thư mục mới, không ghi đè dự án cũ. Video lớn vẫn giữ trên ổ đĩa; tải trực tiếp từ trình duyệt giới hạn 250 MB.
+5. Có thể lưu thêm bản hoàn tất vào thư mục khác bằng **Lưu vào thư mục đã chọn**, và giữ bản đầy đủ để mở lại sau. Mỗi lần lưu tạo thư mục mới, không ghi đè dự án cũ. Video lớn vẫn giữ trên ổ đĩa; tải trực tiếp từ trình duyệt giới hạn 250 MB.
 
 Các dự án cũ và nguyên liệu đã lưu vẫn được giữ. Các mục timeline thủ công, âm thanh và phụ đề riêng không còn hiển thị thành tab 01–03.
 
@@ -86,3 +86,8 @@ Tiến trình hiển thị theo từng dự án: 1/6 tách nền, 2/6 chuẩn b�
 Dùng BiRefNet General thay model nhẹ u2netp. Ảnh ngang từ 600 pixel được quét toàn ảnh và hai vùng chồng lấn, hợp nhất alpha để hạn chế bỏ sót người nhỏ hoặc ở rìa. Giữ RGB gốc, độ trong suốt đầu vào và mọi thành phần mask, không chỉ thành phần lớn nhất. Cache cũ tự hết hiệu lực ở lần dựng tiếp theo. Lần đầu cần mạng tải model; CPU/RAM và thời gian xử lý cao hơn.
 
 Không bảo đảm nhận ra mọi người bị che khuất, không tạo phần cơ thể ngoài ảnh. Xem trước trước khi dựng; dùng vùng khôi phục nếu còn thiếu (vùng khôi phục giữ cả nền trong hình chữ nhật) hoặc PNG trong suốt đã chỉnh. Không dùng model nhẹ làm dự phòng âm thầm nếu tải model lỗi.
+## Danh sách dự án
+
+Thanh bên chỉ có tên dự án mới và nút tạo ở phía trên. Bên dưới là các nút tên dự án để mở trực tiếp, kèm trạng thái/tiến trình cập nhật tự động. Không còn ô chọn dự án hoặc mục nhập thư mục trên thanh bên.
+
+**Xóa tất cả phiên → Xác nhận xóa tất cả** hủy các tác vụ V3 đang chạy/chờ, đợi tiến trình dừng rồi xóa toàn bộ dự án/nguyên liệu/kết quả nội bộ. Bản đã xuất ra thư mục bạn chọn, khóa Pixabay và các model đã tải được giữ. V2 không bị ảnh hưởng.
