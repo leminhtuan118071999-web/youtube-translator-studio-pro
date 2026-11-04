@@ -21,7 +21,20 @@ def panel(project,folder,locked,output_panel=None):
             if st.form_submit_button('Lưu khóa Pixabay'):
                 try:pixabay.save_key(key);st.success('Đã lưu khóa trên máy; không đưa vào bản xuất dự án.')
                 except ValueError as exc:st.error(str(exc))
+    pending='theme_query_pending_'+pid
+    if pending in st.session_state:st.session_state['pixabay_query_'+pid]=st.session_state.pop(pending)
+    auto_theme=st.checkbox('Tự chọn chủ đề video nền theo ảnh thumbnail',value=prefs['auto_theme'],disabled=locked)
     query=st.text_input('Từ khóa tìm video nền Pixabay',value=cfg.get('query','forest sunlight'),max_chars=100,key='pixabay_query_'+pid,disabled=locked)
+    theme_cache=folder/'thumbnail-theme.json'
+    if theme_cache.exists():
+        detected=store.read(theme_cache)
+        if detected.get('source_image')==cfg.get('image') and detected.get('query'):
+            st.caption('Chủ đề gợi ý: '+detected['label']+' · '+detected['query'])
+    choice_cache=folder/'thumbnail-theme-choice.json'
+    if auto_theme and choice_cache.exists():
+        choice=store.read(choice_cache)
+        if choice.get('source_image')==cfg.get('image') and not choice.get('automatic'):
+            st.warning('Chưa nhận diện rõ chủ đề; đang dùng từ khóa: '+choice.get('query',''))
     if st.button('Tìm video trên Pixabay',disabled=locked,key='pixabay_search_'+pid):
         try:
             with st.spinner('Đang tìm video trên Pixabay…'):st.session_state['pixabay_hits_'+pid]=pixabay.search(query)
@@ -74,13 +87,13 @@ def panel(project,folder,locked,output_panel=None):
             subtitles=st.checkbox('Tự tạo phụ đề cho cả mở đầu và giọng chính',value=prefs['auto_subtitles'],disabled=locked)
             model=st.selectbox('Model nhận diện cho video kể chuyện',['small','base','tiny'],index=['small','base','tiny'].index(prefs['asr_model']),disabled=locked)
             auto_pixabay=st.checkbox('Tự tải 15 video Pixabay mới cho mỗi dự án (tránh trùng dự án trước)',value=prefs['auto_pixabay'],disabled=locked)
-            preferences=dict(prefs,enabled=enabled,no_intro=no_intro,remove_background=remove,restore_missing=restore_missing,keep_attached_objects=keep_attached_objects,
+            preferences=dict(prefs,auto_theme=auto_theme,enabled=enabled,no_intro=no_intro,remove_background=remove,restore_missing=restore_missing,keep_attached_objects=keep_attached_objects,
                              width=width,x=x,y=y,auto_subtitles=subtitles,asr_model=model,auto_pixabay=auto_pixabay)
             if not locked and preferences != store.story_defaults():
                 store.save_story_defaults(preferences)
             def save_inputs():
                 try:
-                    new=dict(cfg,no_intro=no_intro,enabled=enabled,auto_pixabay=auto_pixabay,query=query,backgrounds=kept,pixabay_selected=[hits[i] for i in selected],remove_background=remove,restore_missing=restore_missing,keep_attached_objects=keep_attached_objects,
+                    new=dict(cfg,auto_theme=auto_theme,no_intro=no_intro,enabled=enabled,auto_pixabay=auto_pixabay,query=query,backgrounds=kept,pixabay_selected=[hits[i] for i in selected],remove_background=remove,restore_missing=restore_missing,keep_attached_objects=keep_attached_objects,
                              width=width,x=x,y=y,auto_subtitles=subtitles,asr_model=model,
                              keep_boxes=[[float(row[k]) for k in ('Trái','Trên','Phải','Dưới')] for row in boxes])
                     if len(set(records)|set(selected))>15:raise ValueError('Tổng số video Pixabay khác nhau của dự án vượt 15. Chọn lại video đã tải.')
@@ -111,6 +124,17 @@ def panel(project,folder,locked,output_panel=None):
                         for derived in ('voice_track','overlay_image','captions','caption_words','captions_origin'):project.pop(derived,None)
                     project['story']=new;store.save(project);return True
                 except (ValueError,OSError,TypeError,KeyError) as exc:st.error(str(exc));return False
+            if st.button('Gợi ý chủ đề từ ảnh trên máy',disabled=locked):
+                if save_inputs():
+                    try:
+                        from .thumbnail_theme import suggest
+                        if not project['story'].get('image'):raise ValueError('Hãy thêm ảnh thumbnail trước.')
+                        with st.spinner('Đang nhận diện ảnh trên máy…'):
+                            result=suggest(store.asset(folder,project['story']['image']),folder)
+                        if result.get('query'):
+                            st.session_state[pending]=result['query'];st.rerun()
+                        else:st.warning('Chủ đề chưa rõ. Hãy nhập từ khóa video nền phù hợp.')
+                    except (ValueError,OSError,RuntimeError):st.error('Chưa tải hoặc chạy được model nhận diện ảnh. Kiểm tra mạng hoặc nhập từ khóa thủ công.')
             if st.button('Lưu nguyên liệu và bố cục kể chuyện',disabled=locked):
                 if save_inputs():st.rerun()
     if cfg.get('image'):

@@ -34,7 +34,7 @@ def validate_start(project,destination):
         if not project.get('voice'):missing.append('file giọng đọc chính')
         if not cfg.get('backgrounds') and not cfg.get('pixabay_selected'):
             from .pixabay import api_key
-            if not cfg.get('auto_pixabay',True) or not cfg.get('query','').strip() or not api_key():
+            if not cfg.get('auto_pixabay',True) or (not cfg.get('query','').strip() and not cfg.get('auto_theme',False)) or not api_key():
                 missing.append('video nền hoặc từ khóa và khóa Pixabay để tự tìm nền')
     elif not project.get('scenes'):missing.append('bật chế độ ảnh nhân vật + video nền và thêm nguyên liệu')
     if not destination.strip():missing.append('nơi lưu kết quả')
@@ -184,7 +184,12 @@ def prepare(run):
             cfg['backgrounds']=[r['file'] for r in records.values()]
             selected=[]
         else:
-            selected=select_for_project(folder,cfg.get('query','forest sunlight'),selected,cancel)
+            query=cfg.get('query','forest sunlight')
+            if not selected and not (folder/'pixabay-selection.json').exists():
+                from .thumbnail_theme import resolve_query
+                query=resolve_query(folder,cfg,cancel,lambda stage:update(10,stage))
+            effective['story']['resolved_query']=query
+            selected=select_for_project(folder,query,selected,cancel)
     downloaded=download(folder,selected,cancel,lambda p,s:update(10+round(10*p),s))
     effective['story']['downloaded']=read(folder/'pixabay-downloads.json') if (folder/'pixabay-downloads.json').exists() else {}
     current=read(folder/'project.json');current['story']['downloaded']=effective['story']['downloaded'];save(current)

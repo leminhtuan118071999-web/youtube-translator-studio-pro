@@ -47,11 +47,11 @@ jobs:
           if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
           & .\runtime\python.exe -c "import streamlit, faster_whisper, onnxruntime, av, scipy; from v3 import projects, render_worker, speech; print('Runtime imports OK')"
           if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
-          & .\runtime\python.exe -m unittest v3.tests.test_windows_portability v3.tests.test_recovery v3.tests.test_cutout v3.tests.test_story_defaults v3.tests.test_output_defaults -v
+          & .\runtime\python.exe -m unittest v3.tests.test_windows_portability v3.tests.test_recovery v3.tests.test_cutout v3.tests.test_story_defaults v3.tests.test_output_defaults v3.tests.test_thumbnail_theme -v
           if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
       - uses: actions/upload-artifact@v4
         with:
-          name: LMT-Studio-V3-Windows-x64-3.2.0
+          name: LMT-Studio-V3-Windows-x64-3.3.0
           path: |
             dist/windows/*.exe
             dist/windows/*.sha256

@@ -29,13 +29,13 @@ def build():
     shutil.copytree(ROOT/'v3',STAGE/'v3',ignore=shutil.ignore_patterns('.venv*','__pycache__','*.pyc','windows','tests','.DS_Store'))
     # Include focused portability tests for the staged runtime check.
     (STAGE/'v3'/'tests').mkdir()
-    for name in ('test_windows_portability.py','test_recovery.py','test_cutout.py','test_story_defaults.py','test_output_defaults.py'):
+    for name in ('test_windows_portability.py','test_recovery.py','test_cutout.py','test_story_defaults.py','test_output_defaults.py','test_thumbnail_theme.py'):
         shutil.copy2(ROOT/'v3'/'tests'/name,STAGE/'v3'/'tests'/name)
     subprocess.run([sys.executable,'-m','PyInstaller','--noconfirm','--clean','--onefile','--windowed',
                     '--name','LMTStudioV3','--distpath',str(STAGE),'--workpath',str(ROOT/'build'/'pyinstaller'),
                     '--specpath',str(ROOT/'build'),str(ROOT/'v3'/'windows'/'launcher.py')],check=True)
     shutil.copy2(ROOT/'v3'/'windows'/'README.md',STAGE/'README-Windows.md')
-    build_info=dict(version='3.2.0',
+    build_info=dict(version='3.3.0',
                     source_commit=os.getenv('GITHUB_HEAD_SHA') or subprocess.check_output(['git','rev-parse','HEAD'],cwd=ROOT,text=True).strip(),
                     built_at=datetime.now(timezone.utc).isoformat())
     manifest=json.dumps(build_info,ensure_ascii=False,indent=2)+'\n'

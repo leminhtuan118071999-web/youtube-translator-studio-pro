@@ -29,3 +29,11 @@ FFmpeg is downloaded directly on the recipient's PC, not redistributed inside th
 Upgrade: finish running jobs and close LMT Studio V3 before installing this version.
 Existing projects, API keys and settings stay in the separate user data folder.
 The extra person model downloads on first use; absent body parts are not generated.
+
+## Version 3.3.0
+
+Optional local thumbnail scene recognition (CLIP ONNX, CPU) suggests Pixabay
+keywords. Model files download once (about 155 MB); thumbnails never leave the
+computer for recognition. Ambiguous images and offline setup use the entered
+manual query. Turn off automatic theme selection to use only your own keywords.
+Existing background reservations and uploaded videos are preserved.
