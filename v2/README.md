@@ -87,3 +87,7 @@ Form 8 giây và nhân vật vẫn chạy riêng theo yêu cầu.
 Sau các lần sửa chi tiết, đoạn vẫn lỗi đối soát sẽ được tự chia nhỏ và dịch/kiểm tra tiếp, giữ ngữ cảnh trước–sau để xác định đúng người nói và người được hỏi. Những đoạn đã đạt được giữ trong checkpoint. Việc chia nhỏ có giới hạn; đoạn chưa đạt không được coi là hoàn tất hoặc bỏ qua.
 
 Với tác vụ đã lỗi trước khi cập nhật, khởi động lại worker bằng mã mới rồi chọn **Tác vụ → Tiếp tục từ checkpoint** cho đúng phiên, giữ nguyên đầu vào. Không bấm tạo bản dịch mới nếu muốn tiếp tục các phần đã đạt của tác vụ cũ.
+
+### Xóa tất cả phiên V2
+
+Thanh bên có **Xóa tất cả phiên**, yêu cầu xác nhận trước khi xóa cả phiên bị ẩn bởi tìm kiếm và nội dung chưa lưu. API `DELETE /v1/sessions` chỉ xóa phiên của tài khoản đã đăng nhập, hủy tác vụ liên quan và vô hiệu hóa lease trong cùng giao dịch. Cấu hình API, dữ liệu V1 và V3 được giữ. Ảnh lưu trữ được giữ theo chính sách hiện tại của thao tác xóa một phiên; yêu cầu AI đã gửi có thể vẫn tính phí cho tới khi worker nhận việc hủy. Cần triển khai cả backend và frontend mới để dùng nút này.

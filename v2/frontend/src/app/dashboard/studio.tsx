@@ -217,6 +217,14 @@ export function Studio({ email }: { email: string }) {
       <button className="primary-button" disabled={busy || dirty} onClick={() => void action(async () => {
         accept(await api<Session>("/sessions", "POST", {})); setTab("Nội dung"); await refresh();
       })}>＋ Phiên mới</button>
+      <button className="ghost-button danger" disabled={busy || !sessions.length} onClick={() => void action(async () => {
+        if (!window.confirm("Xóa TẤT CẢ phiên V2 của tài khoản, kể cả phiên không hiện trong tìm kiếm? Các tác vụ đang chạy sẽ bị hủy; nội dung chưa lưu cũng bị xóa. Không thể hoàn tác từ ứng dụng.")) return;
+        setAutoTranslation(null);
+        await api("/sessions", "DELETE");
+        selectedRef.current = null; dirtyRef.current = false; request.current = null;
+        setSelected(null); setDraft({}); setName(""); setDirty(false); setImages([]); setSearch("");
+        await refresh(); setNotice("Đã xóa tất cả phiên V2 và hủy tác vụ liên quan.");
+      })}>Xóa tất cả phiên</button>
       <input className="session-search" aria-label="Tìm phiên" placeholder="Tìm phiên làm việc…" value={search} onChange={e => setSearch(e.target.value)} />
       <div className="session-list">{sessions.filter(s => s.name.toLowerCase().includes(search.toLowerCase())).map(s => {
         const job = latestJob(jobs, s.id);

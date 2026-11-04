@@ -28,6 +28,18 @@ def create_session(body: SessionInput, user: AuthenticatedUser = Depends(require
         return conn.execute('''insert into public.lmt_v2_sessions(user_id,name,data) values (%s,%s,%s) returning *''',
                             (user.id, body.name, Jsonb(body.model_dump(exclude={'name'})))).fetchone()
 
+@router.delete('/sessions', status_code=204)
+def delete_all_sessions(user: AuthenticatedUser = Depends(require_user)):
+    with connect() as conn:
+        # Same owner lock as creation; row locks serialize edits and job creation.
+        conn.execute('select pg_advisory_xact_lock(hashtextextended(%s,0))', (user.id,))
+        rows = conn.execute('select id from public.lmt_v2_sessions where user_id=%s order by id for update',
+                            (user.id,)).fetchall()
+        for row in rows:
+            store.cancel_active(conn, user.id, row['id'])
+        conn.execute('delete from public.lmt_v2_sessions where user_id=%s', (user.id,))
+    return Response(status_code=204)
+
 @router.get('/sessions/{sid}')
 def get_session(sid: UUID, user: AuthenticatedUser = Depends(require_user)):
     with connect() as conn:
