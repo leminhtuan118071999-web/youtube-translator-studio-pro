@@ -12,10 +12,9 @@ from . import pixabay
 def panel(project,folder,locked):
     pid=project['id'];cfg=project.get('story',{})
     st.subheader('Ảnh nhân vật trên video nền · như video mẫu')
-    st.caption('Giọng mở đầu phát trước, tiếp theo giọng chính. Nền nối tiếp rồi lặp cả danh sách đến hết lời đọc; ảnh nhân vật nằm phía trước. Âm thanh gốc của video nền được tắt.')
     with st.expander('Cấu hình Pixabay · chỉ lưu khóa trên máy này'):
         st.link_button('Lấy khóa API trên Pixabay','https://pixabay.com/api/docs/')
-        st.caption('Đã lưu khóa trên máy.' if pixabay.api_key() else 'Chưa có khóa. Có thể dùng video nền tải lên mà không cần khóa.')
+        st.caption('Đã lưu khóa trên máy.' if pixabay.api_key() else 'Chưa lưu khóa.')
         with st.form('pixabay_key_'+pid,clear_on_submit=True):
             key=st.text_input('Khóa Pixabay API',type='password')
             if st.form_submit_button('Lưu khóa Pixabay'):
@@ -29,7 +28,7 @@ def panel(project,folder,locked):
     hits={str(h['id']):h for h in cfg.get('pixabay_selected',[])}
     hits.update({str(h['id']):h for h in st.session_state.get('pixabay_hits_'+pid,[])})
     records=store.read(folder/'pixabay-downloads.json') if (folder/'pixabay-downloads.json').exists() else cfg.get('downloaded',{})
-    st.caption(f'Đã tải {len(records)}/15 video Pixabay khác nhau cho dự án này. Đổi từ khóa không đặt lại giới hạn; dựng lại dùng tệp đã tải.')
+    st.caption(f'Đã tải {len(records)}/15 video Pixabay.')
     selection_key='pixabay_selection_'+pid
     if st.session_state.pop('restore_story_selection_'+pid,False):
         st.session_state[selection_key]=[str(h['id']) for h in cfg.get('pixabay_selected',[])]
@@ -60,9 +59,7 @@ def panel(project,folder,locked):
             kept=st.multiselect('Video nền đã lưu muốn dùng',existing,default=cfg.get('backgrounds',[]),format_func=lambda n:cfg.get('background_names',{}).get(n,'Video đã tải · '+n[:8]),disabled=locked)
             selected=st.multiselect('Chọn video Pixabay để tải khi dựng (tối đa 15)',list(hits),key=selection_key,format_func=lambda i:f"Pixabay {i} · {hits[i]['tags']} · {hits[i]['duration']} giây",max_selections=15,disabled=locked)
         remove=st.checkbox('Tự động xóa nền ảnh',value=cfg.get('remove_background',True),disabled=locked)
-        st.caption('Bỏ chọn nếu đã dùng PNG trong suốt. Tách nền chất lượng cao, quét toàn ảnh và hai vùng chồng lấn để hạn chế bỏ sót người. Lần đầu tải model lớn; xử lý chậm hơn. Không khôi phục phần cơ thể đã bị cắt trong ảnh gốc.')
         with st.expander('Khôi phục vùng nhân vật hoặc chi tiết bị thiếu'):
-            st.caption('Thêm vùng chữ nhật theo % ảnh gốc: trái, trên, phải, dưới (0–100). Vùng này giữ cả chi tiết và nền bên trong vùng; dùng PNG đã chỉnh sẵn nếu cần đường viền chính xác.')
             boxes=st.data_editor(pd.DataFrame(cfg.get('keep_boxes',[]),columns=['Trái','Trên','Phải','Dưới']),num_rows='dynamic',disabled=locked,key='story_boxes_'+pid).to_dict('records')
         c,d,e=st.columns(3)
         width=c.slider('Chiều rộng nhân vật (% khung)',10,100,int(cfg.get('width',75)),disabled=locked)
@@ -71,7 +68,6 @@ def panel(project,folder,locked):
         subtitles=st.checkbox('Tự tạo phụ đề cho cả mở đầu và giọng chính',value=cfg.get('auto_subtitles',True),disabled=locked)
         model=st.selectbox('Model nhận diện cho video kể chuyện',['small','base','tiny'],index=['small','base','tiny'].index(cfg.get('asr_model','small')),disabled=locked)
         auto_pixabay=st.checkbox('Tự tải 15 video Pixabay mới cho mỗi dự án (tránh trùng dự án trước)',value=cfg.get('auto_pixabay',True),disabled=locked)
-        st.caption('Tự thử từ khóa gần nghĩa cùng chủ đề khi thiếu video mới. Nếu vẫn không đủ 15, app báo rõ; không âm thầm lấy lại nền phiên khác.')
         def save_inputs():
             try:
                 new=dict(cfg,enabled=enabled,auto_pixabay=auto_pixabay,query=query,backgrounds=kept,pixabay_selected=[hits[i] for i in selected],remove_background=remove,
@@ -122,11 +118,10 @@ def panel(project,folder,locked):
                 st.session_state['cutout_seen_'+status['run_id']]=True;st.rerun()
     preview_status()
     if cfg.get('cutout'):
-        st.image(str(store.asset(folder,cfg['cutout'])),caption='Ảnh đã tách nền lần gần nhất · nếu đổi ảnh/vùng giữ, bấm tách nền lại',width=350)
+        st.image(str(store.asset(folder,cfg['cutout'])),caption='Ảnh đã tách nền',width=350)
         if st.button('Xem thử bố cục trên nền',disabled=locked,key='story_preview_'+pid):
             try:
                 from .story import layout_preview
-                st.image(layout_preview(project,folder),caption='Xem thử một khung hình · dùng bố cục đã lưu')
+                st.image(layout_preview(project,folder),caption='Xem trước bố cục')
             except (ValueError,OSError,RuntimeError) as exc:st.error(str(exc))
-    st.caption('Điền thông tin, chọn nơi lưu bên dưới rồi bấm Bắt đầu dựng MP4. App tự lưu thông tin và chạy đến khi hoàn tất.')
     return save_inputs

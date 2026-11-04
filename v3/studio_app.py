@@ -14,7 +14,6 @@ from v3.render_worker import launch, busy, current, delete_all_projects
 st.set_page_config(page_title='LMT Video Editor V3',page_icon='🎞️',layout='wide')
 st.markdown('''<style>.stApp{background:#0b1320}h1,h2,h3{color:#e4ecfb}.block-container{max-width:1240px;padding-top:2rem}div.stButton>button[kind=primary]{background:#357cef}section[data-testid=stSidebar]{background:#101c2b}</style>''',unsafe_allow_html=True)
 st.title('🎞️ LMT Video Editor · V3')
-st.caption('Cấu hình xuất → thêm nguyên liệu và bố cục → chọn nơi lưu → dựng MP4 trên máy của bạn')
 with st.sidebar:
     st.header('Dự án của tôi')
     with st.form('new_project',clear_on_submit=True):
@@ -58,7 +57,7 @@ with st.sidebar:
             if yes.button('Xác nhận xóa tất cả',type='primary'):
                 st.session_state['confirm_delete_all']=False;st.session_state['delete_all_pending']=True;st.rerun()
             if no.button('Giữ lại'):st.session_state['confirm_delete_all']=False;st.rerun()
-    if not rows:st.info('Tạo dự án đầu tiên để bắt đầu.');st.stop()
+    if not rows:st.stop()
     pid=st.session_state['project_id']
 project=store.read(store.project_dir(pid)/'project.json');folder=store.project_dir(pid)
 locked=busy(folder) or st.session_state.get('delete_all_pending',False)
@@ -91,8 +90,6 @@ def save_completed(folder):
         except ValueError as exc:st.error(str(exc))
     destination=st.text_input('Nơi lưu',key=key,placeholder='Ví dụ: ~/Movies/LMT hoặc /Volumes/Ten-o-dia/LMT',disabled=locked)
     complete=st.checkbox('Lưu cả dự án và nguyên liệu để chỉnh sửa lại',value=project.get('export_include_assets',True),key='full_'+folder.name,disabled=locked)
-    st.caption('Mỗi lần lưu tạo một thư mục mới. Bản đầy đủ gồm video, cấu hình và nguyên liệu; cần đủ dung lượng cho bản sao.')
-    st.caption('Chọn trước khi dựng: hoàn thành sẽ tự lưu vào đây. Để trống nếu chỉ muốn giữ kết quả trong app.')
     if status and status.get('details',{}).get('export_error'):st.warning('Video đã dựng xong nhưng chưa sao chép được: '+status['details']['export_error'])
     if status and status['state']=='completed' and st.button('Lưu vào thư mục đã chọn',type='primary',key='export_'+folder.name,disabled=locked):
         try:
@@ -152,12 +149,11 @@ def speech_progress(folder):
 
 progress_panel(folder)
 speech_progress(folder)
-if locked:st.info('Dự án đang xử lý từ bản đã lưu. Nguyên liệu và cấu hình đang khóa; tạo hoặc mở dự án khác vẫn được.')
+if locked:st.info('Dự án đang xử lý · cấu hình đã khóa.')
 output_tab,story_tab=st.tabs(['04 · Xuất video','05 · Dựng kiểu video mẫu'])
 try:
     with output_tab:
         cfg=project['settings'] if locked else store.output_defaults()
-        st.caption('Cấu hình dùng chung: tự lưu khi thay đổi và áp dụng cho mọi dự án khi dựng tiếp theo. Video đang chạy giữ cấu hình lúc bắt đầu.')
         with st.container():
             a,b=st.columns(2)
             with a:
@@ -167,7 +163,6 @@ try:
                 transition=st.selectbox('Chuyển cảnh',['cut','fade'],index=['cut','fade'].index(cfg['transition']),format_func=lambda v:'Cắt thẳng' if v=='cut' else 'Mờ qua đen',disabled=locked)
             with b:
                 sync=st.checkbox('Tự khớp timeline theo thời lượng giọng đọc',value=cfg['sync_voice'],disabled=locked)
-                st.caption('Chia thời lượng cảnh theo tỷ lệ đã nhập; không tự nhận diện nội dung trong clip.')
                 original=st.slider('Âm lượng gốc trong video (%)',0,100,round(cfg['original_volume']*100),disabled=locked)
                 music=st.slider('Âm lượng nhạc nền (%)',0,100,round(cfg['music_volume']*100),disabled=locked)
                 voice=st.slider('Âm lượng giọng đọc (%)',0,200,round(cfg['voice_volume']*100),disabled=locked)
@@ -185,12 +180,10 @@ try:
         from v3.story_ui import panel
         save_inputs=panel(project,folder,locked)
         st.divider()
-        st.caption('Bấm bắt đầu để tự lưu thông tin vừa nhập, tách nền, chuẩn bị video nền, ghép giọng, tạo phụ đề và xuất vào nơi đã chọn.')
         story_mode=project.get('story',{}).get('enabled',False)
         ready=bool(project['scenes'])
         if story_mode:
             from v3.story import voice_duration
-            st.info('Đang dùng chế độ ảnh nhân vật + video nền từ mục 05.')
             ready=bool(project.get('voice') and project['story'].get('image') and (project['story'].get('backgrounds') or project['story'].get('pixabay_selected')))
             if project.get('voice'):st.metric('Thời lượng mở đầu + giọng chính',f'{voice_duration(project,folder):.1f} giây')
 
