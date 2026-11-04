@@ -46,6 +46,33 @@ class MetadataTests(unittest.TestCase):
         self.assertEqual(result[0], 'La famiglia')
         self.assertEqual(len(prompts), 3)
 
+    def test_review_format_retries_same_candidate_with_full_source(self):
+        calls = []
+        def call(prompt):
+            calls.append(prompt)
+            if prompt.startswith('TARGET_METADATA_REVIEW'):
+                if 'REVIEW FORMAT RETRY' not in prompt:
+                    return '{"approvato":true,"problemi":[]}'
+                self.assertIn('Original title', prompt)
+                self.assertIn('Original description', prompt)
+                self.assertIn('La famiglia', prompt)
+                return '{"ok":true,"issues":[]}'
+            return '{"title":"La famiglia","description":"Storia.","tags":["famiglia"]}'
+        self.assertEqual(generate_youtube_metadata('Story', 'Original title', 'Original description', 'Italian', call)[0], 'La famiglia')
+        self.assertEqual(len(calls), 3)
+
+    def test_ambiguous_review_cannot_approve_or_regenerate_valid_candidate(self):
+        calls = []
+        def call(prompt):
+            calls.append(prompt)
+            if prompt.startswith('TARGET_METADATA_REVIEW'):
+                return '{"ok":"true","issues":[]}'
+            return '{"title":"Titolo","description":"Storia.","tags":["storia"]}'
+        with self.assertRaises(ValueError):
+            generate_youtube_metadata('Story', '', '', 'Italian', call)
+        self.assertEqual(len(calls), 4)
+        self.assertEqual(sum(not p.startswith('TARGET_METADATA_REVIEW') for p in calls), 1)
+
     def test_strict_99_character_title(self):
         base={'description':'Nội dung','tags':['gia đình']}
         self.assertEqual(len(validate_metadata(dict(base,title='a'*99))[0]),99)
