@@ -4,7 +4,7 @@
 [Setup]
 AppId={{B2D41370-CC83-47E6-89C7-82B736D7C726}
 AppName=LMT Studio V3
-AppVersion=3.1.0
+AppVersion=3.2.0
 AppPublisher=LMT Studio
 DefaultDirName={localappdata}\Programs\LMTStudioV3
 DefaultGroupName=LMT Studio V3

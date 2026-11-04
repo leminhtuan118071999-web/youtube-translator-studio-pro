@@ -11,6 +11,7 @@ jobs:
     timeout-minutes: 40
     env:
       PYTHONUTF8: "1"
+      GITHUB_HEAD_SHA: ${{ github.event.pull_request.head.sha || github.sha }}
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-python@v5
@@ -44,16 +45,17 @@ jobs:
           Set-Location $installed
           & .\runtime\python.exe -c "import shutil; assert shutil.which('ffmpeg') and shutil.which('ffprobe')" 
           if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
-          & .\runtime\python.exe -c "import streamlit, faster_whisper, onnxruntime, av; from v3 import projects, render_worker, speech; print('Runtime imports OK')"
+          & .\runtime\python.exe -c "import streamlit, faster_whisper, onnxruntime, av, scipy; from v3 import projects, render_worker, speech; print('Runtime imports OK')"
           if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
-          & .\runtime\python.exe -m unittest v3.tests.test_windows_portability v3.tests.test_recovery -v
+          & .\runtime\python.exe -m unittest v3.tests.test_windows_portability v3.tests.test_recovery v3.tests.test_cutout v3.tests.test_story_defaults v3.tests.test_output_defaults -v
           if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
       - uses: actions/upload-artifact@v4
         with:
-          name: LMT-Studio-V3-Windows-x64
+          name: LMT-Studio-V3-Windows-x64-3.2.0
           path: |
             dist/windows/*.exe
             dist/windows/*.sha256
+            dist/windows/build-info.json
             v3/windows/README.md
           if-no-files-found: error
           retention-days: 30

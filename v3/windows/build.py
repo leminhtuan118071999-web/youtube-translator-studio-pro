@@ -1,6 +1,8 @@
 """Build on Windows only. No user data or credentials enter the installer."""
 from pathlib import Path
 import hashlib
+import json
+from datetime import datetime, timezone
 import os
 import shutil
 import subprocess
@@ -27,12 +29,19 @@ def build():
     shutil.copytree(ROOT/'v3',STAGE/'v3',ignore=shutil.ignore_patterns('.venv*','__pycache__','*.pyc','windows','tests','.DS_Store'))
     # Include focused portability tests for the staged runtime check.
     (STAGE/'v3'/'tests').mkdir()
-    for name in ('test_windows_portability.py','test_recovery.py'):
+    for name in ('test_windows_portability.py','test_recovery.py','test_cutout.py','test_story_defaults.py','test_output_defaults.py'):
         shutil.copy2(ROOT/'v3'/'tests'/name,STAGE/'v3'/'tests'/name)
     subprocess.run([sys.executable,'-m','PyInstaller','--noconfirm','--clean','--onefile','--windowed',
                     '--name','LMTStudioV3','--distpath',str(STAGE),'--workpath',str(ROOT/'build'/'pyinstaller'),
                     '--specpath',str(ROOT/'build'),str(ROOT/'v3'/'windows'/'launcher.py')],check=True)
     shutil.copy2(ROOT/'v3'/'windows'/'README.md',STAGE/'README-Windows.md')
+    build_info=dict(version='3.2.0',
+                    source_commit=os.getenv('GITHUB_HEAD_SHA') or subprocess.check_output(['git','rev-parse','HEAD'],cwd=ROOT,text=True).strip(),
+                    built_at=datetime.now(timezone.utc).isoformat())
+    manifest=json.dumps(build_info,ensure_ascii=False,indent=2)+'\n'
+    (STAGE/'build-info.json').write_text(manifest,encoding='utf8')
+    output=ROOT/'dist'/'windows';output.mkdir(parents=True,exist_ok=True)
+    (output/'build-info.json').write_text(manifest,encoding='utf8')
     compiler=Path(os.environ.get('ISCC',r'C:\Program Files (x86)\Inno Setup 6\ISCC.exe'))
     if not compiler.exists():raise SystemExit('Install Inno Setup 6 to build the Setup.exe.')
     subprocess.run([str(compiler),'/Qp','/DPayloadDir='+str(STAGE),str(ROOT/'v3'/'windows'/'installer.iss')],check=True,cwd=ROOT)

@@ -18,3 +18,14 @@ Build: run `python v3/windows/build.py` on Windows with Python 3.12 x64, PyInsta
 
 Third-party sources: https://www.python.org/ · https://pypi.org/ · https://www.gyan.dev/ffmpeg/builds/
 FFmpeg is downloaded directly on the recipient's PC, not redistributed inside this installer. Runtime libraries retain their license metadata.
+
+## Version 3.2.0
+
+- Export settings are collapsed inside the storytelling screen, above Custom settings.
+- Story settings and checkboxes persist across projects and app restarts.
+- Optional automatic recovery of source details and preservation of attached objects.
+- Includes build-info.json identifying the exact source commit.
+
+Upgrade: finish running jobs and close LMT Studio V3 before installing this version.
+Existing projects, API keys and settings stay in the separate user data folder.
+The extra person model downloads on first use; absent body parts are not generated.
