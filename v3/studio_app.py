@@ -153,11 +153,12 @@ def speech_progress(folder):
 progress_panel(folder)
 speech_progress(folder)
 if locked:st.info('Dự án đang xử lý · cấu hình đã khóa.')
-output_tab,story_tab=st.tabs(['04 · Xuất video','05 · Dựng kiểu video mẫu'])
+story_tab,=st.tabs(['05 · Dựng kiểu video mẫu'])
 try:
-    with output_tab:
+    export_settings={}
+    def output_panel():
         cfg=project['settings'] if locked else store.output_defaults()
-        with st.container():
+        with st.expander('Cấu hình xuất video',expanded=False):
             a,b=st.columns(2)
             with a:
                 aspect=st.selectbox('Khung hình',['9:16','16:9','1:1'],index=['9:16','16:9','1:1'].index(cfg['aspect']),disabled=locked)
@@ -173,6 +174,7 @@ try:
                 font=st.slider('Cỡ chữ phụ đề',16,64,cfg['font_size'],disabled=locked)
                 subtitle_mode=st.selectbox('Cách hiện phụ đề nhận diện',['words','sentence'],index=0 if cfg.get('subtitle_mode','words')=='words' else 1,format_func=lambda value:'Tô sáng từng từ đang đọc' if value=='words' else 'Theo cụm lời · không tô từng từ',disabled=locked)
             current_settings=dict(aspect=aspect,resolution=resolution,fit=fit,transition=transition,sync_voice=sync,original_volume=original/100,music_volume=music/100,voice_volume=voice/100,duck=duck,font_size=font,subtitle_mode=subtitle_mode)
+            export_settings.update(current_settings)
             if not locked and current_settings != store.output_defaults():
                 store.save_output_defaults(current_settings)
             if st.button('Lưu cấu hình xuất',disabled=locked):
@@ -181,7 +183,7 @@ try:
                 store.save(project);st.rerun()
     with story_tab:
         from v3.story_ui import panel
-        save_inputs=panel(project,folder,locked)
+        save_inputs=panel(project,folder,locked,output_panel=output_panel)
         st.divider()
         story_mode=project.get('story',{}).get('enabled',False)
         ready=bool(project['scenes'])
@@ -196,7 +198,7 @@ try:
         save_completed(folder)
         if st.button('🎬 Bắt đầu dựng MP4',type='primary',disabled=locked):
             if not save_inputs():st.stop()
-            project['settings']=dict(aspect=aspect,resolution=resolution,fit=fit,transition=transition,sync_voice=sync,original_volume=original/100,music_volume=music/100,voice_volume=voice/100,duck=duck,font_size=font,subtitle_mode=subtitle_mode)
+            project['settings']=dict(export_settings)
             from v3.story import validate_start
             validate_start(project,st.session_state.get('save_folder_'+pid,''))
             project['export_destination']=st.session_state.get('save_folder_'+pid,'').strip()

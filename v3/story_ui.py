@@ -9,7 +9,7 @@ from .render_worker import launch,current
 from . import pixabay
 
 
-def panel(project,folder,locked):
+def panel(project,folder,locked,output_panel=None):
     pid=project['id'];cfg=project.get('story',{})
     prefs=dict(store.STORY_DEFAULTS, **cfg) if locked else store.story_defaults()
     st.subheader('Ảnh nhân vật trên video nền · như video mẫu')
@@ -59,6 +59,7 @@ def panel(project,folder,locked):
             existing=list(dict.fromkeys(cfg.get('backgrounds',[])+[r['file'] for r in records.values()]))
             kept=st.multiselect('Video nền đã lưu muốn dùng',existing,default=cfg.get('backgrounds',[]),format_func=lambda n:cfg.get('background_names',{}).get(n,'Video đã tải · '+n[:8]),disabled=locked)
             selected=st.multiselect('Chọn video Pixabay để tải khi dựng (tối đa 15)',list(hits),key=selection_key,format_func=lambda i:f"Pixabay {i} · {hits[i]['tags']} · {hits[i]['duration']} giây",max_selections=15,disabled=locked)
+        if output_panel is not None:output_panel()
         with st.expander('Cài đặt tùy chỉnh',expanded=False):
             remove=st.checkbox('Tự động xóa nền ảnh',value=prefs['remove_background'],disabled=locked)
             with st.container():
