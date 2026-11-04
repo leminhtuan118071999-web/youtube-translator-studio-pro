@@ -3,6 +3,34 @@ import unittest
 from youtube_metadata import validate_metadata, generate_youtube_metadata
 
 class MetadataTests(unittest.TestCase):
+    def test_nested_metadata_and_review_are_recovered(self):
+        def call(prompt):
+            if prompt.startswith('TARGET_METADATA_REVIEW'):
+                return '```json\n{"result":{"ok":true,"issues":[]}}\n```'
+            return '{"metadata":{"title":"Titolo","description":"Storia fedele.","tags":["storia"]}}'
+        self.assertEqual(generate_youtube_metadata('Story', '', '', 'Italian', call)[0], 'Titolo')
+
+    def test_missing_field_is_retried_with_precise_seo_feedback(self):
+        prompts = []
+        def call(prompt):
+            prompts.append(prompt)
+            if len(prompts) == 1:
+                return '{"description":"Incomplete"}'
+            if prompt.startswith('TARGET_METADATA_REVIEW'):
+                return '{"ok":true,"issues":[]}'
+            self.assertIn('trường JSON "title"', prompt)
+            return '{"title":"Titolo","description":"Storia.","tags":["storia"]}'
+        self.assertEqual(generate_youtube_metadata('Story', '', '', 'Italian', call)[0], 'Titolo')
+        self.assertEqual(len(prompts), 3)
+
+    def test_missing_review_never_bypasses_fidelity_check(self):
+        def call(prompt):
+            if prompt.startswith('TARGET_METADATA_REVIEW'):
+                return '{"issues":[]}'
+            return '{"title":"Titolo","description":"Storia.","tags":["storia"]}'
+        with self.assertRaisesRegex(ValueError, 'trường JSON "ok"'):
+            generate_youtube_metadata('Story', '', '', 'Italian', call)
+
     def test_strict_99_character_title(self):
         base={'description':'Nội dung','tags':['gia đình']}
         self.assertEqual(len(validate_metadata(dict(base,title='a'*99))[0]),99)

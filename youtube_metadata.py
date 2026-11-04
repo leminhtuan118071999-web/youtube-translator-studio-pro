@@ -1,7 +1,24 @@
 """Shared target-language YouTube metadata generation and review."""
 import json
 import unicodedata
-from video_scene_planner import parse_json_object
+
+def parse_metadata_object(raw, required_field):
+    """Accept JSON prose/fences and common provider envelopes, with SEO errors."""
+    decoder = json.JSONDecoder()
+    if isinstance(raw, str):
+        for offset, char in enumerate(raw):
+            if char != '{':
+                continue
+            try:
+                data, _ = decoder.raw_decode(raw, offset)
+            except ValueError:
+                continue
+            if isinstance(data, dict) and required_field in data:
+                return data
+    stage = 'kết quả kiểm tra SEO' if required_field == 'ok' else 'tiêu đề SEO'
+    raise ValueError(f'Phản hồi AI thiếu {stage} (trường JSON "{required_field}"). '
+                     'Trả về đúng cấu trúc JSON đã yêu cầu, không trả form video.')
+
 
 
 def validate_metadata(data):
@@ -52,7 +69,7 @@ def generate_youtube_metadata(script, original_title, original_description, lang
     errors='';candidate=None
     for attempt in range(3):
         try:
-            candidate=parse_json_object(call(
+            candidate=parse_metadata_object(call(
                 f'TARGET_METADATA. Write ALL title, description and tags naturally in {language}. '
                 'Translate the supplied original title and description as faithfully as possible. Preserve their meaning, '
                 'tone, emphasis, specificity and order of information; use natural target-language grammar. '
@@ -76,7 +93,7 @@ def generate_youtube_metadata(script, original_title, original_description, lang
                 'Previous validation errors: '+errors+'\nSOURCE DATA:\n'+json.dumps({**inputs,'candidate':candidate},ensure_ascii=False)
             ),'title')
             result=validate_metadata(candidate)
-            verdict=parse_json_object(call(
+            verdict=parse_metadata_object(call(
                 f'TARGET_METADATA_REVIEW. Check every field is natural {language}, except proper names and links. '
                 'Compare the title directly against original_title when it is present. '
                 'Reject added hooks, SEO embellishments, invented details, changed tone/emphasis, omitted information '
