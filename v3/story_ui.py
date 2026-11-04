@@ -70,7 +70,8 @@ def panel(project,folder,locked):
         y=e.slider('Vị trí dọc · trên → dưới',0,100,int(cfg.get('y',100)),disabled=locked)
         subtitles=st.checkbox('Tự tạo phụ đề cho cả mở đầu và giọng chính',value=cfg.get('auto_subtitles',True),disabled=locked)
         model=st.selectbox('Model nhận diện cho video kể chuyện',['small','base','tiny'],index=['small','base','tiny'].index(cfg.get('asr_model','small')),disabled=locked)
-        auto_pixabay=st.checkbox('Tự tìm và chọn nền Pixabay nếu chưa chọn video nền',value=cfg.get('auto_pixabay',True),disabled=locked)
+        auto_pixabay=st.checkbox('Tự tải 15 video Pixabay mới cho mỗi dự án (tránh trùng dự án trước)',value=cfg.get('auto_pixabay',True),disabled=locked)
+        st.caption('Tự thử từ khóa gần nghĩa cùng chủ đề khi thiếu video mới. Nếu vẫn không đủ 15, app báo rõ; không âm thầm lấy lại nền phiên khác.')
         def save_inputs():
             try:
                 new=dict(cfg,enabled=enabled,auto_pixabay=auto_pixabay,query=query,backgrounds=kept,pixabay_selected=[hits[i] for i in selected],remove_background=remove,

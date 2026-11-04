@@ -1,4 +1,7 @@
 """User-triggered Pixabay video search/download, cached and capped per project."""
+import fcntl
+import random
+import re
 import hashlib
 import json
 from pathlib import Path
@@ -26,15 +29,15 @@ def api_key():
     return read(path).get('key','') if path.exists() else ''
 
 
-def search(query):
+def search(query, page=1):
     query=query.strip()
     if not 1<=len(query)<=100:raise ValueError('Từ khóa Pixabay cần từ 1 đến 100 ký tự.')
     key=api_key()
     if not key:raise ValueError('Chưa lưu khóa Pixabay. Nhập khóa trong mục Cấu hình Pixabay.')
     cache=home()/'pixabay-cache';cache.mkdir(exist_ok=True)
-    filename=cache/(hashlib.sha256(query.casefold().encode()).hexdigest()+'.json')
+    filename=cache/(hashlib.sha256((query.casefold()+'|'+str(page)).encode()).hexdigest()+'.json')
     if filename.exists() and time.time()-filename.stat().st_mtime<86400:return read(filename)['hits']
-    url='https://pixabay.com/api/videos/?'+urlencode(dict(key=key,q=query,per_page=50,safesearch='true'))
+    url='https://pixabay.com/api/videos/?'+urlencode(dict(key=key,q=query,page=page,per_page=50,safesearch='true'))
     try:
         with urlopen(Request(url,headers={'User-Agent':'LMTStudioPro/3'}),timeout=25) as response:
             body=response.read(4*1024*1024+1)
@@ -53,6 +56,75 @@ def search(query):
                          duration=item.get('duration',0),pageURL=item['pageURL'],user=item.get('user',''),tags=item.get('tags','')))
     atomic(filename,{'hits':hits})
     return hits
+
+
+def related_queries(query):
+    """Conservative synonyms, never an unrelated generic fallback."""
+    query = query.strip()
+    groups = [
+        (('forest','woodland','woods','rừng'), ('forest','woodland','woods','forest trees')),
+        (('ocean','sea','beach','biển'), ('ocean','sea','coast','beach')),
+        (('river','stream','sông','suối'), ('river','stream','flowing river','river water')),
+        (('mountain','mountains','núi'), ('mountains','mountain landscape','mountain peaks')),
+        (('waterfall','thác'), ('waterfall','waterfalls','cascading water')),
+        (('city','urban','thành phố'), ('city','urban','cityscape')),
+        (('rain','rainfall','mưa'), ('rain','rainfall','rain drops')),
+        (('flower','flowers','hoa'), ('flowers','flower garden','blooming flowers')),
+        (('cloud','clouds','mây'), ('clouds','cloudy sky','moving clouds')),
+    ]
+    results = [query]
+    for words, synonyms in groups:
+        for word in words:
+            pattern = r'(?<!\w)' + re.escape(word) + r'(?!\w)'
+            if re.search(pattern, query, re.IGNORECASE):
+                results.extend(re.sub(pattern, term, query, flags=re.IGNORECASE) for term in synonyms)
+                break
+    return list(dict.fromkeys(q for q in results if 1 <= len(q) <= 100))[:5]
+
+
+def select_for_project(folder, query, preferred=None, cancel=None):
+    """Reserve 15 distinct IDs atomically across projects; retain on retries."""
+    folder = Path(folder)
+    reservation = folder/'pixabay-selection.json'
+    with (home()/'pixabay-history.lock').open('a') as lock:
+        fcntl.flock(lock, fcntl.LOCK_EX)
+        if reservation.exists():
+            return read(reservation)['hits']
+        history_file = home()/'pixabay-history.json'
+        history = read(history_file) if history_file.exists() else {}
+        # Include downloads from projects created before the shared history.
+        for manifest in home().glob('*/pixabay-downloads.json'):
+            for key in read(manifest):
+                history.setdefault(key, manifest.parent.name)
+        used = set(history)
+        candidates = {}
+        def add(hits):
+            for hit in hits:
+                key = str(int(hit['id']))
+                if key not in used:
+                    candidates.setdefault(key, hit)
+        add(preferred or [])
+        queries = related_queries(query)
+        requests = 0
+        for term in queries:
+            if len(candidates) >= LIMIT or requests >= 10: break
+            for page in range(1, (10 if len(queries) == 1 else 2) + 1):
+                if len(candidates) >= LIMIT or requests >= 10: break
+                if cancel is not None and cancel.exists(): raise Cancelled()
+                hits = search(term, page=page)
+                requests += 1
+                add(hits)
+                if not hits: break
+        if len(candidates) < LIMIT:
+            raise ValueError(f'Chỉ còn {len(candidates)} video Pixabay mới theo từ khóa này; cần 15 video không trùng phiên trước. Đã thử các từ khóa gần nghĩa phù hợp; hãy nhập chủ đề rộng hơn rồi dựng lại.')
+        hits = list(candidates.values())
+        random.SystemRandom().shuffle(hits)
+        chosen = hits[:LIMIT]
+        for hit in chosen: history[str(hit['id'])] = folder.name
+        # History first: a crash can reserve unused IDs but never duplicate them.
+        atomic(history_file, history)
+        atomic(reservation, dict(query=query, searched_queries=queries, hits=chosen))
+        return chosen
 
 
 def safe_url(url):

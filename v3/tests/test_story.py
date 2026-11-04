@@ -82,13 +82,13 @@ class StoryTests(unittest.TestCase):
         run=self.folder/'runs'/'automatic';run.mkdir(parents=True);projects.atomic(run/'snapshot.json',self.p)
         payload=(self.assets/'bg.mp4').read_bytes()
         response=MagicMock();response.__enter__.return_value=response
-        response.geturl.return_value='https://cdn.pixabay.com/video/test.mp4';response.read.side_effect=[payload,b'']
+        response.geturl.return_value='https://cdn.pixabay.com/video/test.mp4';response.read.side_effect=[payload,b'']*15
         opener=MagicMock();opener.open.return_value=response
-        hit=dict(id=77,url=response.geturl.return_value,pageURL='https://pixabay.com/videos/id-77/')
-        with patch('v3.pixabay.search',return_value=[hit]) as search,patch('urllib.request.build_opener',return_value=opener):
+        hits=[dict(id=i,url=response.geturl.return_value,pageURL=f'https://pixabay.com/videos/id-{i}/') for i in range(15)]
+        with patch('v3.pixabay.search',return_value=hits) as search,patch('urllib.request.build_opener',return_value=opener):
             prepare(run);prepare(run)
-            search.assert_called_once_with('forest');self.assertEqual(opener.open.call_count,1)
-        result=projects.read(run/'render-project.json');self.assertEqual(len(result['scenes']),1)
+            search.assert_called_once_with('forest',page=1);self.assertEqual(opener.open.call_count,15)
+        result=projects.read(run/'render-project.json');self.assertEqual(len(result['scenes']),15)
 
     def test_keep_box_restores_requested_detail(self):
         with patch('rembg.new_session'),patch('rembg.remove',return_value=Image.new('RGBA',(100,100))):

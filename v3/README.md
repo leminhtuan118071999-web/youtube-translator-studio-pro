@@ -95,3 +95,7 @@ Thanh bên chỉ có tên dự án mới và nút tạo ở phía trên. Bên d�
 ## Cấu hình xuất dùng chung
 
 Mục 04 tự lưu thông số xuất trên máy khi thay đổi: khung hình, độ phân giải, căn hình, chuyển cảnh, khớp giọng, ba mức âm lượng, hạ nhạc, cỡ chữ và kiểu phụ đề. Mặc định ban đầu: 16:9, 720p, cover, cut, khớp giọng, 0%/15%/100%, hạ nhạc bật, chữ 48, tô từng từ. Cấu hình giữ qua khởi động lại và áp dụng cho dự án mới hoặc lần dựng tiếp theo của dự án cũ. Snapshot đang chạy không đổi. Tệp output-defaults.json lưu cạnh cấu hình V3, không xóa khi xóa tất cả dự án. Cấu hình theo máy, không đồng bộ sang máy khác.
+
+## 15 nền Pixabay riêng cho mỗi dự án
+
+Khi bật tự tải Pixabay và không dùng video nền tải lên, dự án mới chọn đúng 15 ID chưa dùng trên máy, lưu bộ chọn trước khi tải và dùng lại khi retry. Lịch sử giữ qua xóa dự án để tránh lặp lại; các bản dự án cũ đã tải nền vẫn dùng bộ cũ. Tìm có phân trang/cache 24 giờ và tối đa 10 truy vấn mỗi lần chọn. Nếu không đủ video mới, tự thử từ gần nghĩa theo các nhóm rừng, biển, sông, núi, thác, thành phố, mưa, hoa, mây, giữ các từ mô tả còn lại. Chủ đề chưa có nhóm gần nghĩa giữ nguyên từ khóa; không tự nhảy sang chủ đề khác. Nếu vẫn không đủ 15 thì báo rõ để đổi chủ đề. ID khác không bảo đảm cảnh quay khác biệt hoàn toàn về thị giác. Lịch sử theo máy, không đồng bộ giữa nhiều máy. Giới hạn 15 video mỗi phiên, không phải tải kho hàng loạt.

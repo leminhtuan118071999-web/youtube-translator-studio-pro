@@ -125,14 +125,17 @@ def prepare(run):
     # Make the resulting cutout visible in the project even if a later stage fails.
     current=read(folder/'project.json');current.setdefault('story',{})['cutout']=png;save(current)
     update(10,'Bước 2/6 · Chuẩn bị video nền')
-    from .pixabay import download,search
+    from .pixabay import download,select_for_project
     selected=cfg.get('pixabay_selected',[])
-    if not selected and not cfg.get('backgrounds') and cfg.get('auto_pixabay',True):
-        update(10,'Bước 2/6 · Đang tìm và chọn video nền Pixabay')
+    if not cfg.get('backgrounds') and cfg.get('auto_pixabay',True):
+        update(10,'Bước 2/6 · Đang chọn 15 video Pixabay mới, tránh trùng phiên trước')
         records=read(folder/'pixabay-downloads.json') if (folder/'pixabay-downloads.json').exists() else {}
-        if records:
+        if records and not (folder/'pixabay-selection.json').exists():
+            # Preserve older projects that already downloaded their backgrounds.
             cfg['backgrounds']=[r['file'] for r in records.values()]
-        else:selected=search(cfg.get('query','forest sunlight'))[:15]
+            selected=[]
+        else:
+            selected=select_for_project(folder,cfg.get('query','forest sunlight'),selected,cancel)
     downloaded=download(folder,selected,cancel,lambda p,s:update(10+round(10*p),s))
     effective['story']['downloaded']=read(folder/'pixabay-downloads.json') if (folder/'pixabay-downloads.json').exists() else {}
     current=read(folder/'project.json');current['story']['downloaded']=effective['story']['downloaded'];save(current)
