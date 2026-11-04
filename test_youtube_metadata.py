@@ -31,6 +31,21 @@ class MetadataTests(unittest.TestCase):
         with self.assertRaisesRegex(ValueError, 'trường JSON "ok"'):
             generate_youtube_metadata('Story', '', '', 'Italian', call)
 
+    def test_translated_json_keys_are_repaired_without_retranslating_story(self):
+        prompts = []
+        def call(prompt):
+            prompts.append(prompt)
+            if prompt.startswith('TARGET_METADATA_FORMAT_REPAIR'):
+                self.assertIn('titolo', prompt)
+                self.assertIn('do not invent missing content', prompt)
+                return '{"title":"La famiglia","description":"Una storia di famiglia.","tags":["famiglia"]}'
+            if prompt.startswith('TARGET_METADATA_REVIEW'):
+                return '{"ok":true,"issues":[]}'
+            return '{"titolo":"La famiglia","descrizione":"Una storia di famiglia.","tag":["famiglia"]}'
+        result = generate_youtube_metadata('Story', '', '', 'Italian', call)
+        self.assertEqual(result[0], 'La famiglia')
+        self.assertEqual(len(prompts), 3)
+
     def test_strict_99_character_title(self):
         base={'description':'Nội dung','tags':['gia đình']}
         self.assertEqual(len(validate_metadata(dict(base,title='a'*99))[0]),99)
