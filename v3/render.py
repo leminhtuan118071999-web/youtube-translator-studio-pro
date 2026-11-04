@@ -5,13 +5,16 @@ from functools import lru_cache
 import math
 from pathlib import Path
 import re
-import select
+import os
+import queue
+import threading
 import shutil
 import subprocess
 import time
 from .projects import asset, IMAGES
 
 FPS = 30
+NO_WINDOW = 0x08000000 if os.name == "nt" else 0
 
 
 class Cancelled(Exception): pass
@@ -24,7 +27,7 @@ def probe(path):
 
 @lru_cache(maxsize=2048)
 def _probe(path, modified, size):
-    p = subprocess.run(['ffprobe','-v','error','-protocol_whitelist','file,pipe','-show_streams','-show_format','-of','json',str(path)], capture_output=True, text=True, timeout=40)
+    p = subprocess.run(['ffprobe','-v','error','-protocol_whitelist','file,pipe','-show_streams','-show_format','-of','json',str(path)], capture_output=True, text=True, timeout=40, creationflags=NO_WINDOW)
     if p.returncode:
         raise ValueError('Không đọc được tệp media: '+Path(path).name)
     data = json.loads(p.stdout)
@@ -134,12 +137,17 @@ def run_ffmpeg(args, folder, cancel, progress=None, duration=1):
     if cancel.exists(): raise Cancelled()
     base=['ffmpeg','-hide_banner','-loglevel','error','-nostdin','-y','-filter_threads','1','-filter_complex_threads','1']
     with (folder/'ffmpeg.log').open('a') as log:
-        process=subprocess.Popen(base+args+['-progress','pipe:1','-nostats'],stdout=subprocess.PIPE,stderr=log,text=True,cwd=folder)
+        process=subprocess.Popen(base+args+['-progress','pipe:1','-nostats'],stdout=subprocess.PIPE,stderr=log,text=True,cwd=folder,creationflags=NO_WINDOW)
+        messages=queue.Queue()
+        def read_progress():
+            for line in process.stdout: messages.put(line.strip())
+        reader=threading.Thread(target=read_progress,daemon=True);reader.start()
         try:
             while process.poll() is None:
                 if cancel.exists(): raise Cancelled()
-                if select.select([process.stdout],[],[],0.2)[0]:
-                    line=process.stdout.readline().strip()
+                try: line=messages.get(timeout=.2)
+                except queue.Empty: continue
+                if line:
                     if progress and line.startswith('out_time_us='):
                         try: progress(min(1,float(line.split('=')[1])/1e6/duration))
                         except ValueError: pass
@@ -151,13 +159,14 @@ def run_ffmpeg(args, folder, cancel, progress=None, duration=1):
                 process.terminate()
                 try: process.wait(timeout=3)
                 except subprocess.TimeoutExpired: process.kill();process.wait()
+            reader.join(timeout=3)
             process.stdout.close()
     if cancel.exists(): raise Cancelled()
 
 
 def render(project, assets_folder, output_folder, update):
     if not shutil.which('ffmpeg') or not shutil.which('ffprobe'):
-        raise ValueError('Cần cài FFmpeg và ffprobe trên máy Mac.')
+        raise ValueError('Cần cài FFmpeg và ffprobe.')
     output_folder=Path(output_folder);output_folder.mkdir(parents=True,exist_ok=True)
     cancel=output_folder/'cancel'
     durations=plan(project,assets_folder); total=sum(durations); cfg=project['settings']
@@ -165,7 +174,7 @@ def render(project, assets_folder, output_folder, update):
     voice_name=(project.get('voice_track') if story else None) or project.get('voice')
     if story:total=probe(asset(assets_folder,voice_name))['duration']
     if project.get('captions') or project.get('subtitle_text','').strip():
-        capabilities=subprocess.run(['ffmpeg','-hide_banner','-filters'],capture_output=True,text=True,timeout=10).stdout
+        capabilities=subprocess.run(['ffmpeg','-hide_banner','-filters'],capture_output=True,text=True,timeout=10,creationflags=NO_WINDOW).stdout
         if ' subtitles ' not in capabilities:
             raise ValueError('FFmpeg hiện tại chưa có bộ lọc phụ đề libass. Trên Mac: brew install ffmpeg-full, sau đó khởi động lại V3.')
     if project.get('captions'):

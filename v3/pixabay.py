@@ -1,5 +1,5 @@
 """User-triggered Pixabay video search/download, cached and capped per project."""
-import fcntl
+from . import locking as fcntl
 import random
 import re
 import hashlib

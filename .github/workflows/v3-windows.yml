@@ -1,0 +1,44 @@
+name: V3 Windows Installer
+on:
+  workflow_dispatch:
+  pull_request:
+    paths: ['v3/**', '.github/workflows/v3-windows.yml']
+permissions:
+  contents: read
+jobs:
+  windows-installer:
+    runs-on: windows-latest
+    timeout-minutes: 40
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+          architecture: x64
+      - name: Build tools
+        shell: pwsh
+        run: |
+          python -m pip install pyinstaller==6.16.0
+          if (!(Test-Path 'C:\Program Files (x86)\Inno Setup 6\ISCC.exe')) { choco install innosetup --yes --no-progress }
+      - name: Build installer with isolated runtime
+        run: python v3/windows/build.py
+      - name: Verify packaged runtime and real Windows rendering
+        shell: pwsh
+        run: |
+          python -c "from v3.windows.launcher import ffmpeg_setup; print(ffmpeg_setup(print))"
+          $env:PATH = "$env:LOCALAPPDATA\LMTStudioPro\V3\tools;$env:PATH"
+          $env:PYTHONPATH = ''
+          Set-Location build/windows-v3
+          & .\runtime\python.exe -c "import streamlit, faster_whisper, onnxruntime, av; from v3 import projects, render_worker, speech; print('Runtime imports OK')"
+          if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+          & .\runtime\python.exe -m unittest v3.tests.test_windows_portability v3.tests.test_recovery -v
+          if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+      - uses: actions/upload-artifact@v4
+        with:
+          name: LMT-Studio-V3-Windows-x64
+          path: |
+            dist/windows/*.exe
+            dist/windows/*.sha256
+            v3/windows/README.md
+          if-no-files-found: error
+          retention-days: 30

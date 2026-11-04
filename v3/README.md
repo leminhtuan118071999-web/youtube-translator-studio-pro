@@ -111,3 +111,10 @@ Nếu LaunchAgent đã cài, sau khi cập nhật mã chỉ cần khởi động
 ```sh
 launchctl kickstart -k "gui/$(id -u)/com.lmtstudio.v3.editor"
 ```
+
+
+## Bộ cài Windows x64
+
+Mã đóng gói tại v3/windows; GitHub Actions **V3 Windows Installer** build Setup.exe bằng Inno Setup và runtime Python riêng. Người nhận không cần Git/Python/Terminal; mở shortcut, chọn thư mục, nhập Pixabay nếu dùng rồi thiết lập. Wizard tải FFmpeg có libass từ Gyan, xác minh SHA256, kiểm tra runtime và hỗ trợ cài Microsoft VC++ Runtime nếu thiếu (Windows có thể hỏi quyền quản trị cho thành phần hệ thống này). App chạy cục bộ trong trình duyệt. Windows 10/11 x64; ARM/32-bit chưa hỗ trợ. Có tùy chọn tự mở sau đăng nhập. Không kèm dự án/khóa của người phát triển.
+
+Bản Windows cần qua kiểm tra runtime/renderer Windows và thử cài trên máy sạch trước khi phát hành rộng rãi. Setup hiện chưa ký số. Chi tiết và cách build: v3/windows/README.md.

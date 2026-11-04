@@ -1,4 +1,4 @@
-import fcntl
+from v3 import locking as fcntl
 import json
 import os
 from pathlib import Path
@@ -27,7 +27,7 @@ class RealRenderTests(unittest.TestCase):
         for name,freq in [('voice',500),('music',900)]:
             command('-f','lavfi','-i',f'sine=frequency={freq}:sample_rate=48000','-t','2.4',str(assets/(name+'.wav')))
         self.p['scenes']=[dict(id='r',name='SC1.png',file='red.png',duration=1),dict(id='b',name='SC2.mp4',file='blue.mp4',duration=1)]
-        self.p['settings'].update(resolution=720,fit='cover')
+        self.p['settings'].update(aspect='9:16',resolution=720,fit='cover')
 
     def tearDown(self):self.env.stop();self.tmp.cleanup()
 

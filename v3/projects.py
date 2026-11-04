@@ -1,7 +1,7 @@
 """Local project files and immutable render snapshots, never committed to Git."""
 from __future__ import annotations
 import json
-import fcntl
+from . import locking as fcntl
 import unicodedata
 import os
 from pathlib import Path
@@ -17,7 +17,7 @@ IMAGES = {'.jpg','.jpeg','.png','.webp'}
 
 
 def home():
-    default = Path.home() / ('Library/Application Support/LMTStudioPro/V3' if sys.platform == 'darwin' else '.local/share/lmt-studio-pro/v3')
+    default = (Path(os.getenv('LOCALAPPDATA', Path.home()/'AppData/Local'))/'LMTStudioPro/V3') if os.name=='nt' else Path.home() / ('Library/Application Support/LMTStudioPro/V3' if sys.platform == 'darwin' else '.local/share/lmt-studio-pro/v3')
     path = Path(os.getenv('LMT_V3_HOME', default)).expanduser().resolve()
     path.mkdir(parents=True, exist_ok=True, mode=0o700)
     return path
@@ -170,6 +170,12 @@ def natural(name):
 def choose_folder():
     """Native picker runs only in the local Mac app, on an explicit button click."""
     import subprocess
+    if os.name == 'nt':
+        result = subprocess.run(['powershell.exe','-NoProfile','-STA','-Command',
+            "Add-Type -AssemblyName System.Windows.Forms; $d=New-Object System.Windows.Forms.FolderBrowserDialog; $d.Description='LMT Studio V3'; if($d.ShowDialog() -eq 'OK'){[Console]::OutputEncoding=[System.Text.Encoding]::UTF8; Write-Output $d.SelectedPath}"],
+            capture_output=True,encoding='utf-8',creationflags=subprocess.CREATE_NO_WINDOW)
+        if result.returncode: raise ValueError('Không mở được hộp chọn thư mục. Hãy nhập đường dẫn.')
+        return result.stdout.strip() or None
     if sys.platform != 'darwin':
         raise ValueError('Trên máy này, hãy nhập đường dẫn thư mục vào ô bên dưới.')
     result = subprocess.run(['osascript','-e',

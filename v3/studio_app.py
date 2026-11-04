@@ -2,6 +2,7 @@
 from pathlib import Path
 import json
 import sys
+import os
 import subprocess
 ROOT=Path(__file__).resolve().parents[1]
 if str(ROOT) not in sys.path: sys.path.insert(0,str(ROOT))
@@ -77,8 +78,13 @@ def save_completed(folder):
     status=current(folder)
     st.subheader('Lưu video / dự án vào thư mục của bạn')
     key='save_folder_'+str(folder.name)
-    if key not in st.session_state:st.session_state[key]=project.get('export_destination','')
-    if st.button('📁 Chọn thư mục lưu trên Mac',key='pick_'+folder.name,disabled=locked):
+    if key not in st.session_state:
+        default_folder=''
+        if sys.platform=='win32':
+            try:default_folder=store.read(store.home()/'windows-preferences.json').get('export_folder','')
+            except (OSError,ValueError):pass
+        st.session_state[key]=project.get('export_destination') or default_folder
+    if st.button('📁 Chọn thư mục lưu',key='pick_'+folder.name,disabled=locked):
         try:
             chosen=store.choose_folder()
             if chosen:st.session_state[key]=chosen
@@ -98,8 +104,9 @@ def save_completed(folder):
     if location:
         st.success('Đã lưu thành công.')
         st.code(location,language=None)
-        if sys.platform=='darwin' and st.button('Mở nơi vừa lưu',key='open_export_'+folder.name):
-            subprocess.run(['open',location],check=True)
+        if sys.platform in ('darwin','win32') and st.button('Mở nơi vừa lưu',key='open_export_'+folder.name):
+            if sys.platform=='win32':os.startfile(location)
+            else:subprocess.run(['open',location],check=True)
 
 @st.fragment(run_every=2)
 def progress_panel(folder):
@@ -123,8 +130,9 @@ def progress_panel(folder):
             if output.stat().st_size<=250*1024*1024:
                 with output.open('rb') as f: st.download_button('Tải MP4',f,file_name='lmt-video.mp4',mime='video/mp4',key='mp4_'+status['run_id'])
             st.code(str(output),language=None)
-            if sys.platform == 'darwin' and st.button('Mở thư mục video',key='finder_'+status['run_id']):
-                subprocess.run(['open',str(output.parent)],check=True)
+            if sys.platform in ('darwin','win32') and st.button('Mở thư mục video',key='finder_'+status['run_id']):
+                if sys.platform=='win32':os.startfile(str(output.parent))
+                else:subprocess.run(['open',str(output.parent)],check=True)
     else:st.warning(status['stage'])
     if st.button('Làm mới trạng thái và các nút'): st.rerun()
 @st.fragment(run_every=2)

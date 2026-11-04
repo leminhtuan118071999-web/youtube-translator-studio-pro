@@ -1,4 +1,4 @@
-import fcntl
+from v3 import locking as fcntl
 import os
 import tempfile
 import subprocess
@@ -37,7 +37,7 @@ class RecoveryTests(unittest.TestCase):
             with (self.folder/'render.lock').open('a') as other:
                 with self.assertRaises(BlockingIOError):
                     fcntl.flock(other,fcntl.LOCK_EX|fcntl.LOCK_NB)
-            self.assertEqual(len(kwargs['pass_fds']),1)
+            self.assertTrue(kwargs.get('creationflags')) if os.name=='nt' else self.assertEqual(len(kwargs['pass_fds']),1)
             return process
         with patch('v3.render_worker.subprocess.Popen',side_effect=spawn):
             self.assertEqual(recover_pending(),[run.name])

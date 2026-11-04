@@ -1,6 +1,6 @@
 """One detached render process per immutable run, serialized across projects."""
 from __future__ import annotations
-import fcntl
+from . import locking as fcntl
 import os
 from pathlib import Path
 import subprocess
@@ -14,7 +14,36 @@ import signal
 from .render import render, Cancelled
 
 
+def starting(folder):
+    marker=Path(folder)/'render.starting.json'
+    try: return os.name=='nt' and time.time()-read(marker)['created']<30
+    except (OSError,ValueError,KeyError,TypeError): return False
+
+
+def spawn_worker(run, lock, log):
+    if os.name=='nt':
+        atomic(run.parent.parent/'render.starting.json',dict(created=time.time()))
+        return subprocess.Popen([sys.executable,'-m','v3.render_worker',str(run),'acquire'],
+            cwd=Path(__file__).resolve().parents[1],stdout=log,stderr=log,
+            creationflags=subprocess.CREATE_NO_WINDOW|subprocess.CREATE_NEW_PROCESS_GROUP)
+    return subprocess.Popen([sys.executable,'-m','v3.render_worker',str(run),str(lock.fileno())],
+        cwd=Path(__file__).resolve().parents[1],stdout=log,stderr=log,
+        start_new_session=True,pass_fds=(lock.fileno(),))
+
+
+def stop_tree(process):
+    if os.name=='nt':
+        subprocess.run(['taskkill','/PID',str(process.pid),'/T','/F'],stdout=subprocess.DEVNULL,
+                       stderr=subprocess.DEVNULL,creationflags=subprocess.CREATE_NO_WINDOW)
+        process.wait(timeout=5)
+    else:
+        os.killpg(process.pid,signal.SIGTERM)
+        try:process.wait(timeout=3)
+        except subprocess.TimeoutExpired:os.killpg(process.pid,signal.SIGKILL);process.wait()
+
+
 def busy(folder):
+    if starting(folder): return True
     path=Path(folder)/'render.lock'
     with path.open('a') as lock:
         try: fcntl.flock(lock,fcntl.LOCK_EX|fcntl.LOCK_NB)
@@ -28,6 +57,8 @@ def launch(project, task="render"):
     if task=="transcribe" and not project.get("voice"):raise ValueError("Hãy tải file giọng đọc trước.")
     folder=project_dir(project['id'])
     with (folder/'render.lock').open('a') as lock:
+        if starting(folder): raise ValueError('Dự án đang khởi động tác vụ.')
+        if (folder/'.deleting').exists(): raise ValueError('Dự án đang được xóa.')
         try: fcntl.flock(lock,fcntl.LOCK_EX|fcntl.LOCK_NB)
         except BlockingIOError: raise ValueError('Dự án này đang dựng video.') from None
         run_id=uuid4().hex;run=folder/'runs'/run_id;run.mkdir(parents=True)
@@ -37,9 +68,7 @@ def launch(project, task="render"):
         # Transfer the locked descriptor to the child without a duplicate-start gap.
         try:
             with (run/'worker.log').open('a') as log:
-                process=subprocess.Popen([sys.executable,'-m','v3.render_worker',str(run),str(lock.fileno())],
-                    cwd=Path(__file__).resolve().parents[1],stdout=log,stderr=log,
-                    start_new_session=True,pass_fds=(lock.fileno(),))
+                process=spawn_worker(run,lock,log)
             threading.Thread(target=process.wait,daemon=True).start()
             atomic(folder/('latest-asr.json' if task=='transcribe' else 'latest-cutout.json' if task=='cutout' else 'latest.json'),dict(run_id=run_id,pid=process.pid))
         except Exception as exc:
@@ -102,14 +131,17 @@ def prepare_story(run,task='render'):
                 raise ValueError(error)
         finally:
             if process.poll() is None:
-                os.killpg(process.pid,signal.SIGTERM)
-                try:process.wait(timeout=3)
-                except subprocess.TimeoutExpired:os.killpg(process.pid,signal.SIGKILL);process.wait()
+                stop_tree(process)
     return read(run/('cutout-result.json' if task=='cutout' else 'render-project.json'))
 
 
 def main(run,fd):
-    run=Path(run).resolve();lock=os.fdopen(int(fd),'a')
+    run=Path(run).resolve()
+    if fd=='acquire':
+        lock=(run.parent.parent/'render.lock').open('a')
+        fcntl.flock(lock,fcntl.LOCK_EX)
+        (run.parent.parent/'render.starting.json').unlink(missing_ok=True)
+    else:lock=os.fdopen(int(fd),'a')
     # Keep fd alive for the whole run, including cancellation/error cleanup.
     assert lock.fileno() >= 0
     cancel=run/'cancel';caffeine=None;progress=0;last=0
@@ -121,6 +153,9 @@ def main(run,fd):
         atomic(run/'status.json',dict(state='running',task=task,progress=progress,stage=stage,updated=time.time()))
         last=time.monotonic()
     try:
+        if os.name=='nt':
+            import ctypes
+            ctypes.windll.kernel32.SetThreadExecutionState(0x80000001)
         if sys.platform=='darwin': caffeine=subprocess.Popen(['caffeinate','-i','-w',str(os.getpid())])
         with (home()/'renderer.lock').open('a') as global_lock:
             while True:
@@ -154,6 +189,9 @@ def main(run,fd):
         atomic(run/'status.json',dict(state='failed',progress=progress,stage='Dựng video chưa thành công',error=str(exc)[-3000:],updated=time.time()))
     finally:
         if caffeine: caffeine.terminate()
+        if os.name=='nt':
+            import ctypes
+            ctypes.windll.kernel32.SetThreadExecutionState(0x80000000)
         lock.close()
 
 
@@ -177,6 +215,9 @@ def delete_all_projects():
                     status=run/'status.json'
                     if status.exists() and read(status).get('state') in ('queued','running'):(run/'cancel').touch()
         if waiting:return {'waiting':True,'deleted':0}
+        if os.name=='nt':
+            for project in projects:(project_dir(project['id'])/'.deleting').touch()
+            locks.close()
         trash=home()/'.deleted-projects';trash.mkdir(exist_ok=True)
         for project in projects:
             folder=project_dir(project['id']);target=trash/project['id']
@@ -206,7 +247,7 @@ def recover_pending():
                 status=read(run/'status.json')
                 if status.get('state') not in ('queued','running','interrupted') or (run/'cancel').exists():continue
                 project=read(run/'snapshot.json')
-                if project_dir(project['id'])!=reference.parent:continue
+                if project_dir(project['id'])!=reference.parent or starting(reference.parent) or (reference.parent/'.deleting').exists():continue
                 pending.append((status.get('updated',0),reference,run,status))
             except (OSError,ValueError,KeyError,TypeError):continue
         for _,reference,run,status in sorted(pending,key=lambda item:item[0]):
@@ -218,9 +259,7 @@ def recover_pending():
                 atomic(run/'status.json',status)
                 try:
                     with (run/'worker.log').open('a') as log:
-                        process=subprocess.Popen([sys.executable,'-m','v3.render_worker',str(run),str(lock.fileno())],
-                            cwd=Path(__file__).resolve().parents[1],stdout=log,stderr=log,
-                            start_new_session=True,pass_fds=(lock.fileno(),))
+                        process=spawn_worker(run,lock,log)
                     threading.Thread(target=process.wait,daemon=True).start()
                     atomic(reference,dict(run_id=run.name,pid=process.pid))
                     recovered.append(run.name)
