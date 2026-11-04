@@ -150,7 +150,7 @@ def overview(text, call, progress):
 
 
 def metadata_for_job(text, title, description, language, call, progress):
-    identity = source_hash(json.dumps([text, title, description, language], ensure_ascii=False))
+    identity = source_hash(json.dumps([text, title, description, language, "faithful-title-hook-v1"], ensure_ascii=False))
     try:
         work = json.loads(progress.partial_result().get('seo_work_json') or '{}')
     except (ValueError, TypeError):

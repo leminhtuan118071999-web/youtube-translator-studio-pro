@@ -139,12 +139,16 @@ def generate_youtube_metadata(script, original_title, original_description, lang
             if attempt == 0 and candidate is not None:
                 result = validate_metadata(candidate)
             else:
-                candidate=request_metadata_json(call, 
+                candidate=request_metadata_json(call,
                 f'TARGET_METADATA. Write ALL title, description and tags naturally in {language}. '
                 'Translate the supplied original title and description as faithfully as possible. Preserve their meaning, '
-                'tone, emphasis, specificity and order of information; use natural target-language grammar. '
-                'Do not rewrite the title into a stronger headline, add hooks, keywords, emotional stakes or story '
-                'details absent from the original title. Preserve proper names. Keep the title strictly UNDER 100 characters '
+                'facts, specificity and core meaning; use natural target-language grammar. '
+                'Title: make a close, meaning-preserving translation with a strong, compelling hook. Strengthen '
+                'word choice, rhythm and information order to foreground the curiosity, contrast or emotional stakes '
+                'already expressed in original_title. Preserve the original actors, relationships, actions, numbers, '
+                'certainty, outcome and key details. Never add events, secrets, reactions, promises or stakes from '
+                'story_context that are absent from original_title. If the original has no dramatic detail, use clear, '
+                'engaging wording rather than inventing drama. Preserve proper names. Keep the title strictly UNDER 100 characters '
                 '(maximum 99 including spaces and punctuation). No invented twists, false promises, exaggerated facts, '
                 'keyword stuffing or unnecessary ALL CAPS. Do not truncate an overlong title; rewrite it coherently. '
                 + description_rule +
@@ -165,12 +169,15 @@ def generate_youtube_metadata(script, original_title, original_description, lang
             result=validate_metadata(candidate)
             if checkpoint:
                 checkpoint(dict(title=result[0], description=result[1], tags=candidate["tags"]))
-            verdict=request_metadata_review(call, 
+            verdict=request_metadata_review(call,
                 f'TARGET_METADATA_REVIEW. Check every field is natural {language}, except proper names and links. '
                 'Compare the title directly against original_title when it is present. '
-                'Reject added hooks, SEO embellishments, invented details, changed tone/emphasis, omitted information '
-                'or wrong actors, relationships and numbers in translations of supplied originals. Supplied fields must be '
-                'faithful translations, not creative rewrites. ' + description_review +
+                'Accept a strong hook created through natural word choice, rhythm, reordered information or emphasis on '
+                'curiosity, contrast or emotion already expressed in original_title. Do not reject a title merely '
+                'because its wording is more compelling. Reject invented events, secrets, reactions, exaggerated '
+                'stakes, false promises, changed certainty/outcome, omitted key details or wrong actors, relationships '
+                'and numbers. Story context cannot justify adding facts absent from a supplied original title. '
+                'Supplied fields must be faithful translations, not creative factual rewrites. ' + description_review +
                 'Check emoji and bullet symbols are relevant, restrained and do not change facts or tone. '
                 'Allow only minimal meaning-preserving shortening for platform length limits. Only a missing original '
                 'field may be derived from story context. Tags may be optimized but must be relevant and non-spammy. '

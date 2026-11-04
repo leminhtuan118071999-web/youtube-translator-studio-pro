@@ -143,6 +143,25 @@ class MetadataTests(unittest.TestCase):
         self.assertEqual(result[2],'family, family story')
         with self.assertRaises(ValueError):validate_metadata({'title':'Title','description':'Desc','tags':['x'*501]})
 
+    def test_grounded_strong_title_hook_is_accepted_without_extra_calls(self):
+        prompts = []
+        title = 'Không ai nâng ly vì vợ anh — Ông trùm dừng lời chúc khi thấy cổ cô'
+        def call(prompt):
+            prompts.append(prompt)
+            if prompt.startswith('TARGET_METADATA_REVIEW'):
+                self.assertIn('Do not reject a title merely', prompt)
+                self.assertIn('Reject invented events', prompt)
+                return '{"ok":true,"issues":[]}'
+            self.assertIn('strong, compelling hook', prompt)
+            self.assertIn('absent from original_title', prompt)
+            self.assertNotIn('Do not rewrite the title into a stronger headline', prompt)
+            return json.dumps(dict(title=title, description='Mô tả gốc.', tags=['gia đình']))
+        result = generate_youtube_metadata('Story context',
+            "No One Raised a Glass to His Wife — The Mafia Boss Stopped the Toast When He Saw Her Neck",
+            'Original description.', 'Tiếng Việt', call)
+        self.assertEqual(result[0], title)
+        self.assertEqual(len(prompts), 2)
+
     def test_faithful_review_retries_creative_rewrite_against_full_originals(self):
         original_title = 'A grandmother receives a painting'
         original_description = 'A gift from her granddaughter.\n\nCredits: Anna\nhttps://example.com/source'
