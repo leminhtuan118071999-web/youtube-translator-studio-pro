@@ -14,10 +14,11 @@ export function autoTranslationReady(input: {
   sessionId?: string;
   language: unknown;
   url: string;
+  source?: string;
   busy: boolean;
   running: boolean;
   healthy: boolean;
 }): boolean {
   return !!input.request && input.request.sid === input.sessionId && input.request.language === input.language
-    && !input.busy && !input.running && input.healthy && validYouTubeLink(input.url);
+    && !input.busy && !input.running && input.healthy && (!!input.source?.trim() || validYouTubeLink(input.url));
 }

@@ -221,7 +221,7 @@ export function Studio({ email }: { email: string }) {
   const running = selectedJob ? active(selectedJob) : false;
   useEffect(() => {
     if (!autoTranslationReady({ request: autoTranslation, sessionId: selected?.id, language: draft.language,
-      url: str(draft.url), busy, running, healthy })) return;
+      url: str(draft.url), source: str(draft.source), busy, running, healthy })) return;
     const timer = setTimeout(() => {
       setAutoTranslation(null);
       void action(async () => { await run("full"); setTab("Lời kể"); });
@@ -277,12 +277,15 @@ export function Studio({ email }: { email: string }) {
         <div className="form-grid"><label>Tên phiên<input disabled={busy} value={name} onChange={e => { setName(e.target.value); dirtyRef.current = true; setDirty(true); }} /></label>
           <ChoiceField key={`${selected.id}:language`} label="Ngôn ngữ đích" options={languages} value={typeof draft.language === "string" ? draft.language : "Tiếng Việt"} disabled={busy || running} maxLength={80} onChange={value => {
             change("language", value); setAutoTranslation({ sid: selected.id, language: value });
-            setNotice("Đã chọn ngôn ngữ. Khi link YouTube hợp lệ và worker kết nối, app tự dịch lời kể và YouTube SEO.");
+            setNotice("Đã chọn ngôn ngữ. Khi có kịch bản gốc hoặc link YouTube hợp lệ và worker kết nối, app tự dịch lời kể và YouTube SEO.");
           }} />
+          <label style={{ gridColumn: "1 / -1" }}>Kịch bản gốc<textarea disabled={busy || running} rows={12} maxLength={350000}
+            value={str(draft.source)} onChange={e => change("source", e.target.value)}
+            placeholder="Dán kịch bản gốc có sẵn để dịch sang ngôn ngữ đích. Không bắt buộc nhập link YouTube." /></label>
           <label>Link YouTube<input disabled={busy} value={str(draft.url)} onChange={e => change("url", e.target.value)} placeholder="https://www.youtube.com/watch?v=…" /></label>
         </div>
         <Thumbnail url={str(draft.url)} download={() => void action(() => download("jpg"))} />
-        <p className="muted">Nhập link YouTube rồi chọn ngôn ngữ đích: app tự lấy phụ đề và dịch thành lời kể cùng YouTube SEO. Bạn không cần nhập tiêu đề, mô tả hoặc phụ đề nguồn.</p>
+        <p className="muted">Dán kịch bản gốc hoặc nhập link YouTube để dịch lời kể và tạo YouTube SEO. Kịch bản bạn nhập được ưu tiên sử dụng.</p>
         <div className="toolbar">{generate("Dịch lời kể và YouTube SEO", "full")}<button className="ghost-button" disabled={busy} onClick={() => void action(() => download("json"))}>Xuất phiên JSON</button>
           <button className="ghost-button danger" disabled={busy} onClick={() => void action(async () => { if (!window.confirm("Xóa phiên này và hủy mọi tác vụ đang chạy?")) return; await api(`/sessions/${selected.id}`, "DELETE"); selectedRef.current = null; setSelected(null); dirtyRef.current = false; setDirty(false); await refresh(); })}>Xóa phiên</button></div>
       </section>}

@@ -11,3 +11,11 @@ test('only an explicit language choice for the current idle session starts trans
   assert.equal(autoTranslationReady(ready),true);
   for (const change of [{request:null},{sessionId:'two'},{language:'Tiếng Việt'},{busy:true},{running:true},{healthy:false},{url:''}]) assert.equal(autoTranslationReady({...ready,...change}),false);
 });
+
+test('an entered original script can be translated without a YouTube link', () => {
+  const ready={request:{sid:'one',language:'Tiếng Ý'},sessionId:'one',language:'Tiếng Ý',url:'',source:'Original story to translate.',busy:false,running:false,healthy:true};
+  assert.equal(autoTranslationReady(ready),true);
+  assert.equal(autoTranslationReady({...ready,source:'  '}),false);
+  assert.equal(autoTranslationReady({...ready,request:null}),false);
+  assert.equal(autoTranslationReady({...ready,running:true}),false);
+});
