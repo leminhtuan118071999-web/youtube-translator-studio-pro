@@ -142,6 +142,21 @@ def main():
     ctypes.windll.kernel32.CreateMutexW.restype=ctypes.c_void_p
     mutex=ctypes.windll.kernel32.CreateMutexW(None,False,'Local\\LMTStudioV3Setup')
     if ctypes.windll.kernel32.GetLastError()==183:return
+    if '--smoke-test' in sys.argv:
+        output=Path(sys.argv[sys.argv.index('--smoke-test')+1])
+        try:
+            import tkinter as tk
+            root=tk.Tk();root.withdraw();root.update()
+            root.clipboard_clear();root.clipboard_append('LMT Windows smoke test');root.update()
+            assert root.clipboard_get()=='LMT Windows smoke test'
+            root.destroy()
+            tools=ffmpeg_setup(lambda value:None)
+            start_server(lambda value:None,tools)
+            write_json(output,dict(ok=True,server=server_ready(),runtime=(APP/'runtime'/'python.exe').exists()))
+        except Exception as exc:
+            write_json(output,dict(ok=False,error=str(exc)))
+            raise SystemExit(1)
+        return
     if '--background' in sys.argv:
         if (DATA/'setup-complete.json').exists():
             try:start_server(lambda value:None,DATA/'tools')

@@ -9,6 +9,8 @@ jobs:
   windows-installer:
     runs-on: windows-latest
     timeout-minutes: 40
+    env:
+      PYTHONUTF8: "1"
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-python@v5
@@ -26,9 +28,21 @@ jobs:
         shell: pwsh
         run: |
           python -c "from v3.windows.launcher import ffmpeg_setup; print(ffmpeg_setup(print))"
+          if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
           $env:PATH = "$env:LOCALAPPDATA\LMTStudioPro\V3\tools;$env:PATH"
           $env:PYTHONPATH = ''
-          Set-Location "$env:RUNNER_TEMP\lmt-v3"
+          $installer = (Get-Item dist/windows/*.exe).FullName
+          $installed = Join-Path $env:RUNNER_TEMP 'LMT Installed Test'
+          $install = Start-Process -FilePath $installer -ArgumentList @('/VERYSILENT','/SUPPRESSMSGBOXES','/NORESTART','/SP-',('/DIR="'+$installed+'"')) -Wait -PassThru
+          if ($install.ExitCode -ne 0) { throw "Installer failed: $($install.ExitCode)" }
+          $smokeFile = Join-Path $env:RUNNER_TEMP 'v3-smoke.json'
+          $smoke = Start-Process -FilePath "$installed\LMTStudioV3.exe" -ArgumentList @('--smoke-test',('"'+$smokeFile+'"')) -Wait -PassThru
+          if ($smoke.ExitCode -ne 0) { Get-Content $smokeFile; throw 'Frozen launcher smoke failed' }
+          $smokeResult = Get-Content $smokeFile | ConvertFrom-Json
+          if (!$smokeResult.ok -or !$smokeResult.server -or !$smokeResult.runtime) { throw 'Installed app not ready' }
+          Set-Location $installed
+          & .\runtime\python.exe -c "import shutil; assert shutil.which('ffmpeg') and shutil.which('ffprobe')" 
+          if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
           & .\runtime\python.exe -c "import streamlit, faster_whisper, onnxruntime, av; from v3 import projects, render_worker, speech; print('Runtime imports OK')"
           if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
           & .\runtime\python.exe -m unittest v3.tests.test_windows_portability v3.tests.test_recovery -v
