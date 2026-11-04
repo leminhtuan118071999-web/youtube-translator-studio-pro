@@ -1,3 +1,6 @@
+#ifndef PayloadDir
+  #error PayloadDir must be supplied by build.py
+#endif
 [Setup]
 AppId={{B2D41370-CC83-47E6-89C7-82B736D7C726}
 AppName=LMT Studio V3
@@ -22,7 +25,7 @@ Name: "desktopicon"; Description: "Create a desktop shortcut"; GroupDescription:
 Name: "autostart"; Description: "Start V3 after Windows sign-in"; GroupDescription: "Background work:"; Flags: unchecked
 
 [Files]
-Source: "..\..\build\windows-v3\*"; DestDir: "{app}"; Flags: ignoreversion recursesubdirs createallsubdirs
+Source: "{#PayloadDir}\*"; DestDir: "{app}"; Flags: ignoreversion recursesubdirs createallsubdirs
 
 [Icons]
 Name: "{group}\LMT Studio V3"; Filename: "{app}\LMTStudioV3.exe"; WorkingDir: "{app}"

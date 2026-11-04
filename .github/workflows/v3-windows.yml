@@ -28,7 +28,7 @@ jobs:
           python -c "from v3.windows.launcher import ffmpeg_setup; print(ffmpeg_setup(print))"
           $env:PATH = "$env:LOCALAPPDATA\LMTStudioPro\V3\tools;$env:PATH"
           $env:PYTHONPATH = ''
-          Set-Location build/windows-v3
+          Set-Location "$env:RUNNER_TEMP\lmt-v3"
           & .\runtime\python.exe -c "import streamlit, faster_whisper, onnxruntime, av; from v3 import projects, render_worker, speech; print('Runtime imports OK')"
           if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
           & .\runtime\python.exe -m unittest v3.tests.test_windows_portability v3.tests.test_recovery -v
