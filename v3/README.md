@@ -91,3 +91,7 @@ Không bảo đảm nhận ra mọi người bị che khuất, không tạo ph�
 Thanh bên chỉ có tên dự án mới và nút tạo ở phía trên. Bên dưới là các nút tên dự án để mở trực tiếp, kèm trạng thái/tiến trình cập nhật tự động. Không còn ô chọn dự án hoặc mục nhập thư mục trên thanh bên.
 
 **Xóa tất cả phiên → Xác nhận xóa tất cả** hủy các tác vụ V3 đang chạy/chờ, đợi tiến trình dừng rồi xóa toàn bộ dự án/nguyên liệu/kết quả nội bộ. Bản đã xuất ra thư mục bạn chọn, khóa Pixabay và các model đã tải được giữ. V2 không bị ảnh hưởng.
+
+## Cấu hình xuất dùng chung
+
+Mục 04 tự lưu thông số xuất trên máy khi thay đổi: khung hình, độ phân giải, căn hình, chuyển cảnh, khớp giọng, ba mức âm lượng, hạ nhạc, cỡ chữ và kiểu phụ đề. Mặc định ban đầu: 16:9, 720p, cover, cut, khớp giọng, 0%/15%/100%, hạ nhạc bật, chữ 48, tô từng từ. Cấu hình giữ qua khởi động lại và áp dụng cho dự án mới hoặc lần dựng tiếp theo của dự án cũ. Snapshot đang chạy không đổi. Tệp output-defaults.json lưu cạnh cấu hình V3, không xóa khi xóa tất cả dự án. Cấu hình theo máy, không đồng bộ sang máy khác.

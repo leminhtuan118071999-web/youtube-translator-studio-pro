@@ -62,6 +62,42 @@ def available_name(name, exclude=None, unique_copy=False):
         number+=1
 
 
+OUTPUT_DEFAULTS = dict(aspect='16:9', resolution=720, fit='cover', transition='cut',
+                       sync_voice=True, original_volume=0, music_volume=0.15,
+                       voice_volume=1.0, duck=True, font_size=48, subtitle_mode='words')
+
+
+def validate_output_defaults(settings):
+    result = dict(OUTPUT_DEFAULTS)
+    choices = dict(aspect=['9:16','16:9','1:1'], resolution=[720,1080],
+                   fit=['contain','cover'], transition=['cut','fade'], subtitle_mode=['words','sentence'])
+    for key, options in choices.items():
+        value = settings.get(key, result[key])
+        if value not in options: raise ValueError('Cấu hình xuất không hợp lệ: '+key)
+        result[key] = value
+    for key in ('sync_voice','duck'):
+        value = settings.get(key, result[key])
+        if type(value) is not bool: raise ValueError('Cấu hình xuất không hợp lệ: '+key)
+        result[key] = value
+    for key, maximum in [('original_volume',1),('music_volume',1),('voice_volume',2),('font_size',64)]:
+        value = settings.get(key, result[key])
+        minimum = 16 if key == 'font_size' else 0
+        if type(value) not in (int,float) or not minimum <= value <= maximum:
+            raise ValueError('Cấu hình xuất không hợp lệ: '+key)
+        if key == 'font_size' and type(value) is not int: raise ValueError('Cỡ chữ phải là số nguyên.')
+        result[key] = value
+    return result
+
+
+def output_defaults():
+    path = home()/'output-defaults.json'
+    return validate_output_defaults(read(path) if path.exists() else {})
+
+
+def save_output_defaults(settings):
+    atomic(home()/'output-defaults.json', validate_output_defaults(settings))
+
+
 def create(name, unique_copy=False):
     with (home()/'.project-names.lock').open('a') as lock:
         fcntl.flock(lock,fcntl.LOCK_EX)
@@ -70,9 +106,7 @@ def create(name, unique_copy=False):
         folder = project_dir(pid)
         (folder / 'assets').mkdir(parents=True)
         data = dict(id=pid, name=name, scenes=[], voice=None, music=None,
-                    captions=None, subtitle_text='', settings=dict(aspect='9:16', resolution=1080,
-                    fit='contain', transition='cut', sync_voice=True, original_volume=0,
-                    music_volume=0.15, voice_volume=1.0, duck=True, font_size=48), updated=time.time())
+                    captions=None, subtitle_text='', settings=output_defaults(), updated=time.time())
         atomic(folder/'project.json', data)
     return data
 

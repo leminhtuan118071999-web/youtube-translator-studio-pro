@@ -148,7 +148,8 @@ if locked:st.info('Dự án đang xử lý từ bản đã lưu. Nguyên liệu 
 output_tab,story_tab=st.tabs(['04 · Xuất video','05 · Dựng kiểu video mẫu'])
 try:
     with output_tab:
-        cfg=project['settings']
+        cfg=project['settings'] if locked else store.output_defaults()
+        st.caption('Cấu hình dùng chung: tự lưu khi thay đổi và áp dụng cho mọi dự án khi dựng tiếp theo. Video đang chạy giữ cấu hình lúc bắt đầu.')
         with st.container():
             a,b=st.columns(2)
             with a:
@@ -165,8 +166,12 @@ try:
                 duck=st.checkbox('Tự hạ nhạc khi có lời đọc',value=cfg['duck'],disabled=locked)
                 font=st.slider('Cỡ chữ phụ đề',16,64,cfg['font_size'],disabled=locked)
                 subtitle_mode=st.selectbox('Cách hiện phụ đề nhận diện',['words','sentence'],index=0 if cfg.get('subtitle_mode','words')=='words' else 1,format_func=lambda value:'Tô sáng từng từ đang đọc' if value=='words' else 'Theo cụm lời · không tô từng từ',disabled=locked)
+            current_settings=dict(aspect=aspect,resolution=resolution,fit=fit,transition=transition,sync_voice=sync,original_volume=original/100,music_volume=music/100,voice_volume=voice/100,duck=duck,font_size=font,subtitle_mode=subtitle_mode)
+            if not locked and current_settings != store.output_defaults():
+                store.save_output_defaults(current_settings)
             if st.button('Lưu cấu hình xuất',disabled=locked):
                 project['settings']=dict(aspect=aspect,resolution=resolution,fit=fit,transition=transition,sync_voice=sync,original_volume=original/100,music_volume=music/100,voice_volume=voice/100,duck=duck,font_size=font,subtitle_mode=subtitle_mode)
+                store.save_output_defaults(project['settings'])
                 store.save(project);st.rerun()
     with story_tab:
         from v3.story_ui import panel
