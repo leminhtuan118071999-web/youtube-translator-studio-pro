@@ -321,9 +321,9 @@ function CopyButton({ text, label }: { text: string; label: string }) {
       if (latest.current === text) setState("error");
     }
   }
-  return <div><button type="button" className="ghost-button" disabled={!text.trim() || state === "copying"}
+  return <div><button type="button" className={`copy-button ${state === "copied" ? "is-copied" : state === "error" ? "has-error" : ""}`} disabled={!text.trim() || state === "copying"}
     aria-label={`Copy ${label}`} onClick={() => void copy()}>
-    {state === "copied" ? "✓ Đã copy" : state === "copying" ? "Đang copy…" : `Copy ${label}`}
+    {state === "copied" ? "✓ Đã copy" : state === "copying" ? "Đang copy…" : `⧉ Copy ${label}`}
   </button><span role="status" aria-live="polite" className={state === "error" ? "error-message" : "status-good"}>
     {state === "copied" ? ` Đã copy ${label}` : state === "error" ? " Không copy được. Hãy cho phép trình duyệt sao chép và thử lại." : ""}
   </span></div>;

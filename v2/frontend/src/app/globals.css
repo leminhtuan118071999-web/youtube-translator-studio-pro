@@ -153,3 +153,20 @@ button:focus-visible, a:focus-visible { outline: 2px solid var(--accent); outlin
 .session-progress p { margin: 8px 0; }
 .session-progress progress { width: 100%; height: 9px; accent-color: var(--accent); }
 .session-progress.has-error { border-color: #b75b65; }
+
+/* Distinct clipboard controls for narration and SEO. */
+.copy-button {
+  display: inline-flex; align-items: center; justify-content: center; gap: 7px;
+  min-height: 42px; padding: 10px 17px; border: 1px solid #83b7ff; border-radius: 10px;
+  background: linear-gradient(180deg, #306fc4, #205399); color: #fff;
+  font-size: 13px; font-weight: 800; cursor: pointer;
+  box-shadow: 0 3px 0 #123666, 0 5px 14px #0004;
+  transition: background 120ms ease, box-shadow 120ms ease, transform 120ms ease;
+}
+.copy-button:hover:not(:disabled) { background: #347ad2; box-shadow: 0 3px 0 #123666, 0 6px 18px #3b82f64d; }
+.copy-button:active:not(:disabled) { transform: translateY(2px); box-shadow: 0 1px 0 #123666; }
+.copy-button.is-copied { background: #176743; border-color: #75dfac; box-shadow: 0 3px 0 #0c3c27, 0 5px 14px #0004; }
+.copy-button.is-copied:hover:not(:disabled) { background: #1c7a50; }
+.copy-button.has-error { background: #8f2c3b; border-color: #ff9ba9; }
+.copy-button:disabled { opacity: .5; cursor: not-allowed; box-shadow: none; }
+@media (prefers-reduced-motion: reduce) { .copy-button { transition: none; } }
