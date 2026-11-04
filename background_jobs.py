@@ -149,6 +149,26 @@ def overview(text, call, progress):
 
 
 
+def metadata_for_job(text, title, description, language, call, progress):
+    identity = source_hash(json.dumps([text, title, description, language], ensure_ascii=False))
+    try:
+        work = json.loads(progress.partial_result().get('seo_work_json') or '{}')
+    except (ValueError, TypeError):
+        work = {}
+    if not isinstance(work, dict) or work.get('identity') != identity:
+        work = {}
+    brief = work.get('context')
+    if not isinstance(brief, str) or not brief:
+        brief = overview(text, call, progress)
+    def checkpoint(candidate):
+        progress.publish('seo_work_json', json.dumps(dict(identity=identity, context=brief, candidate=candidate), ensure_ascii=False))
+    progress.update(97, 'Đang tạo và đối chiếu SEO; tự khôi phục kết quả đã lưu khi cần')
+    result = generate_youtube_metadata(brief, title, description, language, call,
+                                      resume_candidate=work.get('candidate'), checkpoint=checkpoint)
+    progress.publish('seo_work_json', '')
+    return result
+
+
 def run_full_job(snapshot, progress):
     """Return completed/partial fields. Never return or store the API key."""
     result = {"ok": False, "fields": {}, "error": ""}
@@ -331,9 +351,8 @@ def run_full_job(snapshot, progress):
         progress.publish("language", language)
         # Complete metadata in the same target language after narration succeeds.
         progress.update(96, "📝 Đang dịch sát nghĩa tiêu đề, mô tả gốc và tạo thẻ tag...")
-        brief = overview(target_text, call, progress)
-        new_title, new_description, tags = generate_youtube_metadata(
-            brief, title, description, language, call,
+        new_title, new_description, tags = metadata_for_job(
+            target_text, title, description, language, call, progress,
         )
         fields.update(new_title=new_title, new_description=new_description,
                       seo_tags=tags, metadata="\n\n".join((new_title, new_description, tags)))

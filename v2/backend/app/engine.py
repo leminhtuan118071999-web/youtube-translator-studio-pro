@@ -6,7 +6,7 @@ if str(ROOT) not in sys.path:
     sys.path.insert(0, str(ROOT))
 import json
 from api_clients import PROVIDERS, generate_text, list_models, validate_base_url, migrate_claude_settings, migrate_free_provider_settings
-from background_jobs import run_full_job, overview
+from background_jobs import run_full_job, overview, metadata_for_job
 from server_video_jobs import run_video_forms_job
 from server_character_jobs import run_character_job, profile_data
 from youtube_metadata import generate_youtube_metadata
@@ -70,10 +70,9 @@ def execute(kind, snapshot, progress, image_sink=None):
         progress.check_cancelled()
         call = lambda prompt: request_text(snapshot, prompt)
         progress.update(10, 'Đang đọc ngữ cảnh để dịch tiêu đề và mô tả gốc')
-        brief = overview(snapshot['translated'], call, progress)
         progress.update(50, 'Đang dịch sát nghĩa và đối chiếu với tiêu đề, mô tả gốc')
-        title, description, tags = generate_youtube_metadata(
-            brief, snapshot.get('title', ''), snapshot.get('description', ''), snapshot['language'], call)
+        title, description, tags = metadata_for_job(
+            snapshot['translated'], snapshot.get('title', ''), snapshot.get('description', ''), snapshot['language'], call, progress)
         fields = dict(new_title=title, new_description=description, seo_tags=tags,
                       metadata='\n\n'.join((title, description, tags)))
         for field, value in fields.items():

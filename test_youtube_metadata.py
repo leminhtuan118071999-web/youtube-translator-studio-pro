@@ -28,7 +28,7 @@ class MetadataTests(unittest.TestCase):
             if prompt.startswith('TARGET_METADATA_REVIEW'):
                 return '{"issues":[]}'
             return '{"title":"Titolo","description":"Storia.","tags":["storia"]}'
-        with self.assertRaisesRegex(ValueError, 'trường JSON "ok"'):
+        with self.assertRaisesRegex(ValueError, 'chưa trả kết luận'):
             generate_youtube_metadata('Story', '', '', 'Italian', call)
 
     def test_translated_json_keys_are_repaired_without_retranslating_story(self):
@@ -71,7 +71,46 @@ class MetadataTests(unittest.TestCase):
         with self.assertRaises(ValueError):
             generate_youtube_metadata('Story', '', '', 'Italian', call)
         self.assertEqual(len(calls), 4)
-        self.assertEqual(sum(not p.startswith('TARGET_METADATA_REVIEW') for p in calls), 1)
+        self.assertEqual(sum(p.startswith('TARGET_METADATA.') for p in calls), 1)
+
+    def test_text_verdict_recovers_json_failure(self):
+        def call(prompt):
+            if prompt.startswith('TARGET_METADATA_TEXT_REVIEW'):
+                self.assertIn('Original title', prompt)
+                self.assertNotIn('Return ONLY JSON', prompt)
+                return 'LMT_SEO_PASS'
+            if prompt.startswith('TARGET_METADATA_REVIEW'):
+                return 'Formato non disponibile'
+            return '{"title":"Titolo","description":"Storia.","tags":["storia"]}'
+        self.assertEqual(generate_youtube_metadata('Story', 'Original title', '', 'Italian', call)[0], 'Titolo')
+
+    def test_negative_text_verdict_never_approves(self):
+        def call(prompt):
+            if prompt.startswith('TARGET_METADATA_TEXT_REVIEW'):
+                return 'LMT_SEO_FAIL: wrong actor'
+            if prompt.startswith('TARGET_METADATA_REVIEW'):
+                return 'No JSON'
+            return '{"title":"Titolo","description":"Storia.","tags":["storia"]}'
+        with self.assertRaisesRegex(ValueError, 'wrong actor'):
+            generate_youtube_metadata('Story', '', '', 'Italian', call)
+
+    def test_resume_reviews_saved_candidate_without_generating_again(self):
+        from background_jobs import metadata_for_job, JobProgress
+        progress = JobProgress()
+        candidate = '{"title":"Titolo","description":"Storia.","tags":["storia"]}'
+        def broken(prompt):
+            return 'No verdict' if 'REVIEW' in prompt else candidate
+        with self.assertRaises(ValueError):
+            metadata_for_job('Story', '', '', 'Italian', broken, progress)
+        self.assertTrue(progress.partial_result()['seo_work_json'])
+        prompts = []
+        def recovered(prompt):
+            prompts.append(prompt)
+            return '{"ok":true,"issues":[]}'
+        self.assertEqual(metadata_for_job('Story', '', '', 'Italian', recovered, progress)[0], 'Titolo')
+        self.assertEqual(len(prompts), 1)
+        self.assertTrue(prompts[0].startswith('TARGET_METADATA_REVIEW'))
+        self.assertEqual(progress.partial_result()['seo_work_json'], '')
 
     def test_strict_99_character_title(self):
         base={'description':'Nội dung','tags':['gia đình']}

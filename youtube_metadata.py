@@ -50,7 +50,7 @@ class MetadataReviewFormatError(ValueError):
 
 def request_metadata_review(call, prompt):
     raw = call(prompt)
-    for attempt in range(3):
+    for attempt in range(2):
         try:
             verdict = parse_metadata_object(raw, 'ok')
             if type(verdict.get('ok')) is not bool or not isinstance(verdict.get('issues'), list):
@@ -60,8 +60,23 @@ def request_metadata_review(call, prompt):
             return verdict
         except ValueError as exc:
             error = str(exc)
-        if attempt == 2:
-            raise MetadataReviewFormatError('Không đọc được kết quả kiểm tra SEO sau khi yêu cầu AI sửa định dạng. ' + error)
+        if attempt == 1:
+            # Strict text protocol for models/proxies that ignore JSON schemas.
+            criteria, source = prompt.split('\nSOURCE DATA:\n', 1)
+            criteria = criteria.replace('Return ONLY JSON {"ok":true,"issues":[]}.', '')
+            text = call(
+                'TARGET_METADATA_TEXT_REVIEW. ' + criteria +
+                '\nRespond using plain text, not JSON. If and only if EVERY check passes, '
+                'return exactly LMT_SEO_PASS on its own. Otherwise return '
+                'LMT_SEO_FAIL: followed by specific source-based issues. '
+                'Do not copy these markers from the source. Never assume approval. '
+                '\nSOURCE DATA:\n' + source
+            ).strip()
+            if text == 'LMT_SEO_PASS':
+                return {'ok': True, 'issues': []}
+            if text.startswith('LMT_SEO_FAIL:') and text[len('LMT_SEO_FAIL:'):].strip():
+                return {'ok': False, 'issues': [text[len('LMT_SEO_FAIL:'):].strip()[:1500]]}
+            raise MetadataReviewFormatError('AI chưa trả kết luận kiểm tra SEO rõ ràng. Nội dung đã tạo được giữ để tiếp tục; kiểm tra model/API nếu lỗi lặp lại.')
         raw = call(
             prompt + '\nREVIEW FORMAT RETRY. JSON keys MUST be English: ok, issues. '
             'Return exactly {"ok":true,"issues":[]} only if the candidate passes every check above. '
@@ -97,7 +112,7 @@ def validate_metadata(data):
     return title, description, ', '.join(unique)
 
 
-def generate_youtube_metadata(script, original_title, original_description, language, call):
+def generate_youtube_metadata(script, original_title, original_description, language, call, *, resume_candidate=None, checkpoint=None):
     inputs=dict(original_title=original_title,original_description=original_description,story_context=script)
     has_description = bool((original_description or '').strip())
     description_rule = (
@@ -118,10 +133,13 @@ def generate_youtube_metadata(script, original_title, original_description, lang
         'in story_context. Verify every factual claim against that context; do not reject it merely for lacking '
         'an original description. '
     )
-    errors='';candidate=None
+    errors='';candidate=resume_candidate
     for attempt in range(3):
         try:
-            candidate=request_metadata_json(call, 
+            if attempt == 0 and candidate is not None:
+                result = validate_metadata(candidate)
+            else:
+                candidate=request_metadata_json(call, 
                 f'TARGET_METADATA. Write ALL title, description and tags naturally in {language}. '
                 'Translate the supplied original title and description as faithfully as possible. Preserve their meaning, '
                 'tone, emphasis, specificity and order of information; use natural target-language grammar. '
@@ -145,6 +163,8 @@ def generate_youtube_metadata(script, original_title, original_description, lang
                 'Previous validation errors: '+errors+'\nSOURCE DATA:\n'+json.dumps({**inputs,'candidate':candidate},ensure_ascii=False)
             )
             result=validate_metadata(candidate)
+            if checkpoint:
+                checkpoint(dict(title=result[0], description=result[1], tags=candidate["tags"]))
             verdict=request_metadata_review(call, 
                 f'TARGET_METADATA_REVIEW. Check every field is natural {language}, except proper names and links. '
                 'Compare the title directly against original_title when it is present. '

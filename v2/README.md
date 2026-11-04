@@ -95,3 +95,7 @@ Thanh bên có **Xóa tất cả phiên**, yêu cầu xác nhận trước khi x
 ### Giao diện gọn và cập nhật nhẹ
 
 Bỏ ô tìm phiên và các tab Form 8 giây, Nhân vật, Chuyển dữ liệu theo quy trình tập trung lời kể/SEO. Dữ liệu cũ vẫn lưu trên máy chủ. Giao diện dùng GET /v1/dashboard: một lần xác thực và một kết nối DB cho danh sách, tác vụ, worker và nội dung phiên nếu revision thay đổi. Không truyền form/hồ sơ/checkpoint lớn vào giao diện này. Bộ nhớ đệm mở lại phiên ngay rồi đối chiếu dữ liệu; bản đang sửa không bị polling ghi đè. Poll không chồng yêu cầu, 5 giây khi có tác vụ, 15 giây khi rảnh và dừng tải khi tab ẩn. Phản hồi đang xử lý hiện ngay; lưu trước khi giao tác vụ không còn đợi thêm một lượt tải toàn màn hình. Các thay đổi này giảm tải web, không bỏ kiểm tra dịch sát nghĩa. Gói Render Free vẫn có thời gian khởi động lại sau khi ngủ.
+
+### Khôi phục bước SEO
+
+Worker lưu seo_work_json gồm ngữ cảnh và bản SEO chưa duyệt, gắn với hash nội dung/tiêu đề/mô tả/ngôn ngữ. Tiếp tục cùng tác vụ dùng lại bản đó và vẫn kiểm tra sát nghĩa; thay đầu vào làm checkpoint không còn khớp. Sau một lần sửa JSON kiểm tra không thành công, dùng giao thức văn bản kết luận rõ ràng LMT_SEO_PASS hoặc LMT_SEO_FAIL: lý do, với cùng dữ liệu gốc. Không suy ra đạt từ phản hồi rỗng, thiếu trường hoặc văn bản mơ hồ. Thành công xóa checkpoint tạm. Cần cập nhật và khởi động lại worker Mac để dùng cơ chế này; triển khai giao diện không thay mã worker.
