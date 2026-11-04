@@ -25,6 +25,7 @@ def main():
     if not marker.exists() or marker.read_text()!=requirements.read_text():
         subprocess.run([python,'-m','pip','install','-r',str(requirements)],check=True)
         marker.write_text(requirements.read_text())
+    subprocess.run([python,'-m','v3.recover'],cwd=ROOT.parent,check=True)
     os.execv(python,[python,'-m','streamlit','run',str(ROOT/'studio_app.py'),
                       '--server.address','127.0.0.1','--server.port','8503','--server.maxUploadSize','1024',
                       '--browser.gatherUsageStats','false'])

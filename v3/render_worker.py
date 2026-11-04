@@ -183,3 +183,47 @@ def delete_all_projects():
             folder.rename(target)
             shutil.rmtree(target)
         return {'waiting':False,'deleted':len(projects)}
+
+
+def recover_pending():
+    """Resume only interrupted latest runs, preserving their immutable inputs."""
+    recovered=[]
+    with (home()/'recovery.lock').open('a') as recovery_lock:
+        fcntl.flock(recovery_lock,fcntl.LOCK_EX)
+        pending=[]
+        latest={}
+        for reference in home().glob('*/latest*.json'):
+            if reference.name not in ('latest.json','latest-asr.json','latest-cutout.json'):continue
+            prior=latest.get(reference.parent)
+            if prior is None or reference.stat().st_mtime_ns > prior.stat().st_mtime_ns:
+                latest[reference.parent]=reference
+        for reference in latest.values():
+            try:
+                run_id=read(reference)['run_id']
+                # Reject paths outside the managed run directory.
+                if not isinstance(run_id,str) or not __import__('re').fullmatch(r'[a-f0-9]{32}',run_id):continue
+                run=reference.parent/'runs'/run_id
+                status=read(run/'status.json')
+                if status.get('state') not in ('queued','running','interrupted') or (run/'cancel').exists():continue
+                project=read(run/'snapshot.json')
+                if project_dir(project['id'])!=reference.parent:continue
+                pending.append((status.get('updated',0),reference,run,status))
+            except (OSError,ValueError,KeyError,TypeError):continue
+        for _,reference,run,status in sorted(pending,key=lambda item:item[0]):
+            with (reference.parent/'render.lock').open('a') as lock:
+                try:fcntl.flock(lock,fcntl.LOCK_EX|fcntl.LOCK_NB)
+                except BlockingIOError:continue  # A detached worker is still alive.
+                old_status=dict(status)
+                status.update(state='queued',stage='Tự khôi phục sau gián đoạn · đang chờ xử lý',updated=time.time())
+                atomic(run/'status.json',status)
+                try:
+                    with (run/'worker.log').open('a') as log:
+                        process=subprocess.Popen([sys.executable,'-m','v3.render_worker',str(run),str(lock.fileno())],
+                            cwd=Path(__file__).resolve().parents[1],stdout=log,stderr=log,
+                            start_new_session=True,pass_fds=(lock.fileno(),))
+                    threading.Thread(target=process.wait,daemon=True).start()
+                    atomic(reference,dict(run_id=run.name,pid=process.pid))
+                    recovered.append(run.name)
+                except OSError:
+                    atomic(run/'status.json',old_status)
+    return recovered

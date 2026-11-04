@@ -99,3 +99,15 @@ Mục 04 tự lưu thông số xuất trên máy khi thay đổi: khung hình, �
 ## 15 nền Pixabay riêng cho mỗi dự án
 
 Khi bật tự tải Pixabay và không dùng video nền tải lên, dự án mới chọn đúng 15 ID chưa dùng trên máy, lưu bộ chọn trước khi tải và dùng lại khi retry. Lịch sử giữ qua xóa dự án để tránh lặp lại; các bản dự án cũ đã tải nền vẫn dùng bộ cũ. Tìm có phân trang/cache 24 giờ và tối đa 10 truy vấn mỗi lần chọn. Nếu không đủ video mới, tự thử từ gần nghĩa theo các nhóm rừng, biển, sông, núi, thác, thành phố, mưa, hoa, mây, giữ các từ mô tả còn lại. Chủ đề chưa có nhóm gần nghĩa giữ nguyên từ khóa; không tự nhảy sang chủ đề khác. Nếu vẫn không đủ 15 thì báo rõ để đổi chủ đề. ID khác không bảo đảm cảnh quay khác biệt hoàn toàn về thị giác. Lịch sử theo máy, không đồng bộ giữa nhiều máy. Giới hạn 15 video mỗi phiên, không phải tải kho hàng loạt.
+
+## Tự tiếp tục sau khi mở lại máy
+
+Launcher V3 chạy bước khôi phục trước Streamlit. Sau khi đăng nhập Mac, LaunchAgent tự gọi launcher; dự án có tác vụ mới nhất đang queued/running/interrupted nhưng không còn khóa worker được khởi động lại từ chính snapshot cũ, giữ nơi xuất và nguyên liệu. Worker còn sống được bỏ qua để tránh chạy trùng. Các dự án được xử lý qua khóa renderer dùng chung. Tác vụ completed/failed/cancelled hoặc có dấu cancel không tự chạy lại. Chỉ xét tác vụ mới nhất của mỗi dự án, tránh hồi sinh tác vụ cũ đã được thay thế.
+
+Render MP4 bị ngắt được dựng lại; không nối tiếp từ phần trăm cũ. File tải/cutout/phụ đề được tái sử dụng khi cache còn hợp lệ. Máy phải đăng nhập, có mạng khi cần tải và không ngủ. Dữ liệu chưa bấm bắt đầu/lưu không thể khôi phục. V2 worker vốn tự nhận tác vụ queued/retry_wait và running hết lease, trong giới hạn số lần thử; lỗi nội dung/API và tác vụ đã hủy cần kiểm tra thủ công.
+
+Nếu LaunchAgent đã cài, sau khi cập nhật mã chỉ cần khởi động lại riêng dịch vụ V3, không cài lại hai agent:
+
+```sh
+launchctl kickstart -k "gui/$(id -u)/com.lmtstudio.v3.editor"
+```
