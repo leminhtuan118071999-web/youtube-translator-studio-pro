@@ -1,4 +1,6 @@
 import json
+import sys
+from types import SimpleNamespace
 import os
 from pathlib import Path
 import tempfile
@@ -91,7 +93,8 @@ class StoryTests(unittest.TestCase):
         result=projects.read(run/'render-project.json');self.assertEqual(len(result['scenes']),15)
 
     def test_keep_box_restores_requested_detail(self):
-        with patch('rembg.new_session'),patch('rembg.remove',return_value=Image.new('RGBA',(100,100))):
+        api=SimpleNamespace(new_session=MagicMock(),remove=MagicMock(return_value=Image.new('L',(100,100))))
+        with patch.dict(sys.modules,rembg=api):
             config=dict(image='person.png',remove_background=True,keep_boxes=[[20,20,80,80]])
             name=cutout(self.folder,config)
         with Image.open(self.assets/name) as image:

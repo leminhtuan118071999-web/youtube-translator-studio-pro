@@ -103,7 +103,7 @@ def save_output_defaults(settings):
     atomic(home()/'output-defaults.json', validate_output_defaults(settings))
 
 
-STORY_DEFAULTS = dict(enabled=True, no_intro=False, remove_background=True,
+STORY_DEFAULTS = dict(enabled=True, no_intro=False, remove_background=True, restore_missing=True, keep_attached_objects=True,
                       width=75, x=50, y=100, auto_subtitles=True,
                       asr_model='small', auto_pixabay=True, export_include_assets=True)
 

@@ -43,22 +43,42 @@ def validate_start(project,destination):
 
 
 # Version the cache whenever segmentation changes; never reuse the old u2netp mask.
-CUTOUT_VERSION = 'birefnet-multiview-v1'
+CUTOUT_VERSION = 'birefnet-attached-details-v3'
 
 
 def cutout_signature(config):
     return signature(dict(version=CUTOUT_VERSION, **{k:config.get(k) for k in
-        ('image','remove_background','keep_boxes')}))
+        ('image','remove_background','restore_missing','keep_attached_objects','keep_boxes')}))
 
 
-def group_cutout(original):
+def attached_details(candidate,person):
+    """Keep predicted foreground components that touch the person's silhouette."""
+    import numpy as np
+    from scipy import ndimage
+    from PIL import Image,ImageChops
+    size=candidate.size
+    ratio=min(1,1024/max(size))
+    small=(max(1,round(size[0]*ratio)),max(1,round(size[1]*ratio)))
+    foreground=np.asarray(candidate.resize(small,Image.Resampling.BILINEAR))>=160
+    anchor=np.asarray(person.resize(small,Image.Resampling.BILINEAR))>=224
+    # Small gaps at fingers/straps are tolerated; distant foreground stays out.
+    anchor=ndimage.binary_dilation(anchor,iterations=max(1,round(max(small)*.005)))
+    labels,count=ndimage.label(foreground)
+    connected=np.unique(labels[anchor & foreground])
+    connected=connected[connected>0]
+    keep=np.isin(labels,connected) if count else np.zeros_like(foreground)
+    selection=Image.fromarray(keep.astype('uint8')*255).resize(size,Image.Resampling.NEAREST)
+    return ImageChops.darker(candidate,selection)
+
+
+def group_cutout(original,restore_missing=True,keep_attached_objects=True):
     """Union full-frame and overlapping regional masks, preserving source pixels."""
     from PIL import Image, ImageChops
     from rembg import remove, new_session
     session = new_session('birefnet-general', providers=['CPUExecutionProvider'])
     rgb = original.convert('RGB')
-    def predict(image):
-        mask = remove(image, session=session, only_mask=True).convert('L')
+    def predict(image,model_session=session):
+        mask = remove(image, session=model_session, only_mask=True).convert('L')
         if mask.size != image.size:
             mask = mask.resize(image.size, Image.Resampling.LANCZOS)
         return mask
@@ -71,6 +91,34 @@ def group_cutout(original):
             regional = Image.new('L', rgb.size)
             regional.paste(predict(rgb.crop(box)), (left, 0))
             alpha = ImageChops.lighter(alpha, regional)
+    elif h > w and h >= 600:
+        for top, bottom in ((0, round(h*.65)), (round(h*.35), h)):
+            box = (0, top, w, bottom)
+            regional = Image.new('L', rgb.size)
+            regional.paste(predict(rgb.crop(box)), (0, top))
+            alpha = ImageChops.lighter(alpha, regional)
+    if restore_missing or keep_attached_objects:
+        # Independent person model can recover limbs/interior regions missed in
+        # every BiRefNet view. Only its high-confidence pixels may add opacity;
+        # weak background predictions cannot reintroduce a background rectangle.
+        human_session = new_session('u2net_human_seg', providers=['CPUExecutionProvider'])
+        human = predict(rgb,human_session)
+        recovery = human.point([0 if value <= 224 else round((value-224)*255/31)
+                                for value in range(256)])
+        if restore_missing:alpha = ImageChops.lighter(alpha,recovery)
+        if keep_attached_objects:
+            bbox=recovery.getbbox()
+            if bbox:
+                l,t,r,b=bbox
+                margin_x=max(8,round((r-l)*.3));margin_y=max(8,round((b-t)*.15))
+                box=(max(0,l-margin_x),max(0,t-margin_y),min(w,r+margin_x),min(h,b+margin_y))
+                # A full-image crop adds no new evidence; existing multiview
+                # masks already cover it. Focus the extra pass on the person.
+                if (box[2]-box[0])*(box[3]-box[1]) < w*h*.9:
+                    details=predict(rgb.crop(box))
+                    attached=attached_details(details,recovery.crop(box))
+                    regional=Image.new('L',rgb.size);regional.paste(attached,box[:2])
+                    alpha=ImageChops.lighter(alpha,regional)
     # Respect existing transparency. Do not synthesize hidden body parts or pixels.
     alpha = ImageChops.multiply(alpha, original.getchannel('A'))
     result = original.copy()
@@ -87,7 +135,8 @@ def cutout(folder,config):
     if config.get('remove_background',True):
         os.environ.setdefault('U2NET_HOME',str(home()/'models'/'rembg'))
         os.environ.setdefault('OMP_NUM_THREADS','2')
-        result=group_cutout(original)
+        result=group_cutout(original,restore_missing=config.get('restore_missing',True),
+                            keep_attached_objects=config.get('keep_attached_objects',True))
     else:result=original.copy()
     # Optional keep boxes restore original details, without regenerating the image.
     for box in config.get('keep_boxes',[]):
@@ -118,7 +167,7 @@ def prepare(run):
         except (ValueError,KeyError):return None
     def remember(key,sig,name):
         cache[key]=dict(signature=sig,file=name);atomic(cache_path,cache)
-    update(2,'Bước 1/6 · Tách nền ảnh; lần đầu cần tải model')
+    update(2,'Bước 1/6 · Tách nền, giữ đồ vật gắn với nhân vật và khôi phục chi tiết từ ảnh gốc; lần đầu tải model')
     sig=cutout_signature(cfg)
     png=cached('cutout',sig)
     if not png:png=cutout(folder,cfg);remember('cutout',sig,png)
