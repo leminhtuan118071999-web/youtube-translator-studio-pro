@@ -4,6 +4,7 @@ Never import Streamlit or touch st.session_state from a worker thread.
 Jobs and API keys exist in process memory, not persistent storage.
 """
 from youtube_metadata import generate_youtube_metadata
+from processing_metrics import ProcessingMetrics
 import json
 import re
 import threading
@@ -159,7 +160,17 @@ def metadata_for_job(text, title, description, language, call, progress):
         work = {}
     brief = work.get('context')
     if not isinstance(brief, str) or not brief:
-        brief = overview(text, call, progress)
+        report = progress.partial_result().get('optimization_review_json')
+        try:report = json.loads(report or '{}')
+        except (ValueError,TypeError):report = {}
+        if not isinstance(report,dict):report = {}
+        contexts = report.get('seo_contexts')
+        if (report.get('output_sha256') == source_hash(text) and report.get('target_language') == language
+                and isinstance(contexts,list) and contexts and len(contexts)==report.get('reviewed_parts')
+                and all(isinstance(v,str) and 0<len(v)<=1800 for v in contexts)):
+            brief = overview('\n\n'.join(contexts), call, progress)
+        else:
+            brief = overview(text, call, progress)
     def checkpoint(candidate):
         progress.publish('seo_work_json', json.dumps(dict(identity=identity, context=brief, candidate=candidate), ensure_ascii=False))
     progress.update(97, 'Đang tạo và đối chiếu SEO; tự khôi phục kết quả đã lưu khi cần')
@@ -186,9 +197,11 @@ def run_full_job(snapshot, progress):
                                    "new_title","new_description","seo_tags",
                                    "metadata","language")})
     api_key = snapshot["api_key"]
+    metrics = ProcessingMetrics(progress)
 
     def _wait_for_retry(seconds, description):
         """Keep the existing job cancelable while its progress shows the wait."""
+        wait_started = time.monotonic()
         remaining = max(0.0, float(seconds))
         while remaining > 0:
             progress.check_cancelled()
@@ -197,6 +210,7 @@ def run_full_job(snapshot, progress):
             step = min(1.0, remaining)
             time.sleep(step)
             remaining -= step
+        metrics.retry_wait(time.monotonic()-wait_started)
 
     def call(prompt):
         """Retry only the failed request; never repeat finished translation chunks."""
@@ -208,16 +222,16 @@ def run_full_job(snapshot, progress):
                 # Coordinate TPM pacing with other Streamlit jobs using Groq.
                 with groq_request_gate.reporting(progress):
                     if snapshot["provider"] == "API bên thứ ba (tùy chỉnh)":
-                        return generate_text(
+                        return metrics.measure(prompt, lambda: generate_text(
                             snapshot["provider"], snapshot["base_url"],
                             snapshot["model"], api_key, prompt,
                             api_format=snapshot.get("api_format", "chat"),
                             auth_mode=snapshot.get("auth_mode", "bearer"),
-                        )
-                    return generate_text(
+                        ))
+                    return metrics.measure(prompt, lambda: generate_text(
                         snapshot["provider"], snapshot["base_url"],
                         snapshot["model"], api_key, prompt
-                    )
+                    ))
             except RateLimitError as exc:
                 if not exc.can_retry:
                     raise RuntimeError(
@@ -350,7 +364,7 @@ def run_full_job(snapshot, progress):
         fields["language"] = language
         progress.publish("language", language)
         # Complete metadata in the same target language after narration succeeds.
-        progress.update(96, "📝 Đang dịch sát nghĩa tiêu đề, mô tả gốc và tạo thẻ tag...")
+        progress.update(96, "✅ Lời kể đã lưu; đang xử lý YouTube SEO riêng...")
         new_title, new_description, tags = metadata_for_job(
             target_text, title, description, language, call, progress,
         )
@@ -373,4 +387,7 @@ def run_full_job(snapshot, progress):
             safe_error = safe_error.replace(extra_key, "[KEY PHỤ ĐỀ ĐÃ ẨN]")
         result["error"] = safe_error[:700]
         progress.update(100, "⚠️ Tác vụ kết thúc nhưng có lỗi.")
+    finally:
+        metrics.publish()
+        result["fields"]["processing_metrics"] = progress.partial_result().get("processing_metrics", {})
     return result

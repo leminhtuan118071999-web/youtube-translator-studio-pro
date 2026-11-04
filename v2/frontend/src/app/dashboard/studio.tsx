@@ -9,6 +9,9 @@ type Data = Record<string, unknown>;
 type Session = { id: string; name: string; revision: number; status: string; data: Data; updated_at: string };
 type Summary = Omit<Session, "data">;
 type Job = { id: string; session_id: string | null; job_type: string; status: string; progress: number; stage: string; error: string; attempts: number };
+type Metrics = { calls: number; failures: number; retries: number; wait_seconds: number; total_seconds: number;
+  current?: { phase: string; started_at: number } | null; phases: Record<string, { calls: number; seconds: number }> };
+type Checkpoint = { job_id: string; session_id: string; input_revision: number; translated: string | null; metrics: Metrics | null };
 type Provider = { base_url: string; model: string; kind: string; auth?: string };
 type Config = { values: Record<string, string>; configured_keys: string[]; version: number };
 const tabs = ["Nội dung", "Lời kể", "YouTube SEO", "Tác vụ", "Cấu hình API", "AI33"];
@@ -86,6 +89,7 @@ export function Studio({ email }: { email: string }) {
   const [autoTranslation, setAutoTranslation] = useState<{ sid: string; language: string } | null>(null);
   const dirtyRef = useRef(false);
   const selectedRef = useRef<string | null>(null);
+  const [checkpoint, setCheckpoint] = useState<Checkpoint | null>(null);
   const [jobs, setJobs] = useState<Job[]>([]);
   const [healthy, setHealthy] = useState(false);
   const [tab, setTab] = useState("Nội dung");
@@ -105,6 +109,7 @@ export function Studio({ email }: { email: string }) {
   function accept(session: Session) {
     sessionCache.current.set(session.id, session);
     setAutoTranslation(null);
+    setCheckpoint(null);
     selectedRef.current = session.id;
     setSelected(session); setDraft(session.data); setName(session.name);
     dirtyRef.current = false; setDirty(false);
@@ -114,9 +119,10 @@ export function Studio({ email }: { email: string }) {
     const sid = selectedRef.current;
     const cached = sid ? sessionCache.current.get(sid) : undefined;
     const query = sid ? `?sid=${sid}&revision=${cached?.revision ?? -1}` : "";
-    const task = api<{ sessions: Summary[]; jobs: Job[]; healthy: boolean; selected: Session | null }>(`/dashboard${query}`).then(result => {
+    const task = api<{ sessions: Summary[]; jobs: Job[]; healthy: boolean; selected: Session | null; checkpoint?: Checkpoint | null }>(`/dashboard${query}`).then(result => {
       setSessions(result.sessions); setJobs(result.jobs); setHealthy(result.healthy);
       activeJobsRef.current = result.jobs.some(active);
+      if (sid === selectedRef.current) setCheckpoint(result.checkpoint ?? null);
       if (result.selected && sid === selectedRef.current && !dirtyRef.current
           && result.selected.revision >= (sessionCache.current.get(sid!)?.revision ?? -1)) {
         sessionCache.current.set(result.selected.id, result.selected);
@@ -207,6 +213,11 @@ export function Studio({ email }: { email: string }) {
   const pref = (key: string, fallback = "") => changes[key] ?? config.values[key] ?? fallback;
   const setPref = (key: string, value: string) => setChanges(old => ({ ...old, [key]: value }));
   const selectedJob = selected ? latestJob(jobs, selected.id) : undefined;
+  const currentCheckpoint = checkpoint && checkpoint.session_id === selected?.id && checkpoint?.job_id === selectedJob?.id
+    && !dirty && (checkpoint.input_revision === selected?.revision
+      || (selectedJob?.status === "completed" && checkpoint.input_revision + 1 === selected?.revision)) ? checkpoint : null;
+  const earlyNarration = selectedJob?.status !== "completed" && currentCheckpoint?.translated ? currentCheckpoint.translated : null;
+  const narrationText = earlyNarration ?? str(draft.translated);
   const running = selectedJob ? active(selectedJob) : false;
   useEffect(() => {
     if (!autoTranslationReady({ request: autoTranslation, sessionId: selected?.id, language: draft.language,
@@ -261,6 +272,7 @@ export function Studio({ email }: { email: string }) {
       {dirty && <div className="save-banner"><span>Có thay đổi chưa lưu. Lưu sẽ hủy tác vụ đang chạy của phiên.</span><button disabled={busy} className="secondary-button" onClick={() => void action(async () => { await save(); setNotice("Đã lưu trên máy chủ."); })}>Lưu thay đổi</button></div>}
       {!healthy && <p className="muted worker-hint">Worker chưa sẵn sàng. Bạn vẫn có thể chuẩn bị và lưu nội dung; nút tạo sẽ mở khi worker kết nối.</p>}
       {!selected && !["Cấu hình API", "Tác vụ", "AI33"].includes(tab) && <section className="welcome-panel"><div><p className="eyebrow">BẮT ĐẦU SÁNG TẠO</p><h2>Dịch lời kể và nội dung YouTube.</h2><p className="muted">Tạo phiên mới hoặc mở phiên đã lưu ở thanh bên. Cấu hình API của bạn được mã hóa trên máy chủ.</p></div><div className="welcome-icon">✦</div></section>}
+      {currentCheckpoint?.metrics && <ProcessingTimes metrics={currentCheckpoint.metrics} running={running} />}
       {selected && tab === "Nội dung" && <section className="editor-panel">
         <div className="form-grid"><label>Tên phiên<input disabled={busy} value={name} onChange={e => { setName(e.target.value); dirtyRef.current = true; setDirty(true); }} /></label>
           <ChoiceField key={`${selected.id}:language`} label="Ngôn ngữ đích" options={languages} value={typeof draft.language === "string" ? draft.language : "Tiếng Việt"} disabled={busy || running} maxLength={80} onChange={value => {
@@ -274,8 +286,9 @@ export function Studio({ email }: { email: string }) {
         <div className="toolbar">{generate("Dịch lời kể và YouTube SEO", "full")}<button className="ghost-button" disabled={busy} onClick={() => void action(() => download("json"))}>Xuất phiên JSON</button>
           <button className="ghost-button danger" disabled={busy} onClick={() => void action(async () => { if (!window.confirm("Xóa phiên này và hủy mọi tác vụ đang chạy?")) return; await api(`/sessions/${selected.id}`, "DELETE"); selectedRef.current = null; setSelected(null); dirtyRef.current = false; setDirty(false); await refresh(); })}>Xóa phiên</button></div>
       </section>}
-      {selected && tab === "Lời kể" && <section className="editor-panel">{stale("translation_stale")}<div className="toolbar"><h2>Bản dịch cho giọng đọc AI</h2><CopyButton key={`${selected.id}:narration`} text={str(draft.translated)} label="lời kể" /></div><p className="muted">Một người dẫn chuyện, lời kể gián tiếp, số viết bằng chữ theo ngôn ngữ đích.</p>
-        <textarea disabled={busy} rows={22} value={str(draft.translated)} onChange={e => change("translated", e.target.value)} />
+      {selected && tab === "Lời kể" && <section className="editor-panel">{!earlyNarration && stale("translation_stale")}<div className="toolbar"><h2>Bản dịch cho giọng đọc AI</h2><CopyButton key={`${selected.id}:narration`} text={narrationText} label="lời kể" /></div><p className="muted">Một người dẫn chuyện, lời kể gián tiếp, số viết bằng chữ theo ngôn ngữ đích.</p>
+        {earlyNarration && <p className="status-good">Lời kể đã kiểm tra và lưu. Bạn có thể copy trong khi SEO tiếp tục xử lý.</p>}
+        <textarea disabled={busy} readOnly={!!earlyNarration} rows={22} value={narrationText} onChange={e => change("translated", e.target.value)} />
         <div className="toolbar">{generate("Dịch lại và cập nhật SEO", "translation")}</div></section>}
       {selected && tab === "YouTube SEO" && <section className="editor-panel">{stale("seo_stale")}<p className="muted">Tiêu đề và mô tả được dịch sát nghĩa khi có bản gốc. Nếu không có mô tả gốc, mô tả sẽ được viết theo bản dịch lời kể. Có thể thêm emoji phù hợp để dễ đọc và hấp dẫn hơn; thẻ tag được tối ưu riêng.</p>{!str(draft.title).trim() && <p className="muted">Chưa có tiêu đề gốc: tiêu đề sẽ được tạo theo nội dung câu chuyện.</p>}{!str(draft.description).trim() && <p className="muted">Không có mô tả gốc: tự tạo mô tả theo bản dịch lời kể, kèm emoji phù hợp.</p>}<div className="toolbar"><h2>Tiêu đề video</h2><CopyButton key={`${selected.id}:title`} text={str(draft.new_title)} label="tiêu đề" /></div><pre>{str(draft.new_title) || "Tiêu đề chưa được tạo"}</pre><p className="muted">{str(draft.new_title).length}/100 ký tự</p><div className="toolbar"><h2>Mô tả video</h2><CopyButton key={`${selected.id}:description`} text={str(draft.new_description)} label="mô tả" /></div><pre>{str(draft.new_description) || "Mô tả chưa được tạo"}</pre><div className="toolbar"><h2>Thẻ tag</h2><CopyButton key={`${selected.id}:tags`} text={str(draft.seo_tags)} label="thẻ tag" /></div><pre>{str(draft.seo_tags)}</pre><div className="toolbar">{(["new_title", "new_description", "seo_tags"] as const).map(field => <button disabled={busy} key={field} className="ghost-button" onClick={() => { const value = window.prompt(field === "new_title" ? "Tiêu đề mới (tối đa 100 ký tự)" : field === "new_description" ? "Mô tả mới" : "Thẻ tag", str(draft[field])); if (value !== null) void action(() => editArtifact(field, value)); }}>Sửa {field === "new_title" ? "tiêu đề" : field === "new_description" ? "mô tả" : "tag"}</button>)}</div>{generate("Dịch lại tiêu đề, mô tả và tạo tag", "seo")}</section>}
       {tab === "Tác vụ" && <section className="editor-panel"><h2>Hàng đợi trên máy chủ</h2><p className="muted">Checkpoint giữ lại khi worker khởi động lại. Tiếp tục job lỗi dùng đầu vào ban đầu; sửa nội dung rồi tạo job mới nếu muốn thay đổi.</p>{jobs.length === 0 && <p className="muted">Chưa có tác vụ.</p>}{jobs.map(job => <article className="job-card" key={job.id}><div className="toolbar"><strong>{sessions.find(s => s.id === job.session_id)?.name || "Phiên đã xóa"} · {jobNames[job.job_type] || job.job_type}</strong><span className="status-pill">{statusNames[job.status] || job.status} · lần {job.attempts}</span></div><p>{job.stage}</p><progress aria-label={`Tiến trình ${jobNames[job.job_type] || job.job_type}`} value={jobPercent(job)} max={100} /><small>{jobPercent(job)}% · {job.id.slice(0, 8)}</small>{job.error && <p className="error-message">{job.error}</p>}<div className="toolbar">{active(job) && <button disabled={busy} className="ghost-button" onClick={() => void action(async () => { await api(`/jobs/${job.id}/cancel`, "POST"); await refresh(); })}>Hủy tác vụ</button>}{job.status === "failed" && job.session_id && <button disabled={busy || !healthy} className="secondary-button" onClick={() => void action(async () => { await api(`/jobs/${job.id}/retry`, "POST"); await refresh(); })}>Tiếp tục từ checkpoint</button>}</div></article>)}</section>}
@@ -333,4 +346,20 @@ function Thumbnail({ url, download }: { url: string; download: () => void }) {
   const id = /(?:v=|youtu\.be\/|\/shorts\/|\/live\/)([\w-]{11})/.exec(url)?.[1];
   if (!id) return null;
   return <div className="thumbnail-preview"><img src={`https://i.ytimg.com/vi/${id}/hqdefault.jpg`} alt="Thumbnail gốc YouTube" /><button className="secondary-button" onClick={download}>Tải thumbnail gốc</button></div>;
+}
+
+function ProcessingTimes({ metrics, running }: { metrics: Metrics; running: boolean }) {
+  const [now, setNow] = useState(() => Date.now() / 1000);
+  useEffect(() => {
+    if (!running || !metrics.current) return;
+    const timer = setInterval(() => setNow(Date.now() / 1000), 1000);
+    return () => clearInterval(timer);
+  }, [running, metrics.current]);
+  const labels: Record<string, string> = { translation: "Dịch", review: "Đối chiếu", repair: "Sửa lỗi", numbers: "Số bằng chữ", context: "Ngữ cảnh SEO", seo: "Tạo SEO", seo_review: "Kiểm tra SEO" };
+  return <details className="processing-times"><summary>Thời gian xử lý · {metrics.calls} lượt AI · {metrics.retries} lần chờ thử lại</summary>
+    <p className="muted">Thời gian lượt AI gồm cả chờ nhà cung cấp và điều tiết API.</p>
+    {running && metrics.current && <p>{labels[metrics.current.phase] ?? "AI"} đang chạy: {Math.max(0, Math.floor(now - metrics.current.started_at))} giây</p>}
+    <ul>{Object.entries(metrics.phases).map(([key, value]) => <li key={key}>{labels[key] ?? key}: {value.calls} lượt · {Math.round(value.seconds)} giây</li>)}</ul>
+    <p>Chờ thử lại: {Math.round(metrics.wait_seconds)} giây · Lượt API lỗi: {metrics.failures}</p>
+  </details>;
 }

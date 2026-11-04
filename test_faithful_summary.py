@@ -182,13 +182,15 @@ class FaithfulSummaryTests(unittest.TestCase):
                 self.assertNotIn("Old wrong summary", prompt)
                 return json.dumps({"summary":"New checked translation", "entities":[], "edits":[], "unresolved":[],
                     "anchors":[{"fact":"Original story","quote":source}]})
-            if "CHỈ xuất bản dịch" in prompt:
+            if prompt.startswith("NARRATION_TRANSLATION"):
                 self.assertIn(source, prompt)
                 self.assertNotIn("Old wrong summary", prompt)
                 return "New checked translation"
             if "CHARACTER/WORLD REFERENCE" in prompt:
                 return '{"character_bible":"Reference","characters":[]}'
-            if "Soạn YouTube tiêu đề" in prompt:
+            if prompt.startswith("TARGET_METADATA_REVIEW"):
+                return '{"ok":true,"issues":[]}'
+            if prompt.startswith("TARGET_METADATA"):
                 return '{"title":"Title","description":"Description","tags":["tag"]}'
             self.fail(prompt[:80])
         with patch("background_jobs.generate_text", side_effect=call):

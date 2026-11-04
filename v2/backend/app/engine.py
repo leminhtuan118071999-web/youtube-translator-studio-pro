@@ -7,6 +7,7 @@ if str(ROOT) not in sys.path:
 import json
 from api_clients import PROVIDERS, generate_text, list_models, validate_base_url, migrate_claude_settings, migrate_free_provider_settings
 from background_jobs import run_full_job, overview, metadata_for_job
+from processing_metrics import ProcessingMetrics
 from server_video_jobs import run_video_forms_job
 from server_character_jobs import run_character_job, profile_data
 from youtube_metadata import generate_youtube_metadata
@@ -68,7 +69,8 @@ def execute(kind, snapshot, progress, image_sink=None):
         return run_character_job(snapshot, progress)
     if kind == 'seo':
         progress.check_cancelled()
-        call = lambda prompt: request_text(snapshot, prompt)
+        metrics = ProcessingMetrics(progress)
+        call = lambda prompt: metrics.measure(prompt, lambda: request_text(snapshot, prompt))
         progress.update(10, 'Đang đọc ngữ cảnh để dịch tiêu đề và mô tả gốc')
         progress.update(50, 'Đang dịch sát nghĩa và đối chiếu với tiêu đề, mô tả gốc')
         title, description, tags = metadata_for_job(

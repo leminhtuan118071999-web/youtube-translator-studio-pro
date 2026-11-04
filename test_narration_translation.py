@@ -50,16 +50,23 @@ class NarrationTests(unittest.TestCase):
         self.assertEqual(result['fields']['seo_tags'],'ratunek, rodzina')
 
     def test_minimal_correction_receives_candidate_original_and_error(self):
-        drafts=[]
+        drafts=[];patches=[];reviews=[]
         def call(prompt):
+            if prompt.startswith('NARRATION_TRANSLATION_PATCH'):
+                data=json.loads(prompt.split('SOURCE DATA:\n')[1]);patches.append(data)
+                return json.dumps({'edits':[{'find':'Wrong actor','replace':'Nora pays two hundred sixty-eight thousand USD.'}]})
             if prompt.startswith('NARRATION_TRANSLATION'):
-                data=json.loads(prompt.split('SOURCE DATA:\n')[1]);drafts.append(data)
-                return 'Wrong actor' if len(drafts)==1 else 'Nora pays two hundred sixty-eight thousand USD.'
-            return ('{"ok":false,"issues":["Wrong payer"],"source_conflicts":[]}' if len(drafts)==1
+                drafts.append(prompt)
+                return 'Wrong actor'
+            reviews.append(prompt)
+            return ('{"ok":false,"issues":["Wrong payer"],"source_conflicts":[]}' if len(reviews)==1
                     else '{"ok":true,"issues":[],"source_conflicts":[]}')
         self.assertEqual(rewrite_target_script('Nora pays two hundred sixty-eight thousand USD.','English',call,JobProgress()),'Nora pays two hundred sixty-eight thousand USD.')
-        self.assertEqual(drafts[1]['candidate'],'Wrong actor')
-        self.assertIn('Wrong payer',drafts[1]['required_corrections'])
+        self.assertEqual(len(drafts),1)
+        self.assertEqual(len(patches),1)
+        self.assertEqual(len(reviews),2)
+        self.assertEqual(patches[0]['candidate'],'Wrong actor')
+        self.assertIn('Wrong payer',patches[0]['required_corrections'])
 
     def test_resume_keeps_reviewed_parts(self):
         source='Nora pays.\n'*600

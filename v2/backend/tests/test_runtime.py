@@ -328,3 +328,29 @@ def test_jobs_keep_each_session_latest_and_old_active_jobs_beyond_recent_window(
     assert latest_older in ids and old_active in ids
     assert recent[0] in ids and foreign_id not in ids
     assert all('encrypted_keys' not in row and 'input' not in row for row in rows)
+
+
+def test_selected_checkpoint_is_reviewed_owner_scoped_and_revision_fenced(db):
+    from app.routes import _selected_checkpoint
+    owner,other=db
+    configured(owner);s=session(owner);submit(owner,s)
+    job=worker.claim('test-worker');p=worker.Progress(job,{})
+    p.publish('translated','Reviewed narration')
+    p.publish('processing_metrics',dict(calls=2,phases={}))
+    with connect() as c:
+        preview=_selected_checkpoint(c,owner,s['id'],s['revision'])
+        assert preview['translated'] is None
+        assert preview['metrics']['calls']==2
+    p.publish('translation_complete',True)
+    with connect() as c:
+        preview=_selected_checkpoint(c,owner,s['id'],s['revision'])
+        assert preview['translated']=='Reviewed narration'
+        assert set(preview)=={'job_id','session_id','input_revision','translated','metrics'}
+        assert _selected_checkpoint(c,other,s['id'],s['revision']) is None
+        assert _selected_checkpoint(c,owner,s['id'],s['revision']+1) is None
+    assert worker.finish(job,p,dict(ok=True,fields={'translated':'Reviewed narration'}))
+    with connect() as c:
+        assert _selected_checkpoint(c,owner,s['id'],s['revision']+1)['metrics']['calls']==2
+    store.save_session(owner,s['id'],SessionEdit(name='Manual',revision=1,source='New input',translated='Manual narration'))
+    with connect() as c:
+        assert _selected_checkpoint(c,owner,s['id'],2) is None

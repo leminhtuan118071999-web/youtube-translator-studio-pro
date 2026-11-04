@@ -150,6 +150,23 @@ def _studio_session(row):
     return {**row, 'data': {k: v for k, v in row['data'].items() if k in keys}}
 
 
+def _selected_checkpoint(conn, owner, sid, revision):
+    # Project only safe, small diagnostics and the selected job's reviewed narration.
+    # The latest job wins even if an older run has a usable translation.
+    return conn.execute("""select j.id as job_id,j.session_id,j.input_revision,
+        case when j.job_type in ('full','translation')
+            and j.result->>'translation_complete'='true'
+            then j.result->>'translated' else null end as translated,
+        j.result->'processing_metrics' as metrics
+        from public.lmt_v2_jobs j
+        where j.id=(select id from public.lmt_v2_jobs where user_id=%s and session_id=%s
+                    order by created_at desc,id desc limit 1)
+            and j.user_id=%s and j.session_id=%s
+            and (j.input_revision=%s or (j.status='completed' and j.input_revision+1=%s))
+            and j.status in ('running','retry_wait','failed','completed')""",
+        (owner,sid,owner,sid,revision,revision)).fetchone()
+
+
 @router.get('/dashboard')
 def dashboard(sid: UUID | None = None, revision: int = -1,
               user: AuthenticatedUser = Depends(require_user)):
@@ -159,11 +176,14 @@ def dashboard(sid: UUID | None = None, revision: int = -1,
         queue = _dashboard_jobs(conn, user.id)
         worker = conn.execute("select coalesce(bool_or(last_seen > now()-interval '150 seconds'),false) as healthy from public.lmt_v2_worker_health").fetchone()
         selected = None
+        checkpoint = None
         if sid is not None:
             current = next((row for row in sessions if str(row['id']) == str(sid)), None)
+            if current:
+                checkpoint = _selected_checkpoint(conn,user.id,sid,current['revision'])
             if current and current['revision'] != revision:
                 selected = _studio_session(store.owned_session(conn, user.id, sid))
-        return dict(sessions=sessions, jobs=queue, healthy=worker['healthy'], selected=selected)
+        return dict(sessions=sessions, jobs=queue, healthy=worker['healthy'], selected=selected, checkpoint=checkpoint)
 
 @router.post('/migration/legacy/import')
 def migrate(user: AuthenticatedUser = Depends(require_user)):

@@ -124,9 +124,14 @@ def translate_narration(source, language, call, progress):
         if compatible and len(saved['parts']) <= len(parts):
             outputs = list(saved['parts'])
 
+    briefs = [None] * len(outputs)
+    saved_briefs = saved.get('seo_contexts') if compatible else None
+    if isinstance(saved_briefs,list) and len(saved_briefs)==len(outputs):
+        briefs = [v if isinstance(v,str) and 0<len(v)<=1800 else None for v in saved_briefs]
+
     def checkpoint():
         progress.publish('optimization_work_json', json.dumps(
-            dict(identity, parts=outputs, source_cores=[p['core'] for p in parts]),
+            dict(identity, parts=outputs, seo_contexts=briefs, source_cores=[p['core'] for p in parts]),
             ensure_ascii=False))
 
     index = len(outputs)
@@ -134,7 +139,9 @@ def translate_narration(source, language, call, progress):
         part = parts[index]
         try:
             candidate, errors = '', ''
-            for attempt in range(3):
+            brief_holder=[]
+            # One full draft; rejected parts go directly to bounded substring repairs.
+            for attempt in range(1):
                 progress.check_cancelled()
                 progress.update(10 + int(85 * index/len(parts)),
                                 f'🌍 Dịch và kiểm tra phần {index+1}/{len(parts)} (lần {attempt+1})')
@@ -142,6 +149,8 @@ def translate_narration(source, language, call, progress):
                     f'NARRATION_TRANSLATION. Translate ALL core text into {language} as natural spoken narration. '
                     'Preserve the original plot, sequence, dialogue meaning, narrative perspective, actions, relationships and numbers. '
                     'No summarizing, selecting a subplot, abridging, added scenes or character limit. '
+                    'Before returning, silently check every source proposition, speaker, number and ending against the core; '
+                    'correct any omission or wrong attribution within this same pass. '
                     'Return ONLY the translated narration, without headings, notes, markdown or stage directions. '
                     'Improve grammar, punctuation and clear pronoun references only where original evidence permits. '
                     'Do not invent resolutions of source contradictions. '+FACT_RULES+NUMBER_WORDS_RULE+COMPACT_RULES+SINGLE_NARRATOR_RULES+
@@ -157,7 +166,8 @@ def translate_narration(source, language, call, progress):
                     candidate = spell_narration_numbers(candidate, language, call)
                     _review(call,part['core'],candidate,mode='translation',
                             context=dict(before=part['before'],after=part['after'],target_language=language, concision_requirements=COMPACT_RULES, speech_mode='single_narrator_indirect', narration_requirements=SINGLE_NARRATOR_RULES),
-                            previous=outputs[-1][-600:] if outputs else '')
+                            previous=outputs[-1][-600:] if outputs else '', on_context=brief_holder.append)
+                    briefs.append(brief_holder[-1] if brief_holder else None)
                     outputs.append(candidate.strip())
                     checkpoint()
                     break
@@ -176,7 +186,8 @@ def translate_narration(source, language, call, progress):
                         candidate = spell_narration_numbers(candidate, language, call)
                         _review(call, part['core'], candidate, mode='translation',
                                 context=dict(before=part['before'],after=part['after'],target_language=language, concision_requirements=COMPACT_RULES, speech_mode='single_narrator_indirect', narration_requirements=SINGLE_NARRATOR_RULES),
-                                previous=outputs[-1][-600:] if outputs else '')
+                                previous=outputs[-1][-600:] if outputs else '', on_context=brief_holder.append)
+                        briefs.append(brief_holder[-1] if brief_holder else None)
                         outputs.append(candidate.strip())
                         checkpoint()
                         break
@@ -208,7 +219,7 @@ def translate_narration(source, language, call, progress):
         index += 1
     result = '\n\n'.join(outputs)
     progress.publish('optimization_review_json',json.dumps(dict(identity,output_sha256=source_hash(result),
-                      output_characters=len(result),reviewed_parts=len(parts)),ensure_ascii=False))
+                      output_characters=len(result),reviewed_parts=len(parts),seo_contexts=briefs),ensure_ascii=False))
     progress.publish('optimization_work_json','')
     progress.update(95,'✅ Đã dịch đầy đủ và kiểm tra văn bản giọng đọc')
     return result

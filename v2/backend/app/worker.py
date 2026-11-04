@@ -21,7 +21,7 @@ PUBLIC_FIELDS = {
     'optimization_work_json','translation_parts','translation_complete','translated',
     'character_bible','character_profile','character_profile_json','character_images_manifest',
     'character_images_error','new_title','new_description','seo_tags','metadata','language','seo_work_json',
-    'video_forms','video_forms_error','repair_memory_json',
+    'video_forms','video_forms_error','repair_memory_json','processing_metrics',
 }
 
 
