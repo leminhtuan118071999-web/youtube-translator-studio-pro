@@ -8,6 +8,26 @@ from v3 import projects
 
 
 class EditorUITests(unittest.TestCase):
+    def test_story_options_autosave_and_survive_new_project_and_app_restart(self):
+        with tempfile.TemporaryDirectory() as folder, patch.dict(os.environ,LMT_V3_HOME=folder):
+            first=projects.create('First')
+            path=str(Path(__file__).parents[1]/'studio_app.py')
+            app=AppTest.from_file(path,default_timeout=15).run()
+            next(c for c in app.checkbox if c.label=='Tự tạo phụ đề cho cả mở đầu và giọng chính').uncheck().run()
+            next(c for c in app.checkbox if c.label=='Không dùng giọng mở đầu').check().run()
+            next(c for c in app.slider if c.label=='Chiều rộng nhân vật (% khung)').set_value(60).run()
+            self.assertFalse(app.exception)
+            self.assertFalse(projects.story_defaults()['auto_subtitles'])
+            self.assertTrue(projects.story_defaults()['no_intro'])
+            self.assertEqual(projects.story_defaults()['width'],60)
+            projects.create('Second')
+            reopened=AppTest.from_file(path,default_timeout=15).run()
+            self.assertFalse(reopened.exception)
+            self.assertFalse(next(c for c in reopened.checkbox if c.label=='Tự tạo phụ đề cho cả mở đầu và giọng chính').value)
+            self.assertTrue(next(c for c in reopened.checkbox if c.label=='Không dùng giọng mở đầu').value)
+            self.assertEqual(next(c for c in reopened.slider if c.label=='Chiều rộng nhân vật (% khung)').value,60)
+            self.assertNotIn('story',projects.read(projects.project_dir(first['id'])/'project.json'))
+
     def test_create_and_reopen_project_without_credentials(self):
         with tempfile.TemporaryDirectory() as folder, patch.dict(os.environ,LMT_V3_HOME=folder):
             app=AppTest.from_file(str(Path(__file__).parents[1]/'studio_app.py'),default_timeout=15).run()

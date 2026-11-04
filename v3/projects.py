@@ -103,6 +103,35 @@ def save_output_defaults(settings):
     atomic(home()/'output-defaults.json', validate_output_defaults(settings))
 
 
+STORY_DEFAULTS = dict(enabled=True, no_intro=False, remove_background=True,
+                      width=75, x=50, y=100, auto_subtitles=True,
+                      asr_model='small', auto_pixabay=True, export_include_assets=True)
+
+
+def validate_story_defaults(settings):
+    result = dict(STORY_DEFAULTS)
+    for key, default in STORY_DEFAULTS.items():
+        value = settings.get(key, default)
+        if type(default) is bool:
+            valid = type(value) is bool
+        elif key == 'asr_model':
+            valid = value in ('small','base','tiny')
+        else:
+            valid = type(value) is int and (10 if key == 'width' else 0) <= value <= 100
+        if not valid:raise ValueError('Cấu hình mục 05 không hợp lệ: '+key)
+        result[key] = value
+    return result
+
+
+def story_defaults():
+    path = home()/'story-defaults.json'
+    return validate_story_defaults(read(path) if path.exists() else {})
+
+
+def save_story_defaults(settings):
+    atomic(home()/'story-defaults.json', validate_story_defaults(settings))
+
+
 def create(name, unique_copy=False):
     with (home()/'.project-names.lock').open('a') as lock:
         fcntl.flock(lock,fcntl.LOCK_EX)
@@ -111,7 +140,8 @@ def create(name, unique_copy=False):
         folder = project_dir(pid)
         (folder / 'assets').mkdir(parents=True)
         data = dict(id=pid, name=name, scenes=[], voice=None, music=None,
-                    captions=None, subtitle_text='', settings=output_defaults(), updated=time.time())
+                    captions=None, subtitle_text='', settings=output_defaults(),
+                    export_include_assets=story_defaults()['export_include_assets'], updated=time.time())
         atomic(folder/'project.json', data)
     return data
 

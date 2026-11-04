@@ -11,6 +11,7 @@ from . import pixabay
 
 def panel(project,folder,locked):
     pid=project['id'];cfg=project.get('story',{})
+    prefs=dict(store.STORY_DEFAULTS, **cfg) if locked else store.story_defaults()
     st.subheader('Ảnh nhân vật trên video nền · như video mẫu')
     with st.expander('Cấu hình Pixabay · chỉ lưu khóa trên máy này'):
         st.link_button('Lấy khóa API trên Pixabay','https://pixabay.com/api/docs/')
@@ -44,13 +45,13 @@ def panel(project,folder,locked):
         # Explicit source attribution, no autoplay/hotlink downloads.
         st.markdown(f"[Pixabay · video {hit['id']}]({hit['pageURL']}) · {hit['width']}×{hit['height']} · {hit['duration']} giây")
     with st.container():
-        enabled=st.checkbox('Dựng theo kiểu ảnh nhân vật + video nền',value=cfg.get('enabled',True),disabled=locked)
+        enabled=st.checkbox('Dựng theo kiểu ảnh nhân vật + video nền',value=prefs['enabled'],disabled=locked)
         a,b=st.columns(2)
         with a:
             photo=st.file_uploader('01 · Ảnh nhân vật',type=['png','jpg','jpeg','webp'],disabled=locked,key='story_photo_'+pid)
             voice=st.file_uploader('02 · File giọng đọc chính',type=sorted(x[1:] for x in store.AUDIO),disabled=locked,key='story_voice_'+pid)
             intro=st.file_uploader('03 · File giọng đọc mở đầu (tùy chọn)',type=sorted(x[1:] for x in store.AUDIO),disabled=locked,key='story_intro_'+pid)
-            no_intro=st.checkbox('Không dùng giọng mở đầu',value=False,disabled=locked)
+            no_intro=st.checkbox('Không dùng giọng mở đầu',value=prefs['no_intro'],disabled=locked)
             st.caption('Đã có giọng chính.' if project.get('voice') else 'Chưa có giọng chính.')
             if cfg.get('intro'):st.caption('Đã có giọng mở đầu.')
         with b:
@@ -58,19 +59,23 @@ def panel(project,folder,locked):
             existing=list(dict.fromkeys(cfg.get('backgrounds',[])+[r['file'] for r in records.values()]))
             kept=st.multiselect('Video nền đã lưu muốn dùng',existing,default=cfg.get('backgrounds',[]),format_func=lambda n:cfg.get('background_names',{}).get(n,'Video đã tải · '+n[:8]),disabled=locked)
             selected=st.multiselect('Chọn video Pixabay để tải khi dựng (tối đa 15)',list(hits),key=selection_key,format_func=lambda i:f"Pixabay {i} · {hits[i]['tags']} · {hits[i]['duration']} giây",max_selections=15,disabled=locked)
-        remove=st.checkbox('Tự động xóa nền ảnh',value=cfg.get('remove_background',True),disabled=locked)
+        remove=st.checkbox('Tự động xóa nền ảnh',value=prefs['remove_background'],disabled=locked)
         with st.expander('Khôi phục vùng nhân vật hoặc chi tiết bị thiếu'):
             boxes=st.data_editor(pd.DataFrame(cfg.get('keep_boxes',[]),columns=['Trái','Trên','Phải','Dưới']),num_rows='dynamic',disabled=locked,key='story_boxes_'+pid).to_dict('records')
         c,d,e=st.columns(3)
-        width=c.slider('Chiều rộng nhân vật (% khung)',10,100,int(cfg.get('width',75)),disabled=locked)
-        x=d.slider('Vị trí ngang · trái → phải',0,100,int(cfg.get('x',50)),disabled=locked)
-        y=e.slider('Vị trí dọc · trên → dưới',0,100,int(cfg.get('y',100)),disabled=locked)
-        subtitles=st.checkbox('Tự tạo phụ đề cho cả mở đầu và giọng chính',value=cfg.get('auto_subtitles',True),disabled=locked)
-        model=st.selectbox('Model nhận diện cho video kể chuyện',['small','base','tiny'],index=['small','base','tiny'].index(cfg.get('asr_model','small')),disabled=locked)
-        auto_pixabay=st.checkbox('Tự tải 15 video Pixabay mới cho mỗi dự án (tránh trùng dự án trước)',value=cfg.get('auto_pixabay',True),disabled=locked)
+        width=c.slider('Chiều rộng nhân vật (% khung)',10,100,int(prefs['width']),disabled=locked)
+        x=d.slider('Vị trí ngang · trái → phải',0,100,int(prefs['x']),disabled=locked)
+        y=e.slider('Vị trí dọc · trên → dưới',0,100,int(prefs['y']),disabled=locked)
+        subtitles=st.checkbox('Tự tạo phụ đề cho cả mở đầu và giọng chính',value=prefs['auto_subtitles'],disabled=locked)
+        model=st.selectbox('Model nhận diện cho video kể chuyện',['small','base','tiny'],index=['small','base','tiny'].index(prefs['asr_model']),disabled=locked)
+        auto_pixabay=st.checkbox('Tự tải 15 video Pixabay mới cho mỗi dự án (tránh trùng dự án trước)',value=prefs['auto_pixabay'],disabled=locked)
+        preferences=dict(prefs,enabled=enabled,no_intro=no_intro,remove_background=remove,
+                         width=width,x=x,y=y,auto_subtitles=subtitles,asr_model=model,auto_pixabay=auto_pixabay)
+        if not locked and preferences != store.story_defaults():
+            store.save_story_defaults(preferences)
         def save_inputs():
             try:
-                new=dict(cfg,enabled=enabled,auto_pixabay=auto_pixabay,query=query,backgrounds=kept,pixabay_selected=[hits[i] for i in selected],remove_background=remove,
+                new=dict(cfg,no_intro=no_intro,enabled=enabled,auto_pixabay=auto_pixabay,query=query,backgrounds=kept,pixabay_selected=[hits[i] for i in selected],remove_background=remove,
                          width=width,x=x,y=y,auto_subtitles=subtitles,asr_model=model,
                          keep_boxes=[[float(row[k]) for k in ('Trái','Trên','Phải','Dưới')] for row in boxes])
                 if len(set(records)|set(selected))>15:raise ValueError('Tổng số video Pixabay khác nhau của dự án vượt 15. Chọn lại video đã tải.')

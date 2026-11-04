@@ -89,7 +89,10 @@ def save_completed(folder):
             if chosen:st.session_state[key]=chosen
         except ValueError as exc:st.error(str(exc))
     destination=st.text_input('Nơi lưu',key=key,placeholder='Ví dụ: ~/Movies/LMT hoặc /Volumes/Ten-o-dia/LMT',disabled=locked)
-    complete=st.checkbox('Lưu cả dự án và nguyên liệu để chỉnh sửa lại',value=project.get('export_include_assets',True),key='full_'+folder.name,disabled=locked)
+    complete=st.checkbox('Lưu cả dự án và nguyên liệu để chỉnh sửa lại',value=project.get('export_include_assets',True) if locked else store.story_defaults()['export_include_assets'],key=('full_'+folder.name if locked else 'export_include_assets_default'),disabled=locked)
+    if not locked:st.session_state['full_'+folder.name]=complete
+    if not locked and complete != store.story_defaults()['export_include_assets']:
+        store.save_story_defaults(dict(store.story_defaults(),export_include_assets=complete))
     if status and status.get('details',{}).get('export_error'):st.warning('Video đã dựng xong nhưng chưa sao chép được: '+status['details']['export_error'])
     if status and status['state']=='completed' and st.button('Lưu vào thư mục đã chọn',type='primary',key='export_'+folder.name,disabled=locked):
         try:
