@@ -59,55 +59,57 @@ def panel(project,folder,locked):
             existing=list(dict.fromkeys(cfg.get('backgrounds',[])+[r['file'] for r in records.values()]))
             kept=st.multiselect('Video nền đã lưu muốn dùng',existing,default=cfg.get('backgrounds',[]),format_func=lambda n:cfg.get('background_names',{}).get(n,'Video đã tải · '+n[:8]),disabled=locked)
             selected=st.multiselect('Chọn video Pixabay để tải khi dựng (tối đa 15)',list(hits),key=selection_key,format_func=lambda i:f"Pixabay {i} · {hits[i]['tags']} · {hits[i]['duration']} giây",max_selections=15,disabled=locked)
-        remove=st.checkbox('Tự động xóa nền ảnh',value=prefs['remove_background'],disabled=locked)
-        with st.expander('Khôi phục vùng nhân vật hoặc chi tiết bị thiếu'):
-            boxes=st.data_editor(pd.DataFrame(cfg.get('keep_boxes',[]),columns=['Trái','Trên','Phải','Dưới']),num_rows='dynamic',disabled=locked,key='story_boxes_'+pid).to_dict('records')
-        c,d,e=st.columns(3)
-        width=c.slider('Chiều rộng nhân vật (% khung)',10,100,int(prefs['width']),disabled=locked)
-        x=d.slider('Vị trí ngang · trái → phải',0,100,int(prefs['x']),disabled=locked)
-        y=e.slider('Vị trí dọc · trên → dưới',0,100,int(prefs['y']),disabled=locked)
-        subtitles=st.checkbox('Tự tạo phụ đề cho cả mở đầu và giọng chính',value=prefs['auto_subtitles'],disabled=locked)
-        model=st.selectbox('Model nhận diện cho video kể chuyện',['small','base','tiny'],index=['small','base','tiny'].index(prefs['asr_model']),disabled=locked)
-        auto_pixabay=st.checkbox('Tự tải 15 video Pixabay mới cho mỗi dự án (tránh trùng dự án trước)',value=prefs['auto_pixabay'],disabled=locked)
-        preferences=dict(prefs,enabled=enabled,no_intro=no_intro,remove_background=remove,
-                         width=width,x=x,y=y,auto_subtitles=subtitles,asr_model=model,auto_pixabay=auto_pixabay)
-        if not locked and preferences != store.story_defaults():
-            store.save_story_defaults(preferences)
-        def save_inputs():
-            try:
-                new=dict(cfg,no_intro=no_intro,enabled=enabled,auto_pixabay=auto_pixabay,query=query,backgrounds=kept,pixabay_selected=[hits[i] for i in selected],remove_background=remove,
-                         width=width,x=x,y=y,auto_subtitles=subtitles,asr_model=model,
-                         keep_boxes=[[float(row[k]) for k in ('Trái','Trên','Phải','Dưới')] for row in boxes])
-                if len(set(records)|set(selected))>15:raise ValueError('Tổng số video Pixabay khác nhau của dự án vượt 15. Chọn lại video đã tải.')
-                if photo:
-                    stamp=store.signature_upload(photo)
-                    if stamp!=cfg.get('image_upload'):
-                        new['image']=store.upload(folder,photo,store.IMAGES);new['image_upload']=stamp;new.pop('cutout',None)
-                for uploaded,field in ((voice,'voice'),(intro,'intro')):
-                    if uploaded:
-                        stamp=store.signature_upload(uploaded)
-                        if stamp!=cfg.get(field+'_upload'):
-                            name=store.upload(folder,uploaded,store.AUDIO)
-                            if not probe(store.asset(folder,name))['audio']:raise ValueError('File giọng đọc cần có âm thanh.')
-                            if field=='voice':project['voice']=name
-                            else:new['intro']=name
-                            new[field+'_upload']=stamp
-                if no_intro:new.pop('intro',None);new.pop('intro_upload',None)
-                names=dict(cfg.get('background_names',{}));uploads=dict(cfg.get('background_uploads',{}))
-                for video in videos:
-                    stamp=store.signature_upload(video)
-                    name=uploads.get(stamp)
-                    if not name:
-                        name=store.upload(folder,video,store.MEDIA- store.IMAGES);uploads[stamp]=name
-                    if name not in new['backgrounds'] and stamp not in cfg.get('background_uploads',{}):new['backgrounds'].append(name)
-                    names[name]=video.name
-                new.update(background_names=names,background_uploads=uploads)
-                if not enabled and project.get('voice_track'):
-                    for derived in ('voice_track','overlay_image','captions','caption_words','captions_origin'):project.pop(derived,None)
-                project['story']=new;store.save(project);return True
-            except (ValueError,OSError,TypeError,KeyError) as exc:st.error(str(exc));return False
-        if st.button('Lưu nguyên liệu và bố cục kể chuyện',disabled=locked):
-            if save_inputs():st.rerun()
+        with st.expander('Cài đặt tùy chỉnh',expanded=False):
+            remove=st.checkbox('Tự động xóa nền ảnh',value=prefs['remove_background'],disabled=locked)
+            with st.container():
+                st.markdown('**Khôi phục vùng nhân vật hoặc chi tiết bị thiếu**')
+                boxes=st.data_editor(pd.DataFrame(cfg.get('keep_boxes',[]),columns=['Trái','Trên','Phải','Dưới']),num_rows='dynamic',disabled=locked,key='story_boxes_'+pid).to_dict('records')
+            c,d,e=st.columns(3)
+            width=c.slider('Chiều rộng nhân vật (% khung)',10,100,int(prefs['width']),disabled=locked)
+            x=d.slider('Vị trí ngang · trái → phải',0,100,int(prefs['x']),disabled=locked)
+            y=e.slider('Vị trí dọc · trên → dưới',0,100,int(prefs['y']),disabled=locked)
+            subtitles=st.checkbox('Tự tạo phụ đề cho cả mở đầu và giọng chính',value=prefs['auto_subtitles'],disabled=locked)
+            model=st.selectbox('Model nhận diện cho video kể chuyện',['small','base','tiny'],index=['small','base','tiny'].index(prefs['asr_model']),disabled=locked)
+            auto_pixabay=st.checkbox('Tự tải 15 video Pixabay mới cho mỗi dự án (tránh trùng dự án trước)',value=prefs['auto_pixabay'],disabled=locked)
+            preferences=dict(prefs,enabled=enabled,no_intro=no_intro,remove_background=remove,
+                             width=width,x=x,y=y,auto_subtitles=subtitles,asr_model=model,auto_pixabay=auto_pixabay)
+            if not locked and preferences != store.story_defaults():
+                store.save_story_defaults(preferences)
+            def save_inputs():
+                try:
+                    new=dict(cfg,no_intro=no_intro,enabled=enabled,auto_pixabay=auto_pixabay,query=query,backgrounds=kept,pixabay_selected=[hits[i] for i in selected],remove_background=remove,
+                             width=width,x=x,y=y,auto_subtitles=subtitles,asr_model=model,
+                             keep_boxes=[[float(row[k]) for k in ('Trái','Trên','Phải','Dưới')] for row in boxes])
+                    if len(set(records)|set(selected))>15:raise ValueError('Tổng số video Pixabay khác nhau của dự án vượt 15. Chọn lại video đã tải.')
+                    if photo:
+                        stamp=store.signature_upload(photo)
+                        if stamp!=cfg.get('image_upload'):
+                            new['image']=store.upload(folder,photo,store.IMAGES);new['image_upload']=stamp;new.pop('cutout',None)
+                    for uploaded,field in ((voice,'voice'),(intro,'intro')):
+                        if uploaded:
+                            stamp=store.signature_upload(uploaded)
+                            if stamp!=cfg.get(field+'_upload'):
+                                name=store.upload(folder,uploaded,store.AUDIO)
+                                if not probe(store.asset(folder,name))['audio']:raise ValueError('File giọng đọc cần có âm thanh.')
+                                if field=='voice':project['voice']=name
+                                else:new['intro']=name
+                                new[field+'_upload']=stamp
+                    if no_intro:new.pop('intro',None);new.pop('intro_upload',None)
+                    names=dict(cfg.get('background_names',{}));uploads=dict(cfg.get('background_uploads',{}))
+                    for video in videos:
+                        stamp=store.signature_upload(video)
+                        name=uploads.get(stamp)
+                        if not name:
+                            name=store.upload(folder,video,store.MEDIA- store.IMAGES);uploads[stamp]=name
+                        if name not in new['backgrounds'] and stamp not in cfg.get('background_uploads',{}):new['backgrounds'].append(name)
+                        names[name]=video.name
+                    new.update(background_names=names,background_uploads=uploads)
+                    if not enabled and project.get('voice_track'):
+                        for derived in ('voice_track','overlay_image','captions','caption_words','captions_origin'):project.pop(derived,None)
+                    project['story']=new;store.save(project);return True
+                except (ValueError,OSError,TypeError,KeyError) as exc:st.error(str(exc));return False
+            if st.button('Lưu nguyên liệu và bố cục kể chuyện',disabled=locked):
+                if save_inputs():st.rerun()
     if cfg.get('image'):
         if st.button('Tách nền để xem trước',disabled=locked,key='story_cutout_'+pid):
             if save_inputs():launch(project,'cutout');st.rerun()
