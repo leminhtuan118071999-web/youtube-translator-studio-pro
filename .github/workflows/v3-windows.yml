@@ -36,7 +36,8 @@ jobs:
           $install = Start-Process -FilePath $installer -ArgumentList @('/VERYSILENT','/SUPPRESSMSGBOXES','/NORESTART','/SP-',('/DIR="'+$installed+'"')) -Wait -PassThru
           if ($install.ExitCode -ne 0) { throw "Installer failed: $($install.ExitCode)" }
           $smokeFile = Join-Path $env:RUNNER_TEMP 'v3-smoke.json'
-          $smoke = Start-Process -FilePath "$installed\LMTStudioV3.exe" -ArgumentList @('--smoke-test',('"'+$smokeFile+'"')) -Wait -PassThru
+          $smoke = Start-Process -FilePath "$installed\LMTStudioV3.exe" -ArgumentList @('--smoke-test',('"'+$smokeFile+'"')) -PassThru
+          if (!$smoke.WaitForExit(120000)) { throw 'Launcher smoke timed out' }
           if ($smoke.ExitCode -ne 0) { Get-Content $smokeFile; throw 'Frozen launcher smoke failed' }
           $smokeResult = Get-Content $smokeFile | ConvertFrom-Json
           if (!$smokeResult.ok -or !$smokeResult.server -or !$smokeResult.runtime) { throw 'Installed app not ready' }
