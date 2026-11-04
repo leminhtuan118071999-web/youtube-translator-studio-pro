@@ -91,3 +91,7 @@ Với tác vụ đã lỗi trước khi cập nhật, khởi động lại worke
 ### Xóa tất cả phiên V2
 
 Thanh bên có **Xóa tất cả phiên**, yêu cầu xác nhận trước khi xóa cả phiên bị ẩn bởi tìm kiếm và nội dung chưa lưu. API `DELETE /v1/sessions` chỉ xóa phiên của tài khoản đã đăng nhập, hủy tác vụ liên quan và vô hiệu hóa lease trong cùng giao dịch. Cấu hình API, dữ liệu V1 và V3 được giữ. Ảnh lưu trữ được giữ theo chính sách hiện tại của thao tác xóa một phiên; yêu cầu AI đã gửi có thể vẫn tính phí cho tới khi worker nhận việc hủy. Cần triển khai cả backend và frontend mới để dùng nút này.
+
+### Giao diện gọn và cập nhật nhẹ
+
+Bỏ ô tìm phiên và các tab Form 8 giây, Nhân vật, Chuyển dữ liệu theo quy trình tập trung lời kể/SEO. Dữ liệu cũ vẫn lưu trên máy chủ. Giao diện dùng GET /v1/dashboard: một lần xác thực và một kết nối DB cho danh sách, tác vụ, worker và nội dung phiên nếu revision thay đổi. Không truyền form/hồ sơ/checkpoint lớn vào giao diện này. Bộ nhớ đệm mở lại phiên ngay rồi đối chiếu dữ liệu; bản đang sửa không bị polling ghi đè. Poll không chồng yêu cầu, 5 giây khi có tác vụ, 15 giây khi rảnh và dừng tải khi tab ẩn. Phản hồi đang xử lý hiện ngay; lưu trước khi giao tác vụ không còn đợi thêm một lượt tải toàn màn hình. Các thay đổi này giảm tải web, không bỏ kiểm tra dịch sát nghĩa. Gói Render Free vẫn có thời gian khởi động lại sau khi ngủ.

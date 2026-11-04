@@ -41,9 +41,10 @@ def delete_all_sessions(user: AuthenticatedUser = Depends(require_user)):
     return Response(status_code=204)
 
 @router.get('/sessions/{sid}')
-def get_session(sid: UUID, user: AuthenticatedUser = Depends(require_user)):
+def get_session(sid: UUID, view: str = "", user: AuthenticatedUser = Depends(require_user)):
     with connect() as conn:
-        return store.owned_session(conn, user.id, sid)
+        row = store.owned_session(conn, user.id, sid)
+        return _studio_session(row) if view == "studio" else row
 
 @router.put('/sessions/{sid}')
 def update_session(sid: UUID, body: SessionEdit, user: AuthenticatedUser = Depends(require_user)):
@@ -106,7 +107,11 @@ def jobs(user: AuthenticatedUser = Depends(require_user)):
     with connect() as conn:
         # Keep the latest result for every session and every active job visible,
         # even when one busy session has filled the recent history window.
-        return conn.execute(f'''with owned as (
+        return _dashboard_jobs(conn, user.id)
+
+
+def _dashboard_jobs(conn, owner):
+    return conn.execute(f'''with owned as (
                 select {store.JOB_PUBLIC} from public.lmt_v2_jobs where user_id=%s
             ), latest as (
                 select distinct on (session_id) id from owned where session_id is not null
@@ -114,7 +119,7 @@ def jobs(user: AuthenticatedUser = Depends(require_user)):
             ) select * from owned where status in ('queued','running','retry_wait')
                 or id in (select id from latest)
                 or id in (select id from owned order by created_at desc,id desc limit 150)
-            order by created_at desc,id desc''', (user.id,)).fetchall()
+            order by created_at desc,id desc''', (owner,)).fetchall()
 
 @router.post('/jobs/{jid}/cancel', status_code=204)
 def cancel_job(jid: UUID, user: AuthenticatedUser = Depends(require_user)):
@@ -137,6 +142,28 @@ def worker_status(user: AuthenticatedUser = Depends(require_user)):
     with connect() as conn:
         row = conn.execute("select max(last_seen) as last_seen,coalesce(bool_or(last_seen > now()-interval '150 seconds'),false) as healthy from public.lmt_v2_worker_health").fetchone()
         return row
+
+def _studio_session(row):
+    # Visual planning/checkpoints remain saved server-side and in exports.
+    keys = {'url', 'source', 'title', 'description', 'language', 'style', 'duration_seconds',
+            'translated', 'new_title', 'new_description', 'seo_tags', 'translation_stale', 'seo_stale'}
+    return {**row, 'data': {k: v for k, v in row['data'].items() if k in keys}}
+
+
+@router.get('/dashboard')
+def dashboard(sid: UUID | None = None, revision: int = -1,
+              user: AuthenticatedUser = Depends(require_user)):
+    # One authenticated HTTP request and one DB connection per refresh.
+    with connect() as conn:
+        sessions = conn.execute('select id,name,status,revision,legacy_session_id,updated_at from public.lmt_v2_sessions where user_id=%s order by updated_at desc limit 150', (user.id,)).fetchall()
+        queue = _dashboard_jobs(conn, user.id)
+        worker = conn.execute("select coalesce(bool_or(last_seen > now()-interval '150 seconds'),false) as healthy from public.lmt_v2_worker_health").fetchone()
+        selected = None
+        if sid is not None:
+            current = next((row for row in sessions if str(row['id']) == str(sid)), None)
+            if current and current['revision'] != revision:
+                selected = _studio_session(store.owned_session(conn, user.id, sid))
+        return dict(sessions=sessions, jobs=queue, healthy=worker['healthy'], selected=selected)
 
 @router.post('/migration/legacy/import')
 def migrate(user: AuthenticatedUser = Depends(require_user)):
