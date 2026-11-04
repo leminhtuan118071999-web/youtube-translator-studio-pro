@@ -39,7 +39,7 @@ def download(url,path,notify):
                 size+=len(chunk)
                 if size>400*1024*1024:raise RuntimeError('Gói tải vượt kích thước dự kiến.')
                 output.write(chunk)
-                notify(f'Đang tải FFmpeg: {size//1048576} MB'+(f' / {total//1048576} MB' if total else ''))
+                notify(f'Đang tải thành phần: {size//1048576} MB'+(f' / {total//1048576} MB' if total else ''))
         partial.replace(path)
     finally:partial.unlink(missing_ok=True)
 

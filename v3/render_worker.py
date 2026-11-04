@@ -57,10 +57,10 @@ def launch(project, task="render"):
     if task=="transcribe" and not project.get("voice"):raise ValueError("Hãy tải file giọng đọc trước.")
     folder=project_dir(project['id'])
     with (folder/'render.lock').open('a') as lock:
-        if starting(folder): raise ValueError('Dự án đang khởi động tác vụ.')
         if (folder/'.deleting').exists(): raise ValueError('Dự án đang được xóa.')
         try: fcntl.flock(lock,fcntl.LOCK_EX|fcntl.LOCK_NB)
         except BlockingIOError: raise ValueError('Dự án này đang dựng video.') from None
+        if starting(folder): raise ValueError('Dự án đang khởi động tác vụ.')
         run_id=uuid4().hex;run=folder/'runs'/run_id;run.mkdir(parents=True)
         atomic(run/'snapshot.json',project)
         atomic(run/'status.json',dict(state='queued',task=task,progress=0,stage='Đang chờ xử lý',updated=time.time()))
@@ -207,6 +207,11 @@ def delete_all_projects():
         projects=listing();waiting=False
         for project in projects:
             folder=project_dir(project['id'])
+            if starting(folder):
+                waiting=True
+                for run in (folder/'runs').glob('*'):
+                    if (run/'status.json').exists() and read(run/'status.json').get('state') in ('queued','running'):(run/'cancel').touch()
+                continue
             lock=locks.enter_context((folder/'render.lock').open('a'))
             try:fcntl.flock(lock,fcntl.LOCK_EX|fcntl.LOCK_NB)
             except BlockingIOError:
@@ -254,6 +259,7 @@ def recover_pending():
             with (reference.parent/'render.lock').open('a') as lock:
                 try:fcntl.flock(lock,fcntl.LOCK_EX|fcntl.LOCK_NB)
                 except BlockingIOError:continue  # A detached worker is still alive.
+                if starting(reference.parent):continue
                 old_status=dict(status)
                 status.update(state='queued',stage='Tự khôi phục sau gián đoạn · đang chờ xử lý',updated=time.time())
                 atomic(run/'status.json',status)

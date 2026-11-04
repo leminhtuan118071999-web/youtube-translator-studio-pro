@@ -26,7 +26,7 @@ class EditorUITests(unittest.TestCase):
             next(b for b in app.button if b.label=='Lưu nguyên liệu và bố cục kể chuyện').click().run()
             self.assertFalse(app.exception)
             self.assertFalse(projects.listing()[0]['story']['enabled'])
-            self.assertTrue(any(b.label=='📁 Chọn thư mục lưu trên Mac' for b in app.button))
+            self.assertTrue(any(b.label=='📁 Chọn thư mục lưu' for b in app.button))
             self.assertTrue(any(t.label=='Nơi lưu' for t in app.text_input))
             self.assertTrue(any(s.label=='Khung hình' for s in app.selectbox))
             self.assertTrue(any(s.label=='Cách hiện phụ đề nhận diện' for s in app.selectbox))
@@ -48,7 +48,7 @@ class EditorUITests(unittest.TestCase):
             self.assertFalse(app.exception)
             destination=str(Path(temp)/'My videos')
             with patch('v3.projects.choose_folder',return_value=destination):
-                next(b for b in app.button if b.label=='📁 Chọn thư mục lưu trên Mac').click().run()
+                next(b for b in app.button if b.label=='📁 Chọn thư mục lưu').click().run()
             self.assertFalse(app.exception)
             self.assertEqual(next(t for t in app.text_input if t.label=='Nơi lưu').value,destination)
             next(b for b in app.button if b.label=='Lưu vào thư mục đã chọn').click().run()

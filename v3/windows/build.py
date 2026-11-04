@@ -20,7 +20,9 @@ def build():
     for pattern in ('python.exe','pythonw.exe','python3.dll','python312.dll','vcruntime*.dll','LICENSE.txt'):
         for file in base.glob(pattern):shutil.copy2(file,runtime/file.name)
     target=runtime/'Lib'/'site-packages'
-    subprocess.run([sys.executable,'-m','pip','install','--target',str(target),'-r',str(ROOT/'v3'/'requirements.txt')],check=True)
+    subprocess.run([sys.executable,'-m','pip','install','--no-compile','--target',str(target),'-r',str(ROOT/'v3'/'requirements.txt')],check=True)
+    for directory in sorted(target.rglob('*'),key=lambda p:len(p.parts),reverse=True):
+        if directory.is_dir() and directory.name in ('tests','__pycache__'):shutil.rmtree(directory)
     shutil.copytree(ROOT/'v3',STAGE/'v3',ignore=shutil.ignore_patterns('.venv*','__pycache__','*.pyc','windows','tests','.DS_Store'))
     # Include focused portability tests for the staged runtime check.
     (STAGE/'v3'/'tests').mkdir()
@@ -32,7 +34,7 @@ def build():
     shutil.copy2(ROOT/'v3'/'windows'/'README.md',STAGE/'README-Windows.md')
     compiler=Path(os.environ.get('ISCC',r'C:\Program Files (x86)\Inno Setup 6\ISCC.exe'))
     if not compiler.exists():raise SystemExit('Install Inno Setup 6 to build the Setup.exe.')
-    subprocess.run([str(compiler),str(ROOT/'v3'/'windows'/'installer.iss')],check=True,cwd=ROOT)
+    subprocess.run([str(compiler),'/Qp',str(ROOT/'v3'/'windows'/'installer.iss')],check=True,cwd=ROOT)
     for file in (ROOT/'dist'/'windows').glob('*.exe'):
         file.with_suffix('.exe.sha256').write_text(hashlib.file_digest(file.open('rb'),'sha256').hexdigest()+'  '+file.name+'\n')
 

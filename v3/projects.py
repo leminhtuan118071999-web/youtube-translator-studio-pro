@@ -29,7 +29,12 @@ def atomic(path, value):
     with tmp.open('w', encoding='utf8') as f:
         json.dump(value, f, ensure_ascii=False, indent=2, allow_nan=False)
         f.flush(); os.fsync(f.fileno())
-    tmp.replace(path)
+    for attempt in range(20):
+        try:
+            tmp.replace(path);break
+        except PermissionError:
+            if os.name!='nt' or attempt==19:raise
+            time.sleep(.05)  # A Windows reader/antivirus may briefly hold the old file.
 
 
 def read(path):
