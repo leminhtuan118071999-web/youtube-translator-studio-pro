@@ -15,7 +15,8 @@ import webbrowser
 import zipfile
 
 URL='http://127.0.0.1:8503'
-FFMPEG_URL='https://www.gyan.dev/ffmpeg/builds/ffmpeg-release-essentials.zip'
+FFMPEG_URL='https://github.com/GyanD/codexffmpeg/releases/download/9.0.2/ffmpeg-9.0.2-essentials_build.zip'
+FFMPEG_SHA256='60f467265b1e312373dbcd92200c2618a74850f98d3d078e94296bb3fa2047ba'
 APP=Path(sys.executable).parent if getattr(sys,'frozen',False) else Path(__file__).resolve().parents[2]
 DATA=Path(os.getenv('LOCALAPPDATA',Path.home()/'AppData/Local'))/'LMTStudioPro/V3'
 HIDDEN=0x08000000 if os.name=='nt' else 0
@@ -28,10 +29,19 @@ def write_json(path,value):
     temporary.replace(path)
 
 
+def open_download(url, timeout=45):
+    for attempt in range(3):
+        try:
+            return urllib.request.urlopen(urllib.request.Request(url,headers={'User-Agent':'LMTStudioV3-Windows/3.1'}),timeout=timeout)
+        except OSError:
+            if attempt==2:raise
+            time.sleep(2**attempt)
+
+
 def download(url,path,notify):
     partial=path.with_suffix('.part')
     try:
-        with urllib.request.urlopen(url,timeout=45) as response,partial.open('wb') as output:
+        with open_download(url) as response,partial.open('wb') as output:
             total=int(response.headers.get('Content-Length','0'));size=0
             while True:
                 chunk=response.read(1024*1024)
@@ -53,10 +63,8 @@ def ffmpeg_setup(notify):
             if result.returncode==0 and ' subtitles ' in result.stdout:return folder
         except (OSError,subprocess.TimeoutExpired):pass
     archive=folder/'ffmpeg.zip'
-    notify('Đang kiểm tra gói FFmpeg từ gyan.dev…')
-    with urllib.request.urlopen(FFMPEG_URL+'.sha256',timeout=30) as response:
-        digest=response.read(4096).decode().split()[0].lower()
-    if len(digest)!=64 or any(c not in '0123456789abcdef' for c in digest):raise RuntimeError('Không đọc được mã kiểm tra FFmpeg.')
+    notify('Đang kiểm tra FFmpeg từ bản phát hành chính thức Gyan trên GitHub…')
+    digest=FFMPEG_SHA256
     download(FFMPEG_URL,archive,notify)
     with archive.open('rb') as handle:
         actual=hashlib.file_digest(handle,'sha256').hexdigest()
