@@ -55,13 +55,6 @@ const languages = [
   "Tiếng Nhật",
   "Tiếng Hàn"
 ].map(value => ({ label: value, value }));
-const styles = [
-  { label: "Không chọn phong cách", value: "Không áp đặt phong cách hình ảnh cụ thể; bám nội dung gốc và giữ nhân vật, bối cảnh nhất quán." },
-  ...["Hoạt hình 2D", "Hoạt hình 2D vẽ tay", "Hoạt hình 2D điện ảnh, ánh sáng ấm", "Hoạt hình 3D", "Hoạt hình 3D bán hiện thực", "Anime 2D", "Manga đen trắng", "Truyện tranh màu",
-    "Người thật / live action", "Điện ảnh hiện thực", "Phim tài liệu", "Chân dung điện ảnh", "Minh họa tối giản", "Minh họa sách thiếu nhi", "Tranh màu nước", "Tranh sơn dầu",
-    "Tranh thủy mặc", "Tranh dân gian Việt Nam", "Cắt giấy nhiều lớp", "Stop motion đất sét", "Pixel art", "Low poly 3D", "Isometric 3D", "Motion graphics", "Vẽ bảng trắng",
-    "Cổ trang Việt Nam", "Cổ trang Trung Hoa", "Fantasy kỳ ảo", "Khoa học viễn tưởng", "Cyberpunk", "Film noir", "Retro / vintage"].map(value => ({ label: value, value }))
-];
 const active = (job: Job) => ["queued", "running", "retry_wait"].includes(job.status);
 const jobNames: Record<string, string> = { full: "Dịch lời kể và SEO", translation: "Dịch lời kể và SEO", seo: "Dịch tiêu đề, mô tả và tạo tag", forms: "Tạo form 8 giây", characters: "Tạo hồ sơ nhân vật", images: "Tạo ảnh tham chiếu" };
 const statusNames: Record<string, string> = { queued: "Đang chờ", running: "Đang xử lý", retry_wait: "Đang chờ thử lại", succeeded: "Hoàn thành", completed: "Hoàn thành", failed: "Có lỗi", cancelled: "Đã hủy", draft: "Bản nháp", ready: "Sẵn sàng", processing: "Đang xử lý", interrupted: "Đã gián đoạn" };
@@ -275,7 +268,6 @@ export function Studio({ email }: { email: string }) {
             setNotice("Đã chọn ngôn ngữ. Khi link YouTube hợp lệ và worker kết nối, app tự dịch lời kể và YouTube SEO.");
           }} />
           <label>Link YouTube<input disabled={busy} value={str(draft.url)} onChange={e => change("url", e.target.value)} placeholder="https://www.youtube.com/watch?v=…" /></label>
-          <ChoiceField key={`${selected.id}:style`} label="Phong cách" options={styles} value={typeof draft.style === "string" ? draft.style : "Hoạt hình 2D"} disabled={busy} maxLength={500} onChange={value => change("style", value)} />
         </div>
         <Thumbnail url={str(draft.url)} download={() => void action(() => download("jpg"))} />
         <p className="muted">Nhập link YouTube rồi chọn ngôn ngữ đích: app tự lấy phụ đề và dịch thành lời kể cùng YouTube SEO. Bạn không cần nhập tiêu đề, mô tả hoặc phụ đề nguồn.</p>
