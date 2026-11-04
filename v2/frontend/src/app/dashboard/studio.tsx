@@ -277,7 +277,7 @@ export function Studio({ email }: { email: string }) {
       {selected && tab === "Lời kể" && <section className="editor-panel">{stale("translation_stale")}<h2>Bản dịch cho giọng đọc AI</h2><p className="muted">Một người dẫn chuyện, lời kể gián tiếp, số viết bằng chữ theo ngôn ngữ đích.</p>
         <textarea disabled={busy} rows={22} value={str(draft.translated)} onChange={e => change("translated", e.target.value)} />
         <div className="toolbar">{generate("Dịch lại và cập nhật SEO", "translation")}<button className="ghost-button" onClick={() => void action(async () => { await navigator.clipboard.writeText(str(draft.translated)); setNotice("Đã copy lời kể."); })}>Copy lời kể</button></div></section>}
-      {selected && tab === "YouTube SEO" && <section className="editor-panel">{stale("seo_stale")}<p className="muted">Tiêu đề và mô tả được dịch sát nghĩa khi có bản gốc. Nếu không có mô tả gốc, mô tả sẽ được viết theo bản dịch lời kể. Có thể thêm emoji phù hợp để dễ đọc và hấp dẫn hơn; thẻ tag được tối ưu riêng.</p>{!str(draft.title).trim() && <p className="muted">Chưa có tiêu đề gốc: tiêu đề sẽ được tạo theo nội dung câu chuyện.</p>}{!str(draft.description).trim() && <p className="muted">Không có mô tả gốc: tự tạo mô tả theo bản dịch lời kể, kèm emoji phù hợp.</p>}<h2>Tiêu đề video</h2><pre>{str(draft.new_title) || "Tiêu đề chưa được tạo"}</pre><p className="muted">{str(draft.new_title).length}/100 ký tự</p><h2>Mô tả video</h2><pre>{str(draft.new_description) || "Mô tả chưa được tạo"}</pre><h2>Thẻ tag</h2><pre>{str(draft.seo_tags)}</pre><div className="toolbar">{(["new_title", "new_description", "seo_tags"] as const).map(field => <button disabled={busy} key={field} className="ghost-button" onClick={() => { const value = window.prompt(field === "new_title" ? "Tiêu đề mới (tối đa 100 ký tự)" : field === "new_description" ? "Mô tả mới" : "Thẻ tag", str(draft[field])); if (value !== null) void action(() => editArtifact(field, value)); }}>Sửa {field === "new_title" ? "tiêu đề" : field === "new_description" ? "mô tả" : "tag"}</button>)}</div>{generate("Dịch lại tiêu đề, mô tả và tạo tag", "seo")}</section>}
+      {selected && tab === "YouTube SEO" && <section className="editor-panel">{stale("seo_stale")}<p className="muted">Tiêu đề và mô tả được dịch sát nghĩa khi có bản gốc. Nếu không có mô tả gốc, mô tả sẽ được viết theo bản dịch lời kể. Có thể thêm emoji phù hợp để dễ đọc và hấp dẫn hơn; thẻ tag được tối ưu riêng.</p>{!str(draft.title).trim() && <p className="muted">Chưa có tiêu đề gốc: tiêu đề sẽ được tạo theo nội dung câu chuyện.</p>}{!str(draft.description).trim() && <p className="muted">Không có mô tả gốc: tự tạo mô tả theo bản dịch lời kể, kèm emoji phù hợp.</p>}<div className="toolbar"><h2>Tiêu đề video</h2><CopyButton key={`${selected.id}:title`} text={str(draft.new_title)} label="tiêu đề" /></div><pre>{str(draft.new_title) || "Tiêu đề chưa được tạo"}</pre><p className="muted">{str(draft.new_title).length}/100 ký tự</p><div className="toolbar"><h2>Mô tả video</h2><CopyButton key={`${selected.id}:description`} text={str(draft.new_description)} label="mô tả" /></div><pre>{str(draft.new_description) || "Mô tả chưa được tạo"}</pre><div className="toolbar"><h2>Thẻ tag</h2><CopyButton key={`${selected.id}:tags`} text={str(draft.seo_tags)} label="thẻ tag" /></div><pre>{str(draft.seo_tags)}</pre><div className="toolbar">{(["new_title", "new_description", "seo_tags"] as const).map(field => <button disabled={busy} key={field} className="ghost-button" onClick={() => { const value = window.prompt(field === "new_title" ? "Tiêu đề mới (tối đa 100 ký tự)" : field === "new_description" ? "Mô tả mới" : "Thẻ tag", str(draft[field])); if (value !== null) void action(() => editArtifact(field, value)); }}>Sửa {field === "new_title" ? "tiêu đề" : field === "new_description" ? "mô tả" : "tag"}</button>)}</div>{generate("Dịch lại tiêu đề, mô tả và tạo tag", "seo")}</section>}
       {tab === "Tác vụ" && <section className="editor-panel"><h2>Hàng đợi trên máy chủ</h2><p className="muted">Checkpoint giữ lại khi worker khởi động lại. Tiếp tục job lỗi dùng đầu vào ban đầu; sửa nội dung rồi tạo job mới nếu muốn thay đổi.</p>{jobs.length === 0 && <p className="muted">Chưa có tác vụ.</p>}{jobs.map(job => <article className="job-card" key={job.id}><div className="toolbar"><strong>{sessions.find(s => s.id === job.session_id)?.name || "Phiên đã xóa"} · {jobNames[job.job_type] || job.job_type}</strong><span className="status-pill">{statusNames[job.status] || job.status} · lần {job.attempts}</span></div><p>{job.stage}</p><progress aria-label={`Tiến trình ${jobNames[job.job_type] || job.job_type}`} value={jobPercent(job)} max={100} /><small>{jobPercent(job)}% · {job.id.slice(0, 8)}</small>{job.error && <p className="error-message">{job.error}</p>}<div className="toolbar">{active(job) && <button disabled={busy} className="ghost-button" onClick={() => void action(async () => { await api(`/jobs/${job.id}/cancel`, "POST"); await refresh(); })}>Hủy tác vụ</button>}{job.status === "failed" && job.session_id && <button disabled={busy || !healthy} className="secondary-button" onClick={() => void action(async () => { await api(`/jobs/${job.id}/retry`, "POST"); await refresh(); })}>Tiếp tục từ checkpoint</button>}</div></article>)}</section>}
       {tab === "Cấu hình API" && <section className="editor-panel"><h2>Nhà cung cấp AI</h2><p className="muted">API key đã lưu được giữ trên máy chủ. Để trống ô key sẽ giữ key hiện tại; dùng “Xóa key” khi cần.</p>
         <label>Nền tảng<select disabled={busy} value={provider} onChange={e => { setPref("api_provider", e.target.value); setModels([]); }}>{Object.keys(providers).map(p => <option key={p}>{p}</option>)}</select></label>
@@ -305,6 +305,28 @@ function ChoiceField({ label, options, value, disabled, maxLength, onChange }: {
   }}>{options.map(option => <option key={option.value} value={option.value}>{option.label}</option>)}<option value="__custom__">Khác — tự nhập…</option></select></label>
     {isCustom && <label>{label} tùy chỉnh<input disabled={disabled} maxLength={maxLength} value={value} onChange={e => onChange(e.target.value)} placeholder={`Nhập ${label.toLowerCase()}…`} /></label>}
   </div>;
+}
+
+function CopyButton({ text, label }: { text: string; label: string }) {
+  const [state, setState] = useState<"idle" | "copying" | "copied" | "error">("idle");
+  const latest = useRef(text);
+  latest.current = text;
+  useEffect(() => { setState("idle"); }, [text]);
+  async function copy() {
+    setState("copying");
+    try {
+      await navigator.clipboard.writeText(text);
+      if (latest.current === text) setState("copied");
+    } catch {
+      if (latest.current === text) setState("error");
+    }
+  }
+  return <div><button type="button" className="ghost-button" disabled={!text.trim() || state === "copying"}
+    aria-label={`Copy ${label}`} onClick={() => void copy()}>
+    {state === "copied" ? "✓ Đã copy" : state === "copying" ? "Đang copy…" : `Copy ${label}`}
+  </button><span role="status" aria-live="polite" className={state === "error" ? "error-message" : "status-good"}>
+    {state === "copied" ? ` Đã copy ${label}` : state === "error" ? " Không copy được. Hãy cho phép trình duyệt sao chép và thử lại." : ""}
+  </span></div>;
 }
 
 function Thumbnail({ url, download }: { url: string; download: () => void }) {
