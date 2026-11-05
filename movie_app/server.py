@@ -21,12 +21,20 @@ class Handler(BaseHTTPRequestHandler):
         if self.path.split('?')[0] not in {'/','/index.html'}: self.send_error(404);return
         raw=(ROOT/'index.html').read_bytes();self.send_response(200);self.send_header('Content-Type','text/html; charset=utf-8');self.end_headers();self.wfile.write(raw)
     def do_POST(self):
-        if self.path!='/api/youtube': self.send_error(404);return
+        if self.path not in {'/api/youtube','/api/ai'}: self.send_error(404);return
         if self.headers.get('Origin') not in {None,'http://127.0.0.1:8505','http://localhost:8505'}: self.respond(403,{'error':'Nguồn yêu cầu không hợp lệ.'});return
         try:
             size=int(self.headers.get('Content-Length','0'))
-            if not 0<size<10000: raise ValueError('Yêu cầu không hợp lệ.')
-            data=json.loads(self.rfile.read(size));vid=video_id(data.get('url',''))
+            if not 0<size<1500000: raise ValueError('Yêu cầu không hợp lệ.')
+            data=json.loads(self.rfile.read(size))
+            if self.path=='/api/ai':
+                from ai import generate
+                try: self.respond(200,generate(data))
+                except Exception as e:
+                    # Provider responses can contain request metadata: never reflect secrets.
+                    self.respond(422,{'error':'Bước AI chưa hoàn thành. Kiểm tra URL, Model ID, khóa, hạn mức hoặc định dạng JSON. Các phần đã nhận vẫn được giữ.'})
+                return
+            vid=video_id(data.get('url',''))
         except (ValueError,TypeError) as e: self.respond(400,{'error':str(e)});return
         try:
             from youtube_transcript_api import YouTubeTranscriptApi

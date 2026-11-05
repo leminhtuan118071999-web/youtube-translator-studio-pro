@@ -19,3 +19,8 @@ Dữ liệu đang chỉnh ở trong phiên trình duyệt. Tải JSON trước k
 
 ## Kiểm tra
 `python3 -m unittest movie_app.test_server`
+
+## Tự động nhân vật và đoạn phim
+Mở Cấu hình AI, nhập URL API tương thích OpenAI, Model ID và key. Nguồn sẽ gửi tới nhà cung cấp đó; có thể phát sinh phí. Khóa chỉ ở phiên, không lưu JSON.
+Bấm Nhận diện nhân vật từ nguồn, kiểm tra tên/thiết kế, rồi Tự tạo đoạn phim. Nguồn được phân tích theo từng phần đầy đủ, sau đó lập dàn ý và tạo tối đa 150 đoạn x 8 giây. Không ép đủ 20 phút. Ngoại hình và giọng là đề xuất, không phải nhận diện hình ảnh. Thoại được chuyển thể, không cam kết trích nguyên văn. Kết quả cần duyệt trước khi tạo video.
+Checkpoint giữ trong dự án, tải JSON trước khi đóng. Thử lại cùng nguồn và ngôn ngữ sẽ dùng lại các phần đã nhận; đổi nguồn hoặc ngôn ngữ sẽ phân tích lại. Chưa tự tạo ảnh/clip. Kiểm tra tự động JSON và dữ liệu không bảo đảm AI đúng toàn bộ nội dung.
