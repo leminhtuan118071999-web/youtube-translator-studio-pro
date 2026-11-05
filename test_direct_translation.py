@@ -2,7 +2,7 @@ import json
 import unittest
 from unittest.mock import patch
 from background_jobs import JobProgress, run_full_job
-from direct_translation import translate_direct
+from direct_translation import translate_direct, parse_translation, END_MARKER
 from youtube_metadata import generate_youtube_metadata
 
 class DirectTranslationTests(unittest.TestCase):
@@ -27,6 +27,33 @@ class DirectTranslationTests(unittest.TestCase):
         with self.assertRaises(ValueError):
             translate_direct('Original text','English',lambda _:json.dumps(dict(text='partial',seo_context='brief',complete=False)),progress)
         self.assertNotIn('optimization_review_json',progress.partial_result())
+
+    def test_plain_translation_no_json_required(self):
+        p=JobProgress();calls=[]
+        result=translate_direct('Anna said hello.','Vietnamese',lambda prompt:(calls.append(prompt) or 'Anna nói xin chào.\n'+END_MARKER),p)
+        self.assertEqual(result,'Anna nói xin chào.');self.assertEqual(len(calls),1)
+        self.assertNotIn('Return ONLY JSON',calls[0])
+
+    def test_wrong_shape_repaired_once_then_kept(self):
+        p=JobProgress();calls=[]
+        def call(prompt):
+            calls.append(prompt)
+            return '{"title":"wrong output"}' if len(calls)==1 else 'Anna chào.\n'+END_MARKER
+        self.assertEqual(translate_direct('Anna greets.','Vietnamese',call,p),'Anna chào.')
+        self.assertEqual(len(calls),2)
+        self.assertTrue(calls[1].startswith('DIRECT_TRANSLATION_FORMAT.'))
+
+    def test_missing_end_marker_is_not_silently_accepted(self):
+        with self.assertRaises(ValueError):parse_translation('Một phần bản dịch bị cắt')
+        with self.assertRaises(ValueError):parse_translation('{"title":"SEO"}')
+
+    def test_pending_candidate_cannot_cross_language(self):
+        p=JobProgress()
+        from faithful_summary import source_hash
+        p.publish('optimization_work_json',json.dumps(dict(method='direct_translation_v1',source_sha256=source_hash('Source'),target_language='English',parts=[],seo_contexts=[],pending_index=0,pending_raw='Old text\n'+END_MARKER)))
+        calls=[]
+        result=translate_direct('Source','Vietnamese',lambda prompt:(calls.append(prompt) or 'Nguồn\n'+END_MARKER),p)
+        self.assertTrue(calls);self.assertEqual(result,'Nguồn')
 
     def test_fast_seo_single_call_preserves_validation(self):
         prompts=[]
