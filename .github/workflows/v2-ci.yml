@@ -74,4 +74,4 @@ jobs:
       - run: pytest -q
       - name: Regression tests for shared production engines
         working-directory: .
-        run: python -m unittest -q test_processing_metrics test_narration_auto_repair test_narration_translation test_narration_numbers test_youtube_metadata test_persistent_store test_durable_queue test_character_profiles test_character_identity test_wardrobe_lock test_speech_roles
+        run: python -m unittest -q test_v2_text_pipeline test_direct_translation test_processing_metrics test_narration_auto_repair test_narration_translation test_narration_numbers test_youtube_metadata test_persistent_store test_durable_queue test_character_profiles test_character_identity test_wardrobe_lock test_speech_roles

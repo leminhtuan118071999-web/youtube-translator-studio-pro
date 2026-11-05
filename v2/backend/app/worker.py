@@ -192,23 +192,6 @@ def finish(job, progress, result):
     return True
 
 
-def image_sink(job):
-    from .engine import ROOT
-    from character_images import filename_part
-    import requests
-    settings = get_settings()
-    if not settings.supabase_service_role_key:
-        return None
-    def save(name, content):
-        path = f"{job['user_id']}/{job['session_id']}/{filename_part(name)}-{job['id']}.png"
-        r = requests.post(settings.supabase_url.rstrip('/')+'/storage/v1/object/lmt-character-images/'+path,
-            headers={'apikey':settings.supabase_service_role_key,'Authorization':'Bearer '+settings.supabase_service_role_key,
-                     'Content-Type':'image/png','x-upsert':'true'}, data=content, timeout=120)
-        if r.status_code not in (200,201):
-            raise RuntimeError(f'Không lưu được ảnh (HTTP {r.status_code}).')
-        return path
-    return save
-
 
 def process(job):
     keys = {}
@@ -221,7 +204,7 @@ def process(job):
         progress.keys = keys
         from .engine import execute
         snapshot = dict(job['input'], **keys, resume_fields=progress.partial_result())
-        result = execute(job['job_type'], snapshot, progress, image_sink(job))
+        result = execute(job['job_type'], snapshot, progress)
         if not STOP.is_set() and not progress.lost.is_set():
             finish(job, progress, result)
     except LeaseLost:

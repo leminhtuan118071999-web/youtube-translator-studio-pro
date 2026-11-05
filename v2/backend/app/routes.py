@@ -1,7 +1,5 @@
 import json
 from uuid import UUID
-from urllib.parse import quote
-import httpx
 from fastapi import APIRouter, Depends, HTTPException, Response
 from psycopg.types.json import Jsonb
 from .auth import require_user, AuthenticatedUser
@@ -157,7 +155,8 @@ def _selected_checkpoint(conn, owner, sid, revision):
         case when j.job_type in ('full','translation')
             and j.result->>'translation_complete'='true'
             then j.result->>'translated' else null end as translated,
-        j.result->'processing_metrics' as metrics
+        j.result->>'new_title' as new_title, j.result->>'new_description' as new_description,
+        j.result->>'seo_tags' as seo_tags, j.result->'processing_metrics' as metrics
         from public.lmt_v2_jobs j
         where j.id=(select id from public.lmt_v2_jobs where user_id=%s and session_id=%s
                     order by created_at desc,id desc limit 1)
@@ -185,96 +184,18 @@ def dashboard(sid: UUID | None = None, revision: int = -1,
                 selected = _studio_session(store.owned_session(conn, user.id, sid))
         return dict(sessions=sessions, jobs=queue, healthy=worker['healthy'], selected=selected, checkpoint=checkpoint)
 
-@router.post('/migration/legacy/import')
-def migrate(user: AuthenticatedUser = Depends(require_user)):
-    return store.import_legacy(user.id)
-
 @router.get('/sessions/{sid}/export')
 def export(sid: UUID, format: str = 'json', user: AuthenticatedUser = Depends(require_user)):
     with connect() as conn:
         session = store.owned_session(conn, user.id, sid)
     if format == 'txt':
-        from .engine import continuous_combined_forms_text
-        try:
-            text = continuous_combined_forms_text(json.loads(session['data'].get('video_forms') or '{}'))
-        except (ValueError, KeyError, TypeError):
-            raise HTTPException(422, 'Phiên chưa có form để xuất.') from None
-        content, media, ext = text, 'text/plain; charset=utf-8', 'txt'
-    else:
+        content=str(session['data'].get('translated') or '')
+        if not content.strip():raise HTTPException(422,'Phiên chưa có bản dịch.')
+        media, ext='text/plain; charset=utf-8','txt'
+    elif format=='json':
         content, media, ext = json.dumps(session, ensure_ascii=False, default=str, indent=2), 'application/json', 'json'
+    else:raise HTTPException(422,'Chỉ xuất TXT bản dịch hoặc JSON phiên.')
     return Response(content, media_type=media, headers={'Content-Disposition': f'attachment; filename="lmt-{sid}.{ext}"'})
-
-@router.get('/sessions/{sid}/images')
-async def images(sid: UUID, user: AuthenticatedUser = Depends(require_user)):
-    with connect() as conn:
-        row = store.owned_session(conn, user.id, sid)
-    try:
-        manifest = json.loads(row['data'].get('character_images_manifest') or '[]')
-    except (ValueError, TypeError):
-        raise HTTPException(422, 'Manifest ảnh chưa hợp lệ.') from None
-    settings = get_settings()
-    out = []
-    async with httpx.AsyncClient(timeout=20) as client:
-        for item in manifest[:10]:
-            path = item.get('path') or item.get('storage_path') or ''
-            # The backend cannot sign arbitrary paths, even for the same user.
-            parts = path.split('/')
-            expected = {str(sid), row.get('legacy_session_id')}
-            if len(parts) != 3 or parts[0] != user.id or parts[1] not in expected or any(p in ('.','..','') for p in parts):
-                continue
-            response = await client.post(settings.supabase_url.rstrip('/') + '/storage/v1/object/sign/lmt-character-images/' + quote(path, safe='/'),
-                headers={'apikey': settings.supabase_publishable_key, 'Authorization': 'Bearer ' + user.access_token}, json={'expiresIn': 300})
-            if response.is_success:
-                signed = response.json().get('signedURL', '')
-                if signed.startswith('/'):
-                    out.append(dict(name=item.get('name', parts[-1]), url=settings.supabase_url.rstrip('/') + '/storage/v1' + signed))
-    return out
-
-@router.get('/sessions/{sid}/thumbnail')
-async def thumbnail(sid: UUID, user: AuthenticatedUser = Depends(require_user)):
-    from .engine import ROOT
-    from background_jobs import youtube_id
-    with connect() as conn:
-        row = store.owned_session(conn, user.id, sid)
-    vid = youtube_id(row['data'].get('url', ''))
-    if not vid:
-        raise HTTPException(422, 'Phiên chưa có link YouTube hợp lệ.')
-    async with httpx.AsyncClient(timeout=12) as client:
-        for quality in ('maxresdefault','sddefault','hqdefault'):
-            r = await client.get(f'https://i.ytimg.com/vi/{vid}/{quality}.jpg')
-            if r.status_code == 200 and r.headers.get('content-type','').startswith('image/') and len(r.content) <= 10_000_000:
-                return Response(r.content, media_type='image/jpeg', headers={'Content-Disposition':f'attachment; filename="{vid}.jpg"','Cache-Control':'private, max-age=3600'})
-    raise HTTPException(502, 'Chưa tải được thumbnail gốc.')
-
-@router.get('/sessions/{sid}/images.zip')
-async def images_zip(sid: UUID, user: AuthenticatedUser = Depends(require_user)):
-    from io import BytesIO
-    import zipfile
-    from .engine import ROOT
-    from character_images import filename_part
-    with connect() as conn:
-        row = store.owned_session(conn, user.id, sid)
-    try:
-        manifest = json.loads(row['data'].get('character_images_manifest') or '[]')
-    except (ValueError, TypeError):
-        raise HTTPException(422, 'Manifest ảnh chưa hợp lệ.') from None
-    if not manifest:
-        raise HTTPException(422, 'Chưa có ảnh đã lưu.')
-    settings = get_settings()
-    buffer = BytesIO()
-    async with httpx.AsyncClient(timeout=30) as client:
-        with zipfile.ZipFile(buffer, 'w', zipfile.ZIP_DEFLATED) as archive:
-            for index, item in enumerate(manifest[:10], 1):
-                path = item.get('path') or item.get('storage_path') or ''
-                parts = path.split('/')
-                if len(parts) != 3 or parts[0] != user.id or parts[1] not in {str(sid),row.get('legacy_session_id')} or any(p in ('.','..','') for p in parts):
-                    raise HTTPException(422, 'Đường dẫn ảnh không thuộc phiên.')
-                r = await client.get(settings.supabase_url.rstrip('/')+'/storage/v1/object/authenticated/lmt-character-images/'+quote(path,safe='/'),
-                    headers={'apikey':settings.supabase_publishable_key,'Authorization':'Bearer '+user.access_token})
-                if not r.is_success or len(r.content)>12*1024*1024 or not r.content.startswith(b'\x89PNG\r\n\x1a\n'):
-                    raise HTTPException(502, 'Không tải đủ ảnh; chưa tạo ZIP để tránh thiếu dữ liệu.')
-                archive.writestr(f'{index:02d}-{filename_part(item.get("name",parts[-1]))}.png',r.content)
-    return Response(buffer.getvalue(),media_type='application/zip',headers={'Content-Disposition':f'attachment; filename="lmt-{sid}-characters.zip"'})
 
 from .contracts import ArtifactEdit
 @router.put('/sessions/{sid}/artifact')
@@ -283,24 +204,10 @@ def edit_artifact(sid: UUID, body: ArtifactEdit, user: AuthenticatedUser = Depen
         row = store.owned_session(conn, user.id, sid, True)
         if row['revision'] != body.revision:
             raise HTTPException(409, 'Phiên đã thay đổi. Hãy tải lại trước khi sửa.')
-        if body.field == 'scene':
-            if not body.scene_number or not body.prompt_field:
-                raise HTTPException(422, 'Cần chọn cảnh và loại prompt.')
-            try:
-                plan = json.loads(row['data'].get('video_forms') or '{}')
-                scene = next(s for s in plan['scenes'] if s['number']==body.scene_number)
-            except (ValueError, KeyError, TypeError, StopIteration):
-                raise HTTPException(422, 'Không tìm thấy cảnh.') from None
-            scene[body.prompt_field] = body.value
-            fields = dict(video_forms=json.dumps(plan, ensure_ascii=False))
-        else:
-            if body.field == 'new_title' and len(body.value)>100:
-                raise HTTPException(422, 'Tiêu đề YouTube tối đa 100 ký tự.')
-            fields = {body.field: body.value}
-            if body.field == 'character_bible':
-                fields.update(character_bible_stale=True,video_forms_stale=True,character_images_stale=True)
-            else:
-                fields['metadata']='\n\n'.join(body.value if k==body.field else str(row['data'].get(k,'')) for k in ('new_title','new_description','seo_tags'))
+        if body.field == 'new_title' and len(body.value)>100:
+            raise HTTPException(422, 'Tiêu đề YouTube tối đa 100 ký tự.')
+        fields={body.field:body.value}
+        fields['metadata']='\n\n'.join(body.value if k==body.field else str(row['data'].get(k,'')) for k in ('new_title','new_description','seo_tags'))
         store.cancel_active(conn,user.id,sid)
         return conn.execute('''update public.lmt_v2_sessions set data=data || %s,revision=revision+1,status='draft',updated_at=now()
             where id=%s and user_id=%s returning *''',(Jsonb(fields),sid,user.id)).fetchone()

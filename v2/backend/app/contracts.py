@@ -1,7 +1,7 @@
 from typing import Literal
 from uuid import UUID
 from pydantic import BaseModel, Field, ConfigDict
-Kind = Literal['full', 'translation', 'seo', 'characters', 'forms', 'images']
+Kind = Literal['full', 'translation', 'seo']
 
 class SessionInput(BaseModel):
     model_config = ConfigDict(extra='forbid')
@@ -32,7 +32,5 @@ class SettingsInput(BaseModel):
 class ArtifactEdit(BaseModel):
     model_config = ConfigDict(extra='forbid')
     revision: int = Field(ge=0)
-    field: Literal['new_title','new_description','seo_tags','character_bible','scene']
+    field: Literal['new_title','new_description','seo_tags']
     value: str = Field(default='', max_length=100000)
-    scene_number: int | None = Field(default=None, ge=1, le=240)
-    prompt_field: Literal['image_prompt','visual_prompt','transition_to_next'] | None = None

@@ -146,6 +146,7 @@ def import_legacy(owner):
 
 def enqueue(owner, sid, body):
     from .engine import snapshot_for
+    if body.kind not in ('full','translation','seo'):raise HTTPException(422,'Chức năng này đã bỏ khỏi V2.')
     with connect() as conn:
         session = owned_session(conn, owner, sid, True)
         prior = conn.execute(f'select {JOB_PUBLIC} from public.lmt_v2_jobs where user_id=%s and request_id=%s', (owner, body.request_id)).fetchone()
@@ -161,30 +162,16 @@ def enqueue(owner, sid, body):
         if not conn.execute("select name from public.lmt_v2_worker_health where last_seen > now()-interval '150 seconds' limit 1").fetchone():
             raise HTTPException(503, 'Worker độc lập chưa sẵn sàng. Chưa giao tác vụ hoặc gọi API tính phí.')
         data = dict(session['data'])
-        if body.kind not in ('full', 'translation') and data.get('translation_stale'):
-            raise HTTPException(422, 'Nội dung gốc/ngôn ngữ đã đổi; hãy dịch lại trước.')
-        if body.kind not in ('full', 'translation') and not data.get('translated', '').strip():
-            raise HTTPException(422, 'Cần bản dịch trước khi tạo nội dung này.')
         config = config_values(conn, owner)
         try:
             snapshot = snapshot_for({k: v for k, v in data.items() if k in {
                 'source','url','title','description','language','style','translated',
-                'duration_seconds','character_profile_json','character_bible','video_forms',
-                'repair_memory_json','wardrobe_lock_enabled'}}, config)
+                'duration_seconds'}}, config)
         except ValueError as exc:
             raise HTTPException(422, str(exc)) from None
-        if body.kind == 'images' and not (config.get('image_api_key_input') and get_settings().supabase_service_role_key):
-            raise HTTPException(422, 'Chưa cấu hình API ảnh hoặc Storage trên máy chủ.')
         snapshot.setdefault('language', 'Tiếng Việt')
-        snapshot.setdefault('style', 'Hoạt hình 2D')
         keys = {key: snapshot.pop(key) for key in ('api_key','supadata_key','image_api_key')}
         snapshot['uploaded_source'] = data.get('source', '')
-        # New jobs must not reuse partial plans from a different input/style.
-        if data.get('video_forms_stale'):
-            snapshot.pop('video_forms', None)
-        if data.get('character_bible_stale'):
-            snapshot.pop('character_profile_json', None)
-            snapshot.pop('character_bible', None)
         conn.execute("update public.lmt_v2_sessions set status='queued',updated_at=now() where id=%s and user_id=%s", (sid, owner))
         return conn.execute(f'''insert into public.lmt_v2_jobs
             (user_id,session_id,job_type,input,encrypted_keys,input_revision,request_id)
@@ -199,6 +186,7 @@ def retry_job(owner, jid):
             raise HTTPException(404, 'Không tìm thấy tác vụ.')
         session = owned_session(conn, owner, prior['session_id'], True)
         job = conn.execute('select * from public.lmt_v2_jobs where id=%s and user_id=%s for update', (jid, owner)).fetchone()
+        if job['job_type'] not in ('full','translation','seo'):raise HTTPException(422,'Chức năng này đã bỏ khỏi V2.')
         if job['status'] != 'failed' or job['input_revision'] != session['revision']:
             raise HTTPException(409, 'Chỉ tiếp tục job lỗi khi đầu vào chưa thay đổi; nếu đã sửa hãy tạo job mới.')
         if conn.execute('select id from public.lmt_v2_jobs where user_id=%s and session_id=%s and status=any(%s)',

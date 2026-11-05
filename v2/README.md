@@ -1,103 +1,25 @@
-# LMT Studio Pro V2
+# LMT Studio Pro V2 — Dịch văn bản và SEO
 
-Next.js workspace, authenticated FastAPI API, and independent PostgreSQL worker.
-V2 uses direct full-text translation and fast SEO; legacy character and video engines remain compatible. V1 source and Supabase data remain available for rollback.
+## Chức năng hiện tại
+- Lấy phụ đề gốc từ YouTube hoặc dùng toàn bộ văn bản nhập sẵn.
+- Dịch trực tiếp sang ngôn ngữ đích, giữ lời thoại, tên và số liệu; kết quả gọi là Bản dịch.
+- Tiêu đề, mô tả và tag chạy song song, lấy nguồn gốc làm ngữ cảnh, không chờ bản dịch.
+- Kết quả mỗi nhánh lưu/hiện độc lập. Checkpoint cho phép tiếp tục phần lỗi, không gọi lại nhánh đã xong.
+- Giữ AI33, cấu hình API, danh sách phiên, copy riêng và xuất TXT bản dịch/JSON phiên.
+- Không còn tác vụ tạo nhân vật, ảnh, form/video hoặc nhập dữ liệu V1 trong API và bộ xử lý V2.
+- Dữ liệu lịch sử vẫn giữ, không xóa hàng loạt dữ liệu người dùng.
 
-## Implemented
+## Chạy
+Giữ nguyên cấu hình kết nối và khóa mã hóa đã có. Không tạo lại khóa cho tài khoản cũ.
+- API: `uvicorn app.main:app --app-dir v2/backend --host 0.0.0.0 --port 8000`.
+- Worker Mac: `python3 v2/start_local_worker.py` (hoặc LaunchAgent đã cài).
+- Web: trong `v2/frontend`, chạy `npm ci`, `npm run build`, `npm start`.
+Cập nhật cả web/API và worker để dùng cùng luồng mới. Máy worker phải bật và có mạng.
 
-- Existing Supabase accounts, sign-in, registration and password recovery.
-- Owner-scoped session CRUD, search, export and optimistic revision checks.
-- Encrypted provider settings, model discovery and connection check. Existing
-  keys are never returned to the browser.
-- Original YouTube thumbnail preview/download and existing subtitle providers.
-  No additional transcription or third-party service was introduced.
-- Direct full-source translation preserves dialogue, names and numeric notation.
-  Translation and title/description/tags share one action; no narrator rewrite or TTS number spelling.
-  Each request self-checks; no independent per-part review in the fast V2 path.
-- Eight-second forms with reference image/video prompts, English production
-  directions, target-language narration/subtitles, wardrobe/identity checks and
-  repair memory. Groups of 99 support copy, TXT and JSON export. Prompts are
-  editable without changing locked narration/timing.
-- Character profiles, private persistent reference images and per-session ZIP.
-- Durable jobs with encrypted credentials, checkpoints, lease fencing, bounded
-  retries, manual resume, cancellation and independent worker heartbeats.
-- Atomic V1 import with raw reversible snapshots, checksums and idempotent
-  session IDs. Re-running import preserves existing V2 edits/settings.
-- AI33 iframe and external-link fallback.
+## Giới hạn
+Hai nhánh có thể chạy đồng thời nhưng nhà cung cấp có thể giới hạn/tuần tự hóa API. Tự kiểm tra trong cùng lượt là chế độ ưu tiên tốc độ, không cam kết đúng tuyệt đối. Văn bản dài chia phần không chồng lặp và có thể cần thêm lượt tạo ngữ cảnh SEO. Không tự cắt nguồn vượt 350.000 ký tự. Chỉ dùng kết quả hoàn thành đúng phiên/revision để tránh ghi đè bản người dùng sửa.
 
-## Run
-
-1. Apply `backend/migrations/001_v2_core.sql` then `002_v2_runtime.sql` to the same
-   Supabase project, after reviewing a successful V1 dry run. Do not change V1
-   tables, Auth users or image paths.
-2. Configure the backend/worker with the **exact V1 Fernet key** and the same
-   private PostgreSQL DSN. See `backend/.env.example`.
-3. API from repository root:
-   `uvicorn app.main:app --app-dir v2/backend --host 0.0.0.0 --port 8000`.
-4. Worker from `v2/backend`: `python -m app.worker`.
-5. Frontend from `v2/frontend`: `npm ci`, `npm run build`, `npm start`.
-6. Sign in, inspect/import V1 data, then configure or test the saved provider.
-
-The API and worker must have the **whole repository** available because the
-engines live at its root. The frontend builds independently from its directory.
-
-## Free hosting with a local worker
-
-Keep the existing frontend/API on Render Free and run `python3 v2/start_local_worker.py`
-on a powered-on personal computer. On macOS, `Start-LMT-Worker.command` provides
-a Finder launcher and the worker prevents idle system sleep while it runs.
-See [Vietnamese setup guide](docs/FREE_LOCAL_WORKER.md). No paid Render worker
-is created by this option. The computer must remain awake and online.
-
-## Deployment and cutover
-
-`v2/render.yaml` defines the frontend, API and independent worker. It uses paid
-always-on `0.5c-512mb` service plans; inspect the current Render quotation before applying.
-No service is created merely by committing this file. Existing Streamlit hosting
-does not switch to Next.js automatically when this code is merged.
-
-See [deployment](docs/DEPLOYMENT.md), [migration](docs/MIGRATION_RUNBOOK.md) and
-[verification](docs/VERIFICATION.md). Production cutover requires real account,
-provider and worker smoke tests plus session/image reconciliation. Do not retire
-V1 until those gates are verified.
-
-## Limits
-
-Audio metadata provides estimated timing, not word-level forced alignment. The
-worker runs through browser/Streamlit sleep only while its independent hosting
-is available. A provider request in flight may finish after cancellation. Lease
-fencing protects database results; it cannot guarantee exactly-once billing by
-an external provider after a network interruption. Reference prompts cannot
-promise identical characters in external video tools.
-
-V1 images held only in Streamlit process memory must be exported before that
-process is stopped; they cannot be reconstructed by importing database JSON.
-
-### Nhập nội dung từ YouTube
-
-Mục Nội dung chỉ cần tên phiên, link YouTube, ngôn ngữ đích và phong cách. Các ô tiêu đề gốc, mô tả gốc, nội dung gốc/phụ đề và nhập TXT/SRT đã được bỏ khỏi giao diện; dữ liệu nguồn của phiên cũ vẫn được giữ bên trong.
-
-Nhập link rồi đổi ngôn ngữ đích sẽ tự giao tác vụ **Dịch lời kể và YouTube SEO** khi worker sẵn sàng. Lựa chọn được chờ ngắn để tránh gửi tác vụ cho từng lần đổi liên tiếp; không tự chạy khi chỉ mở lại phiên, và không tạo thêm tác vụ khi phiên đang xử lý. Có nút chạy/chạy lại khi cần. Đổi link xóa dữ liệu nguồn cũ trong bản nháp để không dịch nhầm video trước. Không có phụ đề khả dụng thì tác vụ báo lỗi thay vì tự viết nội dung video.
-
-Form 8 giây và nhân vật vẫn chạy riêng theo yêu cầu.
-
-### Tự sửa đoạn dịch chưa đạt
-
-Sau các lần sửa chi tiết, đoạn vẫn lỗi đối soát sẽ được tự chia nhỏ và dịch/kiểm tra tiếp, giữ ngữ cảnh trước–sau để xác định đúng người nói và người được hỏi. Những đoạn đã đạt được giữ trong checkpoint. Việc chia nhỏ có giới hạn; đoạn chưa đạt không được coi là hoàn tất hoặc bỏ qua.
-
-Với tác vụ đã lỗi trước khi cập nhật, khởi động lại worker bằng mã mới rồi chọn **Tác vụ → Tiếp tục từ checkpoint** cho đúng phiên, giữ nguyên đầu vào. Không bấm tạo bản dịch mới nếu muốn tiếp tục các phần đã đạt của tác vụ cũ.
-
-### Xóa tất cả phiên V2
-
-Thanh bên có **Xóa tất cả phiên**, yêu cầu xác nhận trước khi xóa cả phiên bị ẩn bởi tìm kiếm và nội dung chưa lưu. API `DELETE /v1/sessions` chỉ xóa phiên của tài khoản đã đăng nhập, hủy tác vụ liên quan và vô hiệu hóa lease trong cùng giao dịch. Cấu hình API, dữ liệu V1 và V3 được giữ. Ảnh lưu trữ được giữ theo chính sách hiện tại của thao tác xóa một phiên; yêu cầu AI đã gửi có thể vẫn tính phí cho tới khi worker nhận việc hủy. Cần triển khai cả backend và frontend mới để dùng nút này.
-
-### Giao diện gọn và cập nhật nhẹ
-
-Bỏ ô tìm phiên và các tab Form 8 giây, Nhân vật, Chuyển dữ liệu theo quy trình tập trung lời kể/SEO. Dữ liệu cũ vẫn lưu trên máy chủ. Giao diện dùng GET /v1/dashboard: một lần xác thực và một kết nối DB cho danh sách, tác vụ, worker và nội dung phiên nếu revision thay đổi. Không truyền form/hồ sơ/checkpoint lớn vào giao diện này. Bộ nhớ đệm mở lại phiên ngay rồi đối chiếu dữ liệu; bản đang sửa không bị polling ghi đè. Poll không chồng yêu cầu, 5 giây khi có tác vụ, 15 giây khi rảnh và dừng tải khi tab ẩn. Phản hồi đang xử lý hiện ngay; lưu trước khi giao tác vụ không còn đợi thêm một lượt tải toàn màn hình. Các thay đổi này giảm tải web, không bỏ kiểm tra dịch sát nghĩa. Gói Render Free vẫn có thời gian khởi động lại sau khi ngủ.
-
-### Khôi phục bước SEO
-
-Worker lưu seo_work_json gồm ngữ cảnh và bản SEO chưa duyệt, gắn với hash nội dung/tiêu đề/mô tả/ngôn ngữ. Tiếp tục cùng tác vụ dùng lại bản đó và vẫn kiểm tra sát nghĩa; thay đầu vào làm checkpoint không còn khớp. Sau một lần sửa JSON kiểm tra không thành công, dùng giao thức văn bản kết luận rõ ràng LMT_SEO_PASS hoặc LMT_SEO_FAIL: lý do, với cùng dữ liệu gốc. Không suy ra đạt từ phản hồi rỗng, thiếu trường hoặc văn bản mơ hồ. Thành công xóa checkpoint tạm. Cần cập nhật và khởi động lại worker Mac để dùng cơ chế này; triển khai giao diện không thay mã worker.
-
-## Dịch trực tiếp và SEO
-V2 mặc định dịch đầy đủ văn bản gốc sang ngôn ngữ đích, giữ thoại trực tiếp, tên và số liệu. Không chuyển thành lời kể, không viết số bằng chữ và không chạy vòng kiểm tra/sửa lời kể. Từng phần nguồn không chồng lặp, giữ checkpoint để tiếp tục. Mỗi phần dịch + ngữ cảnh SEO trong một yêu cầu, tự kiểm tra trong cùng lượt. Tiêu đề/mô tả/tag tạo chung một lượt, xác thực cấu trúc và giới hạn ký tự; chỉ sửa lại nếu lỗi dữ liệu. Nguồn ngắn thường 2 lượt AI thay vì dịch + đối chiếu + chuẩn hóa số + SEO + đối chiếu. Nguồn dài có thêm lượt ngữ cảnh SEO khi cần. Đây là ưu tiên tốc độ, không phải cam kết AI chính xác tuyệt đối; không có đánh giá độc lập từng câu. V1 vẫn giữ luồng cũ. Các bản dịch/lời kể cũ vẫn lưu, cần chạy Dịch lại để nhận bản dịch trực tiếp.
+## Kiểm tra
+`python -m unittest test_v2_text_pipeline test_direct_translation`
+`PYTHONPATH=.:v2/backend pytest v2/backend/tests` (kiểm tra tích hợp cần PostgreSQL cục bộ dùng một lần).
+Trong `v2/frontend`: `npm test`, `npm run typecheck`.

@@ -216,20 +216,20 @@ def test_validation_does_not_echo_new_api_key():
     finally: app.dependency_overrides.clear()
 
 
-def test_worker_runs_actual_narration_and_seo_engines_into_durable_session(db):
+def test_worker_runs_direct_translation_and_parallel_metadata_into_durable_session(db):
     owner,_=db
     configured(owner)
     s=session(owner,dict(source='Nora saved Maisie.',language='English',style='2D',url=''))
     submit(owner,s)
     job=worker.claim('test-worker')
-    def provider(p,b,m,k,prompt):
-        if prompt.startswith('NARRATION_TRANSLATION'): return 'Nora saved Maisie.'
+    def provider(p,b,m,k,prompt,**kwargs):
+        if prompt.startswith('DIRECT_TRANSLATION'): return '{"text":"Nora saved Maisie.","seo_context":"Nora saved Maisie.","complete":true}'
         if prompt.startswith('FAITHFULNESS_REVIEW'): return '{"ok":true,"issues":[],"source_conflicts":[]}'
         if prompt.startswith(('Summarize','Condense')): return 'Nora saved Maisie.'
         if prompt.startswith('TARGET_METADATA_REVIEW'): return '{"ok":true,"issues":[]}'
         if prompt.startswith('TARGET_METADATA'): return '{"title":"Rescue","description":"Nora saves Maisie.","tags":["rescue"]}'
         raise AssertionError('Unexpected provider call')
-    with patch('background_jobs.generate_text',side_effect=provider):
+    with patch('app.text_pipeline.generate_text',side_effect=provider):
         worker.process(job)
     with connect() as c:
         saved=store.owned_session(c,owner,s['id'])
@@ -283,7 +283,7 @@ def test_resume_uses_original_providers_key_after_user_switches_provider(db):
         assert store.unseal(row['encrypted_keys'])['api_key']=='private-provider-key'
 
 
-def test_scene_prompt_edit_preserves_locked_voice_and_timing(db):
+def test_removed_scene_edit_is_rejected_and_legacy_data_preserved(db):
     owner,other=db
     plan=dict(scenes=[dict(number=1,voiceover='Locked narration',start=0,end=8,visual_prompt='Old prompt',image_prompt='Image')])
     s=session(owner,dict(video_forms=json.dumps(plan)))
@@ -291,11 +291,9 @@ def test_scene_prompt_edit_preserves_locked_voice_and_timing(db):
     try:
         with TestClient(app) as client:
             response=client.put(f"/v1/sessions/{s['id']}/artifact",json=dict(field='scene',scene_number=1,prompt_field='visual_prompt',revision=0,value='New visual'))
-            assert response.status_code==200
-            changed=json.loads(response.json()['data']['video_forms'])['scenes'][0]
-            assert changed['visual_prompt']=='New visual' and changed['voiceover']=='Locked narration'
-            assert changed['start']==0 and changed['end']==8
-            assert client.put(f"/v1/sessions/{s['id']}/artifact",json=dict(field='new_title',revision=0,value='Stale')).status_code==409
+            assert response.status_code==422
+            with connect() as conn:
+                assert json.loads(store.owned_session(conn,owner,s['id'])['data']['video_forms'])==plan
     finally: app.dependency_overrides.clear()
 
 
