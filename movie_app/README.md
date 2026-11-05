@@ -36,3 +36,5 @@ Chế độ xuất mặc định Đồng bộ nhân vật: ZIP yêu cầu ảnh 
 
 ## Kiểm tra người nói và lời thoại
 Sau khi tạo đoạn phim, app tự kiểm tra theo lô tối đa 8 đoạn với ngữ cảnh liền kề và nguồn văn bản (nguồn dài dùng ghi chú phân tích). Nút Kiểm tra người nói / lời thoại dùng cho dự án cũ. Chỉ sửa người nói nếu AI đưa căn cứ và người đó có trong khung hình; giữ nguyên câu thoại. Hiện lý do/căn cứ trong từng đoạn. Câu chưa rõ, nghi nhiều người nói hoặc trùng nguyên câu được đánh dấu cần xác nhận và chặn xuất video/ZIP. Có nút xác nhận thủ công sau khi đối chiếu. Sửa thoại/người nói yêu cầu kiểm tra lại. Kết quả/checkpoint lưu cùng JSON. Đây là kiểm tra bằng AI trên văn bản, không phải nhận diện giọng nói/hình ảnh và không bảo đảm đúng tuyệt đối. Tăng số lượt gọi API.
+
+Cảnh không người: mở đoạn thiếu nhân vật và đánh dấu xác nhận cảnh phong cảnh/chuyển cảnh không có người, hoặc chọn đúng nhân vật nếu có người. Cảnh không người đã xác nhận xuất cùng TXT Đồng bộ nhân vật mà không yêu cầu ảnh nhân vật; cảnh có thoại vẫn cần người nói. Không tự gán nhân vật hoặc mặc định mọi đoạn thiếu tên đều là cảnh không người.

@@ -12,3 +12,11 @@ assert(!output.includes('References:'));assert(!output.includes('[SC'));assert(!
 assert.equal((output.match(/Only Anna speaks exactly/g)||[]).length,3);
 }
 console.log('Video TXT: exactly one complete prompt per shot, no headers or blank lines, both export modes.');
+
+project.shots=[{id:'SC002',characters:[],speaker:'',dialogue:'',location:'Empty landscape',action:'Clouds drift',duration:8}];
+assert.throws(()=>vm.runInContext("videoText(project,'characters')",ctx),/xác nhận cảnh không người/);
+project.shots[0].environmentOnly=true;
+const empty=vm.runInContext("videoText(project,'characters')",ctx);
+assert(empty.includes('Environment-only shot'));assert(!empty.includes('attached character reference'));
+project.shots[0].dialogue='Hello';assert.throws(()=>vm.runInContext("videoText(project,'characters')",ctx),/người nói/);
+console.log('Confirmed empty scenes export without character references; missing cast and speech remain guarded.');
