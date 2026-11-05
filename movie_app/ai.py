@@ -68,6 +68,12 @@ def generate(data,call=None):
     elif mode=='cast':instruction='Return JSON {"characters":[{"name":"LatinIdentifier","appearance":"consistent proposed English design","voice":"proposed consistent voice specification","evidence":"source role, aliases, evidence and uncertainty"}]}. Merge aliases only when supported. Extract cast from all notes.'
     elif mode=='plan':
         instruction='Create a complete chronological adaptation outline of 6 to 12 scenes covering ALL decisive events and ending. Return JSON {"scenes":[{"title":"scene name","events":"detailed scene evidence and necessary action","characters":["LatinIdentifier"]}]}. Use only supplied cast. Do not omit ending. No more than 12 scenes.'
+    elif mode=='repair':
+        original=data.get('original')
+        if not isinstance(original,dict) or not isinstance(original.get('action'),str):raise ValueError('Thiếu đoạn gốc để sửa.')
+        maximum=int(data.get('maximum',4))
+        if not 1<=maximum<=4:raise ValueError('Ngân sách tách đoạn không hợp lệ.')
+        instruction='Repair ONLY the ORIGINAL SHOT into 1 to '+str(maximum)+' consecutive video shots. Use one if splitting is unnecessary. Preserve ALL its factual story content, speech meaning, relationships and chronology; do not summarize away or invent events, repeat dialogue, or redo neighboring events. Split overloaded actions and speaker turns naturally into eight-second clips. Each shot <=3 visible cast members and one speaker. Mention <=3 total cast identifiers anywhere in each shot INCLUDING dialogue: refer to absent people using accurate relationship/role phrases when needed, preserving who did what. Never turn reported events into visible reenactments. Resolve missing cast only with source evidence; never add arbitrary people. Environment-only shots may have characters=[], empty speaker/dialogue. Visual action should start from previous ending and lead to the next shot. Keep consistent wardrobe, props, position, emotional state. Return JSON {"shots":[{"characters":["LatinIdentifier"],"speaker":"LatinIdentifier or empty","dialogue":"target-language speech or empty","action":"English action","location":"English location","camera":"English camera","wardrobe":"English wardrobe"}]}. Dialogue <=24 whitespace words per shot. ORIGINAL SHOT: '+json.dumps(original,ensure_ascii=False)
     elif mode=='audit':
         shots=data.get('shots')
         if not isinstance(shots,list) or not 1<=len(shots)<=8:raise ValueError('Kiểm tra tối đa 8 đoạn mỗi lượt.')
@@ -82,7 +88,14 @@ def generate(data,call=None):
     d=obj(call(prompt))
     if mode=='audit':return check_audit(d,shots,cast)
     if mode=='cast':return check_cast(d)
-    if mode=='shots':return check_shots(d,cast,maximum)
+    if mode in ('shots','repair'):
+        result=check_shots(d,cast,maximum)
+        if mode=='repair':
+            for shot in result['shots']:
+                text=json.dumps(shot,ensure_ascii=False).lower()
+                if sum(c['name'].lower() in text for c in cast)>3:raise ValueError('Đoạn sửa vẫn nhắc hơn 3 tên nhân vật.')
+                shot['environmentOnly']=not shot['characters'] and not shot['dialogue']
+        return result
     if mode=='analyze' and (not isinstance(d.get('notes'),str) or not d['notes'].strip() or len(d['notes'])>18000):raise ValueError('Bản phân tích không hợp lệ hoặc quá dài.')
     if mode=='plan':
         scenes=d.get('scenes')

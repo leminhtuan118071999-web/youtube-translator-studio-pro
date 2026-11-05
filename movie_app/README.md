@@ -41,3 +41,6 @@ Cảnh không người: mở đoạn thiếu nhân vật và đánh dấu xác n
 
 ## Tách đoạn
 Mở đoạn → Tách đoạn thành 2 form. Chia hành động/thoại, chọn tên nhân vật và người nói mỗi phần. Nội dung gốc nằm sẵn ở phần 1; phần 2 để trống để không tự bịa/lặp. Nếu đổi tổng nội dung lời thoại cần xác nhận. Mặc định chia đôi thời gian giữ lại, vẫn tạo clip 8 giây. Mã đoạn mới không trùng, hai phần nằm liền nhau, ảnh gốc chỉ giữ phần 1; kiểm tra thoại lại trước khi xuất. Không tự xử lý giới hạn 3 tên được nhắc trong lời thoại bằng cách thay đổi nghĩa.
+
+## Sửa/tách tự động
+Mỗi đoạn có nút Tự sửa / tách bằng AI. Dựa vào nguồn và đoạn liền kề, trả 1–4 form nối tiếp tùy cần; tự kiểm tra lại thoại sau khi áp dụng. Giữ bản gốc trong repairHistory của JSON, không dùng lại ảnh đầu cảnh cũ cho hành động mới. Mỗi form mới 8 giây; ngân sách bị giới hạn bởi trần 20 phút, không tự cắt thoại bằng cách giảm thời gian giữ lại. Lỗi xác thực trước áp dụng giữ nguyên đoạn gốc; lỗi kiểm tra thoại sau áp dụng giữ bản mới và đánh dấu cần xác nhận. Có thể phát sinh phí API; AI vẫn cần duyệt về nội dung.

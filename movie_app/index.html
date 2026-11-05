@@ -108,6 +108,7 @@ if(s.image){const im=document.createElement('img');im.src=s.image;im.style.width
 const status=document.createElement('select');['Chờ tạo','Đang tạo','Cần kiểm tra','Đạt','Cần tạo lại'].forEach(x=>{const op=document.createElement('option');op.value=x;op.textContent=x;status.append(op);});status.value=s.status;status.onchange=()=>{s.status=status.value;summary.textContent=s.id+' · '+(s.characters.join(', ')||'Cảnh không có nhân vật')+' · '+s.status+' · '+s.duration+' giây';};d.append(status);
 const replace=document.createElement('input');replace.type='file';replace.accept='image/png,image/jpeg';replace.onchange=async()=>{try{s.image=await imageData(replace.files[0]);render();}catch(e){say(e.message);}};d.append(replace);
 const edit=document.createElement('button');edit.textContent='Sửa thoại / hành động';edit.onclick=()=>{const a=window.prompt('Hành động',s.action);if(a===null)return;const line=window.prompt('Thoại (giữ người nói hiện tại)',s.dialogue);if(line===null)return;const next={...s,action:a,dialogue:line,dialogueReview:{status:'needs_confirmation',reason:'Đã sửa nội dung; cần kiểm tra lại.',evidence:''}};try{validate({...p,shots:p.shots.map((x,j)=>j===i?next:x)});p.shots[i]=next;render();}catch(e){say(e.message);}};d.append(edit);
+const autoRepair=document.createElement('button');autoRepair.textContent='✨ Tự sửa / tách bằng AI';autoRepair.onclick=()=>auto('repair',s.id);d.append(autoRepair);
 const splitBox=document.createElement('details'),splitTitle=document.createElement('summary');splitTitle.textContent='✂ Tách đoạn thành 2 form';splitBox.append(splitTitle);
 const splitHint=document.createElement('p');splitHint.textContent='Chia nội dung thành phần 1 rồi phần 2. Mỗi phần chỉ một người nói, tối đa 3 nhân vật. Giây giữ lại mặc định chia đôi để không tăng tổng thời lượng; clip tạo ngoài vẫn 8 giây. Ảnh cũ chỉ giữ ở phần 1. Không tự chia hoặc cắt mất lời thoại.';splitBox.append(splitHint);
 const partFields=[];
@@ -205,7 +206,7 @@ const repeated=new Map();for(const shot of p.shots){const line=String(shot.dialo
 for(const group of repeated.values())if(group.length>1)for(const shot of group)shot.dialogueReview={...shot.dialogueReview,status:'needs_confirmation',reason:'Thoại trùng với '+group.filter(x=>x!==shot).map(x=>x.id).join(', ')+'. Kiểm tra đây là lặp có chủ ý hay lỗi.'};
 validate(p);return p.shots.filter(s=>s.dialogueReview?.status==='needs_confirmation').length;
 }
-async function auto(mode){
+async function auto(mode,targetId){
 if(aiBusy)return;sync();if(!p.source.trim()){say('Nhập nội dung hoặc lấy phụ đề trước.');return;}
 if((mode==='cast'||mode==='all')&&p.characters.length&&!confirm('Thay danh sách nhân vật và xóa các đoạn hiện tại? Hãy lưu JSON trước.'))return;
 if((mode==='shots'||mode==='audit')&&!p.characters.length){say('Nhận diện nhân vật trước khi tạo đoạn phim.');return;}
@@ -220,7 +221,7 @@ progressAI(32,'Đang nhận diện nhân vật và thống nhất tên…');
 const result=await aiRequest('cast',context);
 const candidate={...p,characters:result.characters,shots:[]};validate(candidate);p=candidate;delete p.aiCheckpoint.plan;delete p.aiCheckpoint.batches;p.aiCheckpoint.autoCastDone=true;
 }
-if(mode!=='cast'&&mode!=='audit'){
+if(mode!=='cast'&&mode!=='audit'&&mode!=='repair'){
 const cp=p.aiCheckpoint;const castKey=JSON.stringify(p.characters.map(c=>({name:c.name,appearance:c.appearance,voice:c.voice})));
 if(cp.castKey!==castKey){cp.castKey=castKey;delete cp.plan;cp.batches=[];}
 if(!cp.plan){progressAI(38,'Đang lập dàn ý toàn bộ câu chuyện…');cp.plan=(await aiRequest('plan',context)).scenes;}
@@ -236,6 +237,19 @@ cp.batches[i]=(await aiRequest('shots',sceneContext,{maximum:limit})).shots;
 }
 const shots=cp.batches.flat().map((s,i)=>({...s,id:'SC'+String(i+1).padStart(3,'0')}));
 const candidate={...p,shots};validate(candidate);p=candidate;
+}
+if(mode==='repair'){
+const index=p.shots.findIndex(s=>s.id===targetId);if(index<0)throw Error('Không tìm thấy đoạn gốc.');const original=p.shots[index];
+const remaining=1200-p.shots.reduce((sum,s)=>sum+s.duration,0)+original.duration;
+const maximum=Math.min(4,Math.floor(remaining/8));if(maximum<1)throw Error('Không còn đủ thời lượng cho đoạn 8 giây; cần giảm thời lượng dự án trước.');
+progressAI(45,'Đang sửa / tách '+targetId+' dựa trên nguồn và cảnh liền kề…');
+const strip=({image,dialogueReview,...s})=>s;
+const repairContext='SOURCE EVIDENCE:\n'+(p.source.length<=70000?p.source:context)+'\nNEIGHBORS: '+JSON.stringify(p.shots.slice(Math.max(0,index-1),index+2).map(strip));
+if(repairContext.length>110000)throw Error('Ngữ cảnh sửa quá dài; hãy chia dự án.');
+const result=await aiRequest('repair',repairContext,{original:strip(original),maximum});
+if(stopAI)throw Error('Đã dừng trước khi thay đoạn gốc.');
+const used=new Set(p.shots.map(s=>s.id));const replacements=result.shots.map((s,k)=>{let id=original.id.slice(0,28)+'_R'+(k+1),n=1;while(used.has(id))id=original.id.slice(0,24)+'_R'+(k+1)+'_'+n++;used.add(id);return {...s,id,transition:k===result.shots.length-1?original.transition:'cut',dialogueReview:{status:'needs_confirmation',reason:'Đang chờ kiểm tra sau sửa tự động',evidence:''}};});
+const candidate={...p,shots:[...p.shots.slice(0,index),...replacements,...p.shots.slice(index+1)],repairHistory:[...(p.repairHistory||[]),{original,replacementIds:replacements.map(s=>s.id)}]};validate(candidate);p=candidate;delete p.aiCheckpoint.audit;
 }
 const unresolved=mode==='cast'?0:await auditShots(p.source.length<=70000?p.source:context);
 render();aiBusy=false;progressAI(100,'Đã tạo bản nháp. Kiểm tra tên, người nói, lời thoại và diễn biến trước khi tạo video. Ảnh cần thêm riêng.');$('aiPercent').textContent='100% · Hoàn thành'+(unresolved?' · '+unresolved+' đoạn cần xác nhận':'');say((unresolved?'Có '+unresolved+' đoạn cần xác nhận, mở từng đoạn để xem căn cứ. ':'')+'Đã hoàn thành '+p.characters.length+' nhân vật và '+p.shots.length+' đoạn phim. Tải JSON để lưu cả checkpoint.');
