@@ -47,3 +47,6 @@ Mỗi đoạn có nút Tự sửa / tách bằng AI. Dựa vào nguồn và đo�
 
 ## Xác thực theo nguồn
 Nút Kiểm tra và xác thực theo nguồn luôn chạy lại, không dùng kết quả xác nhận cũ và không tự chấp nhận cảnh báo dù đang bật tùy chọn bỏ qua. AI kiểm tra nghĩa câu, người nói, xưng hô, ngôn ngữ và ngữ cảnh; phải kèm trích đoạn nguồn. Máy chủ kiểm tra trích đoạn thực sự nằm trong nội dung cung cấp. Thiếu căn cứ hợp lệ đánh dấu chưa xác thực, không áp dụng đề xuất sửa người nói. Nguồn dài dùng ghi chú phân tích (không phải đối chiếu toàn bộ bản gốc trực tiếp); kết quả dựa văn bản, không bảo đảm tuyệt đối và không nhận diện giọng/hình.
+
+## Liền mạch và tránh lặp
+Bản nối cảnh 2 vô hiệu hóa cache dàn ý/đoạn cũ khi tạo lại. Mỗi lượt tạo nhận danh sách sự kiện đã hoàn tất và 3 đoạn thực tế gần nhất, không chỉ dàn ý. AI phải trả story_beat, continuity_start, continuity_end, transition_context; các trạng thái được đưa vào prompt video và hiện trong đoạn. Kiểm tra lặp chính xác theo bối cảnh+hành động+thoại trước khi nhận lô và xuất. Không phát hiện hết lặp ngữ nghĩa và không bảo đảm các clip sinh độc lập giữ đúng vị trí/động tác. Dự án cũ cần tạo lại đoạn phim hoặc sửa các đoạn lỗi; video cũ không tự thay đổi.

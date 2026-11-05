@@ -27,3 +27,8 @@ const split=vm.runInContext('splitProjectShot(splitFixture,0,parts)',ctx);
 assert.equal(split.shots.length,2);assert.equal(split.shots.reduce((n,s)=>n+s.duration,0),8);assert.notEqual(split.shots[0].id,split.shots[1].id);assert.equal(split.shots[1].image,'');assert.equal(split.shots[0].transition,'cut');assert.equal(split.shots[1].transition,'dissolve');assert.equal(split.shots[1].dialogueReview.status,'needs_confirmation');assert.equal(splitFixture.shots.length,1);
 ctx.parts[1].speaker='Unknown';assert.throws(()=>vm.runInContext('splitProjectShot(splitFixture,0,parts)',ctx),/người nói/);
 console.log('Split preserves order, total duration and transition, invalidates review, rejects wrong speaker without mutating original.');
+ctx.repeated=[{id:'SC001',action:'Anna opens the door and slowly walks across the room to the window.',location:'room',dialogue:''},{id:'SC002',action:'Anna opens the door and slowly walks across the room to the window.',location:'room',dialogue:''}];
+assert.throws(()=>vm.runInContext('checkRepeatedShots(repeated)',ctx),/bị lặp/);
+ctx.repeated[1].action='Anna closes the curtains and leaves the room through the back door.';
+vm.runInContext('checkRepeatedShots(repeated)',ctx);
+console.log('Repeated story actions detected; distinct following action accepted.');

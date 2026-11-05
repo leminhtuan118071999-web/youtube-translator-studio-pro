@@ -88,6 +88,8 @@ def generate(data,call=None):
         if not 1<=maximum<=25:raise ValueError('Ngân sách đoạn không hợp lệ.')
         instruction='Create this scene as at most '+str(maximum)+' eight-second shots, fewer when sufficient. Return JSON {"shots":[{"characters":["LatinIdentifier"],"speaker":"LatinIdentifier or empty","dialogue":"short target-language dialogue or empty","action":"English action","location":"English location","camera":"English camera","wardrobe":"English wardrobe"}]}. Each spoken line <=24 whitespace words, shorter for slow emotional delivery. No repeating events from previous scene.'
     else:raise ValueError('Bước AI không hợp lệ.')
+    if mode in ('shots','repair'):
+        instruction+=' Each shot must ALSO contain four nonempty English strings: story_beat (one specific NEW event), continuity_start (visible character positions, props held, gaze, emotional and physical state BEFORE action), continuity_end (exact resulting positions, props and state AFTER action), transition_context (same-time continuation OR an explicit motivated time/location/flashback bridge). Within a scene, each start must match the preceding end; when camera reverses preserve physical positions and screen direction. If previous actual shots are supplied, continue their final state; do not reintroduce or repeat completed events. Reactions must advance the story, not duplicate the same gesture, reveal or speech in different words. A new camera angle alone is not a new story beat. Cover source ending without looping. Character appearance descriptions must not cause injury/props from a later timeline to appear early; scene wardrobe and current state override reference wardrobe, while identity stays fixed.'
     prompt=RULES+'\nTARGET LANGUAGE: '+language+'\nCAST: '+json.dumps(cast,ensure_ascii=False)+'\n'+instruction+'\nSOURCE/NOTES:\n'+context
     d=obj(call(prompt))
     if mode in ('audit','verify'):
@@ -104,6 +106,9 @@ def generate(data,call=None):
     if mode=='cast':return check_cast(d)
     if mode in ('shots','repair'):
         result=check_shots(d,cast,maximum)
+        for shot in result['shots']:
+            for field in ('story_beat','continuity_start','continuity_end','transition_context'):
+                if mode=='shots' and (not isinstance(shot.get(field),str) or not shot[field].strip()):raise ValueError('Thiếu trạng thái nối cảnh: '+field)
         if mode=='repair':
             for shot in result['shots']:
                 text=json.dumps(shot,ensure_ascii=False).lower()
