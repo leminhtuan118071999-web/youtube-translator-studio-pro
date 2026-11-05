@@ -170,3 +170,6 @@ button:focus-visible, a:focus-visible { outline: 2px solid var(--accent); outlin
 .copy-button.has-error { background: #8f2c3b; border-color: #ff9ba9; }
 .copy-button:disabled { opacity: .5; cursor: not-allowed; box-shadow: none; }
 @media (prefers-reduced-motion: reduce) { .copy-button { transition: none; } }
+
+.session-progress > summary { cursor: pointer; line-height: 1.5; }
+.session-progress[open] > summary { margin-bottom: 12px; }

@@ -263,14 +263,15 @@ export function Studio({ email }: { email: string }) {
       <nav className="studio-tabs" aria-label="Chức năng">{tabs.map(t => <button key={t} className={t === tab ? "active" : ""} onClick={() => setTab(t)}>{t}</button>)}</nav>
       {error && <p className="error-message" role="alert">{error}<button className="ghost-button" onClick={() => void action(async () => { dirtyRef.current = false; setDirty(false); await refresh(); })}>Tải lại dữ liệu đã lưu</button></p>}
       {notice && <p className="status-good" role="status">{notice}</p>}
-      {selected && selectedJob && <section className={`session-progress ${selectedJob.status === "failed" ? "has-error" : ""}`} aria-label={`Tiến trình phiên ${selected.name}`}>
+      {selected && selectedJob && <details key={selectedJob.id} className={`session-progress ${selectedJob.status === "failed" ? "has-error" : ""}`} aria-label={`Tiến trình phiên ${selected.name}`}>
+        <summary><strong>{selected.name}</strong> · <span role="status" aria-live="polite">{statusNames[selectedJob.status] || selectedJob.status} · {jobPercent(selectedJob)}%</span> · Chi tiết xử lý</summary>
         <div role="status" aria-live="polite" aria-atomic="true"><strong>{selected.name} · {jobNames[selectedJob.job_type] || selectedJob.job_type}</strong><p>{statusNames[selectedJob.status] || selectedJob.status} · {jobPercent(selectedJob)}% — {selectedJob.stage}</p>
           {selectedJob.status === "queued" && <p className="muted">{healthy ? "Đang chờ worker nhận tác vụ." : "Đang chờ kết nối worker. Hãy mở worker trên máy Mac."}</p>}
           {selectedJob.status === "retry_wait" && <p className="muted">Worker sẽ tự thử lại từ phần đã lưu.</p>}
           {selectedJob.error && <p className="error-message">{selectedJob.error}</p>}
         </div><progress aria-label={`Mức hoàn thành phiên ${selected.name}`} value={jobPercent(selectedJob)} max={100} />
         <div className="toolbar">{active(selectedJob) && <button disabled={busy} className="ghost-button" onClick={() => void action(async () => { await api(`/jobs/${selectedJob.id}/cancel`, "POST"); await refresh(); })}>Hủy xử lý</button>}{selectedJob.status === "failed" && <button disabled={busy || !healthy} className="secondary-button" onClick={() => void action(async () => { await api(`/jobs/${selectedJob.id}/retry`, "POST"); await refresh(); })}>Tiếp tục từ phần đã lưu</button>}</div>
-      </section>}
+      </details>}
       {dirty && <div className="save-banner"><span>Có thay đổi chưa lưu. Lưu sẽ hủy tác vụ đang chạy của phiên.</span><button disabled={busy} className="secondary-button" onClick={() => void action(async () => { await save(); setNotice("Đã lưu trên máy chủ."); })}>Lưu thay đổi</button></div>}
       {!healthy && <p className="muted worker-hint">Worker chưa sẵn sàng. Bạn vẫn có thể chuẩn bị và lưu nội dung; nút tạo sẽ mở khi worker kết nối.</p>}
       {!selected && !["Cấu hình API", "AI33"].includes(tab) && <section className="welcome-panel"><div><p className="eyebrow">BẮT ĐẦU SÁNG TẠO</p><h2>Dịch văn bản và nội dung YouTube.</h2><p className="muted">Tạo phiên mới hoặc mở phiên đã lưu ở thanh bên. Cấu hình API của bạn được mã hóa trên máy chủ.</p></div><div className="welcome-icon">✦</div></section>}
@@ -291,7 +292,7 @@ export function Studio({ email }: { email: string }) {
         <div className="toolbar">{generate("Bắt đầu dịch + tiêu đề, mô tả, tag", "full")}<button className="ghost-button" disabled={busy} onClick={() => void action(() => download("json"))}>Xuất phiên JSON</button>
           <button className="ghost-button danger" disabled={busy} onClick={() => void action(async () => { if (!window.confirm("Xóa phiên này và hủy mọi tác vụ đang chạy?")) return; await api(`/sessions/${selected.id}`, "DELETE"); selectedRef.current = null; setSelected(null); dirtyRef.current = false; setDirty(false); await refresh(); })}>Xóa phiên</button></div>
       </section>}
-      {selected && tab === "Nội dung" && <section className="editor-panel">{!earlyNarration && stale("translation_stale")}<div className="toolbar"><h2>Bản dịch sát văn bản gốc</h2><CopyButton key={`${selected.id}:narration`} text={narrationText} label="văn bản" /></div><p className="muted">Giữ nội dung, lời thoại, tên riêng và số liệu của bản gốc; không viết lại thành lời kể.</p>
+      {selected && tab === "Nội dung" && <section className="editor-panel">{!earlyNarration && stale("translation_stale")}<div className="toolbar"><h2>Bản dịch sát văn bản gốc</h2><span className="status-pill" aria-label="Số ký tự bản dịch">{Array.from(narrationText).length.toLocaleString("vi-VN")} ký tự</span><CopyButton key={`${selected.id}:narration`} text={narrationText} label="văn bản" /></div><p className="muted">Giữ nội dung, lời thoại, tên riêng và số liệu của bản gốc; không viết lại thành lời kể. Số ký tự tính cả khoảng trắng và xuống dòng.</p>
         {earlyNarration && <p className="status-good">Bản dịch đã lưu. Bạn có thể copy ngay; tiêu đề, mô tả và tag được xử lý song song.</p>}
         <textarea disabled={busy} readOnly={!!earlyNarration} rows={22} value={narrationText} onChange={e => change("translated", e.target.value)} />
         <div className="toolbar">{generate("Dịch lại và cập nhật SEO", "translation")}</div></section>}
