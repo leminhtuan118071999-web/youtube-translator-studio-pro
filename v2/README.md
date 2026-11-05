@@ -1,8 +1,7 @@
 # LMT Studio Pro V2
 
 Next.js workspace, authenticated FastAPI API, and independent PostgreSQL worker.
-V2 reuses the existing production translation, narration, SEO, character and
-video-planning engines. V1 source and Supabase data remain available for rollback.
+V2 uses direct full-text translation and fast SEO; legacy character and video engines remain compatible. V1 source and Supabase data remain available for rollback.
 
 ## Implemented
 
@@ -12,9 +11,9 @@ video-planning engines. V1 source and Supabase data remain available for rollbac
   keys are never returned to the browser.
 - Original YouTube thumbnail preview/download and existing subtitle providers.
   No additional transcription or third-party service was introduced.
-- Complete translation into one narrator's indirect speech; number spelling and
-  fidelity checks use the existing engines. Translation/SEO have one action;
-  profiles, images and forms are independent actions.
+- Direct full-source translation preserves dialogue, names and numeric notation.
+  Translation and title/description/tags share one action; no narrator rewrite or TTS number spelling.
+  Each request self-checks; no independent per-part review in the fast V2 path.
 - Eight-second forms with reference image/video prompts, English production
   directions, target-language narration/subtitles, wardrobe/identity checks and
   repair memory. Groups of 99 support copy, TXT and JSON export. Prompts are
@@ -99,3 +98,6 @@ Bỏ ô tìm phiên và các tab Form 8 giây, Nhân vật, Chuyển dữ liệu
 ### Khôi phục bước SEO
 
 Worker lưu seo_work_json gồm ngữ cảnh và bản SEO chưa duyệt, gắn với hash nội dung/tiêu đề/mô tả/ngôn ngữ. Tiếp tục cùng tác vụ dùng lại bản đó và vẫn kiểm tra sát nghĩa; thay đầu vào làm checkpoint không còn khớp. Sau một lần sửa JSON kiểm tra không thành công, dùng giao thức văn bản kết luận rõ ràng LMT_SEO_PASS hoặc LMT_SEO_FAIL: lý do, với cùng dữ liệu gốc. Không suy ra đạt từ phản hồi rỗng, thiếu trường hoặc văn bản mơ hồ. Thành công xóa checkpoint tạm. Cần cập nhật và khởi động lại worker Mac để dùng cơ chế này; triển khai giao diện không thay mã worker.
+
+## Dịch trực tiếp và SEO
+V2 mặc định dịch đầy đủ văn bản gốc sang ngôn ngữ đích, giữ thoại trực tiếp, tên và số liệu. Không chuyển thành lời kể, không viết số bằng chữ và không chạy vòng kiểm tra/sửa lời kể. Từng phần nguồn không chồng lặp, giữ checkpoint để tiếp tục. Mỗi phần dịch + ngữ cảnh SEO trong một yêu cầu, tự kiểm tra trong cùng lượt. Tiêu đề/mô tả/tag tạo chung một lượt, xác thực cấu trúc và giới hạn ký tự; chỉ sửa lại nếu lỗi dữ liệu. Nguồn ngắn thường 2 lượt AI thay vì dịch + đối chiếu + chuẩn hóa số + SEO + đối chiếu. Nguồn dài có thêm lượt ngữ cảnh SEO khi cần. Đây là ưu tiên tốc độ, không phải cam kết AI chính xác tuyệt đối; không có đánh giá độc lập từng câu. V1 vẫn giữ luồng cũ. Các bản dịch/lời kể cũ vẫn lưu, cần chạy Dịch lại để nhận bản dịch trực tiếp.

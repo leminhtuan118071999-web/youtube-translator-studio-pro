@@ -150,8 +150,8 @@ def overview(text, call, progress):
 
 
 
-def metadata_for_job(text, title, description, language, call, progress):
-    identity = source_hash(json.dumps([text, title, description, language, "faithful-title-hook-v1"], ensure_ascii=False))
+def metadata_for_job(text, title, description, language, call, progress, *, fast=False):
+    identity = source_hash(json.dumps([text, title, description, language, "faithful-title-hook-v1", fast], ensure_ascii=False))
     try:
         work = json.loads(progress.partial_result().get('seo_work_json') or '{}')
     except (ValueError, TypeError):
@@ -175,7 +175,7 @@ def metadata_for_job(text, title, description, language, call, progress):
         progress.publish('seo_work_json', json.dumps(dict(identity=identity, context=brief, candidate=candidate), ensure_ascii=False))
     progress.update(97, 'Đang tạo và đối chiếu SEO; tự khôi phục kết quả đã lưu khi cần')
     result = generate_youtube_metadata(brief, title, description, language, call,
-                                      resume_candidate=work.get('candidate'), checkpoint=checkpoint)
+                                      resume_candidate=work.get('candidate'), checkpoint=checkpoint, self_check_only=fast)
     progress.publish('seo_work_json', '')
     return result
 
@@ -324,56 +324,73 @@ def run_full_job(snapshot, progress):
         fields["source"] = source
         progress.publish("source", source)
 
-        # Translate the complete original as reviewed spoken narration.
-        target_text = fields.get("optimized_script")
-        try:
-            review = json.loads(fields.get("optimization_review_json") or "{}")
-        except (TypeError, ValueError):
-            review = {}
-        verified_checkpoint = (
-            isinstance(target_text, str) and bool(target_text.strip())
-            and isinstance(review, dict)
-            and review.get("version") == 2
-            and review.get("narration_style") == "single_narrator_indirect_v1"
-            and review.get("method") == "full_narration_translation"
-            and review.get("target_language") == language
-            and review.get("source_sha256") == source_hash(source)
-            and review.get("output_sha256") == source_hash(target_text)
-        )
-        if not verified_checkpoint:
-            for field in ("translation_parts", "translation_complete", "translated",
-                          "character_bible", "character_profile", "character_profile_json",
-                          "character_images_manifest", "character_images_error",
-                          "new_title", "new_description", "seo_tags", "metadata"):
-                fields.pop(field, None)
-            if fields.get("optimization_work_json"):
-                progress.publish("optimization_work_json", fields["optimization_work_json"])
-            target_text = rewrite_target_script(source, language, call, progress)
-            fields["optimization_review_json"] = progress.partial_result().get("optimization_review_json", "")
+        if snapshot.get('translation_mode') == 'direct':
+            from direct_translation import translate_direct, METHOD
+            target_text=fields.get('translated')
+            try:report=json.loads(fields.get('optimization_review_json') or '{}')
+            except (ValueError,TypeError):report={}
+            valid=(isinstance(report,dict) and report.get('method')==METHOD
+                   and report.get('source_sha256')==source_hash(source) and report.get('target_language')==language
+                   and isinstance(target_text,str) and bool(target_text.strip())
+                   and report.get('output_sha256')==source_hash(target_text))
+            if not valid:
+                target_text=translate_direct(source,language,call,progress)
+                fields['optimization_review_json']=progress.partial_result().get('optimization_review_json','')
+            fields.update(translated=target_text,optimized_script=target_text,translation_parts=[target_text],
+                          translation_complete=True,optimization_work_json='')
+            for name in ('optimization_review_json','optimization_work_json','translated','optimized_script','translation_parts','translation_complete'):
+                progress.publish(name,fields.get(name,''))
         else:
-            progress.update(67, "✅ Đã khôi phục bản viết lại ngôn ngữ đích đã đối soát")
-        if not target_text.strip():
-            raise ValueError("Bản dịch giọng đọc không được rỗng.")
-        fields.update(optimized_script=target_text, translated=target_text,
-                      optimization_work_json="", translation_parts=[target_text],
-                      translation_complete=True)
-        for name in ("optimization_review_json", "optimization_work_json", "optimized_script",
-                     "translated", "translation_parts", "translation_complete"):
-            progress.publish(name, fields.get(name, ""))
+            # Translate the complete original as reviewed spoken narration.
+            target_text = fields.get("optimized_script")
+            try:
+                review = json.loads(fields.get("optimization_review_json") or "{}")
+            except (TypeError, ValueError):
+                review = {}
+            verified_checkpoint = (
+                isinstance(target_text, str) and bool(target_text.strip())
+                and isinstance(review, dict)
+                and review.get("version") == 2
+                and review.get("narration_style") == "single_narrator_indirect_v1"
+                and review.get("method") == "full_narration_translation"
+                and review.get("target_language") == language
+                and review.get("source_sha256") == source_hash(source)
+                and review.get("output_sha256") == source_hash(target_text)
+            )
+            if not verified_checkpoint:
+                for field in ("translation_parts", "translation_complete", "translated",
+                              "character_bible", "character_profile", "character_profile_json",
+                              "character_images_manifest", "character_images_error",
+                              "new_title", "new_description", "seo_tags", "metadata"):
+                    fields.pop(field, None)
+                if fields.get("optimization_work_json"):
+                    progress.publish("optimization_work_json", fields["optimization_work_json"])
+                target_text = rewrite_target_script(source, language, call, progress)
+                fields["optimization_review_json"] = progress.partial_result().get("optimization_review_json", "")
+            else:
+                progress.update(67, "✅ Đã khôi phục bản viết lại ngôn ngữ đích đã đối soát")
+            if not target_text.strip():
+                raise ValueError("Bản dịch giọng đọc không được rỗng.")
+            fields.update(optimized_script=target_text, translated=target_text,
+                          optimization_work_json="", translation_parts=[target_text],
+                          translation_complete=True)
+            for name in ("optimization_review_json", "optimization_work_json", "optimized_script",
+                         "translated", "translation_parts", "translation_complete"):
+                progress.publish(name, fields.get(name, ""))
 
         fields["language"] = language
         progress.publish("language", language)
         # Complete metadata in the same target language after narration succeeds.
-        progress.update(96, "✅ Lời kể đã lưu; đang xử lý YouTube SEO riêng...")
+        progress.update(96, "✅ Bản dịch đã lưu; đang xử lý tiêu đề, mô tả và tag...")
         new_title, new_description, tags = metadata_for_job(
-            target_text, title, description, language, call, progress,
+            target_text, title, description, language, call, progress, fast=snapshot.get("translation_mode")=="direct",
         )
         fields.update(new_title=new_title, new_description=new_description,
                       seo_tags=tags, metadata="\n\n".join((new_title, new_description, tags)))
         for name in ("new_title", "new_description", "seo_tags", "metadata"):
             progress.publish(name, fields[name])
         result["ok"] = True
-        progress.update(100, "✅ Hoàn thành bản dịch giọng đọc, tiêu đề, mô tả và SEO")
+        progress.update(100, "✅ Hoàn thành bản dịch, tiêu đề, mô tả và tag")
         return result
 
     except Exception as exc:

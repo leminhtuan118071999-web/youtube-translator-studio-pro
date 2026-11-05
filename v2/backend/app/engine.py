@@ -48,7 +48,7 @@ def request_text(snapshot, prompt):
 
 def execute(kind, snapshot, progress, image_sink=None):
     """Checkpoints belong to the V2 job; never write into V1."""
-    snapshot = dict(snapshot, cloud=None)
+    snapshot = dict(snapshot, cloud=None, translation_mode="direct")
     if kind in ('full', 'translation'):
         return run_full_job(snapshot, progress)
     if kind == 'forms':
@@ -74,7 +74,7 @@ def execute(kind, snapshot, progress, image_sink=None):
         progress.update(10, 'Đang đọc ngữ cảnh để dịch tiêu đề và mô tả gốc')
         progress.update(50, 'Đang dịch sát nghĩa và đối chiếu với tiêu đề, mô tả gốc')
         title, description, tags = metadata_for_job(
-            snapshot['translated'], snapshot.get('title', ''), snapshot.get('description', ''), snapshot['language'], call, progress)
+            snapshot['translated'], snapshot.get('title', ''), snapshot.get('description', ''), snapshot['language'], call, progress, fast=True)
         fields = dict(new_title=title, new_description=description, seo_tags=tags,
                       metadata='\n\n'.join((title, description, tags)))
         for field, value in fields.items():

@@ -112,7 +112,7 @@ def validate_metadata(data):
     return title, description, ', '.join(unique)
 
 
-def generate_youtube_metadata(script, original_title, original_description, language, call, *, resume_candidate=None, checkpoint=None):
+def generate_youtube_metadata(script, original_title, original_description, language, call, *, resume_candidate=None, checkpoint=None, self_check_only=False):
     inputs=dict(original_title=original_title,original_description=original_description,story_context=script)
     has_description = bool((original_description or '').strip())
     description_rule = (
@@ -164,11 +164,14 @@ def generate_youtube_metadata(script, original_title, original_description, lang
                 'alter supplied originals. If only one original field is missing, derive ONLY that missing field '
                 'from story context; faithfully translate the field that is present. '
                 'Return ONLY JSON {"title":"...","description":"...","tags":["..."]}. JSON keys must stay English; translate only values. '
+                'Before returning silently verify accuracy, target language, actors and numeric values against the originals; fix errors in this same response. '+
                 'Previous validation errors: '+errors+'\nSOURCE DATA:\n'+json.dumps({**inputs,'candidate':candidate},ensure_ascii=False)
             )
             result=validate_metadata(candidate)
             if checkpoint:
                 checkpoint(dict(title=result[0], description=result[1], tags=candidate["tags"]))
+            if self_check_only:
+                return result
             verdict=request_metadata_review(call,
                 f'TARGET_METADATA_REVIEW. Check every field is natural {language}, except proper names and links. '
                 'Compare the title directly against original_title when it is present. '

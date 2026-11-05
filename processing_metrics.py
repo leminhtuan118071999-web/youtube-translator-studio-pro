@@ -1,11 +1,12 @@
 """Content-free timing counters for AI operations; never store prompts or credentials."""
 import time
 
-LABELS = dict(translation='Dịch lời kể', review='Đối chiếu bản dịch', repair='Sửa phần lỗi',
+LABELS = dict(translation='Dịch văn bản', review='Đối chiếu bản dịch', repair='Sửa phần lỗi',
               numbers='Chuẩn hóa số', context='Ngữ cảnh SEO', seo='Tạo SEO', seo_review='Kiểm tra SEO')
 
 
 def phase_for(prompt):
+    if prompt.startswith('DIRECT_TRANSLATION'):return 'translation'
     if prompt.startswith('NARRATION_TRANSLATION_PATCH'):return 'repair'
     if prompt.startswith('NARRATION_TRANSLATION_NUMBER_WORDS'):return 'numbers'
     if prompt.startswith('NARRATION_TRANSLATION'):return 'translation'
