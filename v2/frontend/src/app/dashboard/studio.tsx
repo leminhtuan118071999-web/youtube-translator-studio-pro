@@ -282,10 +282,16 @@ export function Studio({ email }: { email: string }) {
             change("language", value); setAutoTranslation({ sid: selected.id, language: value });
             setNotice("Đã chọn ngôn ngữ. Khi có kịch bản gốc hoặc link YouTube hợp lệ và worker kết nối, app tự dịch văn bản và YouTube SEO.");
           }} />
+          <label>Link YouTube<input disabled={busy} value={str(draft.url)} onChange={e => change("url", e.target.value)} placeholder="https://www.youtube.com/watch?v=…" /></label>
+          <details key={`${selected.id}:source-inputs`} style={{ gridColumn: "1 / -1" }}>
+            <summary>Kịch bản gốc · Tiêu đề gốc · Mô tả gốc</summary>
+            <div className="form-grid" style={{ marginTop: 16 }}>
           <label style={{ gridColumn: "1 / -1" }}>Kịch bản gốc<textarea disabled={busy || running} rows={12} maxLength={350000}
             value={str(draft.source)} onChange={e => change("source", e.target.value)}
             placeholder="Dán kịch bản gốc có sẵn để dịch sang ngôn ngữ đích. Không bắt buộc nhập link YouTube." /></label>
-          <label>Tiêu đề gốc (nếu có)<input disabled={busy || running} value={str(draft.title)} onChange={e => change("title", e.target.value)} /></label><label>Mô tả gốc (nếu có)<textarea disabled={busy || running} value={str(draft.description)} onChange={e => change("description", e.target.value)} /></label><label>Link YouTube<input disabled={busy} value={str(draft.url)} onChange={e => change("url", e.target.value)} placeholder="https://www.youtube.com/watch?v=…" /></label>
+          <label>Tiêu đề gốc (nếu có)<input disabled={busy || running} value={str(draft.title)} onChange={e => change("title", e.target.value)} /></label><label>Mô tả gốc (nếu có)<textarea disabled={busy || running} value={str(draft.description)} onChange={e => change("description", e.target.value)} /></label>
+            </div>
+          </details>
         </div>
 
         <p className="muted">Dán kịch bản gốc hoặc nhập link YouTube để dịch văn bản và tạo YouTube SEO. Kịch bản bạn nhập được ưu tiên sử dụng.</p>
