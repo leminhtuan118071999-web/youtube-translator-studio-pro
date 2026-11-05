@@ -1,7 +1,6 @@
 "use client";
 
 import { useCallback, useEffect, useRef, useState } from "react";
-import { autoTranslationReady } from "@/lib/auto-translation";
 import { createClient } from "@/lib/supabase/client";
 import { SignOutButton } from "./sign-out-button";
 
@@ -86,7 +85,6 @@ export function Studio({ email }: { email: string }) {
   const [draft, setDraft] = useState<Data>({});
   const [name, setName] = useState("");
   const [dirty, setDirty] = useState(false);
-  const [autoTranslation, setAutoTranslation] = useState<{ sid: string; language: string } | null>(null);
   const dirtyRef = useRef(false);
   const selectedRef = useRef<string | null>(null);
   const [checkpoint, setCheckpoint] = useState<Checkpoint | null>(null);
@@ -108,7 +106,6 @@ export function Studio({ email }: { email: string }) {
 
   function accept(session: Session) {
     sessionCache.current.set(session.id, session);
-    setAutoTranslation(null);
     setCheckpoint(null);
     selectedRef.current = session.id;
     setSelected(session); setDraft(session.data); setName(session.name);
@@ -220,15 +217,6 @@ export function Studio({ email }: { email: string }) {
   const narrationText = earlyNarration ?? str(draft.translated);
   const seoValue = (field: "new_title" | "new_description" | "seo_tags") => currentCheckpoint?.[field] ?? str(draft[field]);
   const running = selectedJob ? active(selectedJob) : false;
-  useEffect(() => {
-    if (!autoTranslationReady({ request: autoTranslation, sessionId: selected?.id, language: draft.language,
-      url: str(draft.url), source: str(draft.source), busy, running, healthy })) return;
-    const timer = setTimeout(() => {
-      setAutoTranslation(null);
-      void action(async () => { await run("full"); setTab("Nội dung"); });
-    }, 700);
-    return () => clearTimeout(timer);
-  }, [autoTranslation, selected?.id, selected?.revision, draft, name, busy, running, healthy]);
   const stale = (key: string) => draft[key] === true ? <p className="status-warning">Nội dung này được tạo từ đầu vào cũ. Hãy tạo lại để khớp với phiên hiện tại.</p> : null;
   const generate = (label: string, kind: string) => <button className="primary-button" disabled={busy || !selected || running || !healthy} onClick={() => void action(() => run(kind))}>{label}</button>;
 
@@ -240,8 +228,7 @@ export function Studio({ email }: { email: string }) {
       })}>＋ Phiên mới</button>
       <button className="ghost-button danger" disabled={busy || !sessions.length} onClick={() => void action(async () => {
         if (!window.confirm("Xóa TẤT CẢ phiên V2 của tài khoản, của tài khoản? Các tác vụ đang chạy sẽ bị hủy; nội dung chưa lưu cũng bị xóa. Không thể hoàn tác từ ứng dụng.")) return;
-        setAutoTranslation(null);
-        await api("/sessions", "DELETE");
+            await api("/sessions", "DELETE");
         selectedRef.current = null; dirtyRef.current = false; request.current = null;
         setSelected(null); setDraft({}); setName(""); setDirty(false); sessionCache.current.clear();
         await refresh(); setNotice("Đã xóa tất cả phiên V2 và hủy tác vụ liên quan.");
@@ -279,10 +266,11 @@ export function Studio({ email }: { email: string }) {
       {selected && tab === "Nội dung" && <section className="editor-panel">
         <div className="form-grid"><label>Tên phiên<input disabled={busy} value={name} onChange={e => { setName(e.target.value); dirtyRef.current = true; setDirty(true); }} /></label>
           <ChoiceField key={`${selected.id}:language`} label="Ngôn ngữ đích" options={languages} value={typeof draft.language === "string" ? draft.language : "Tiếng Việt"} disabled={busy || running} maxLength={80} onChange={value => {
-            change("language", value); setAutoTranslation({ sid: selected.id, language: value });
-            setNotice("Đã chọn ngôn ngữ. Khi có kịch bản gốc hoặc link YouTube hợp lệ và worker kết nối, app tự dịch văn bản và YouTube SEO.");
+            change("language", value);
+            setNotice("Đã chọn ngôn ngữ. Điền thông tin rồi bấm Bắt đầu để chạy phiên.");
           }} />
           <label>Link YouTube<input disabled={busy} value={str(draft.url)} onChange={e => change("url", e.target.value)} placeholder="https://www.youtube.com/watch?v=…" /></label>
+          <YouTubeThumbnail url={str(draft.url)} />
           <details key={`${selected.id}:source-inputs`} style={{ gridColumn: "1 / -1" }}>
             <summary>Kịch bản gốc · Tiêu đề gốc · Mô tả gốc</summary>
             <div className="form-grid" style={{ marginTop: 16 }}>
@@ -368,4 +356,20 @@ function ProcessingTimes({ metrics, running }: { metrics: Metrics; running: bool
     <ul>{Object.entries(metrics.phases).map(([key, value]) => <li key={key}>{labels[key] ?? key}: {value.calls} lượt · {Math.round(value.seconds)} giây</li>)}</ul>
     <p>Chờ thử lại: {Math.round(metrics.wait_seconds)} giây · Lượt API lỗi: {metrics.failures}</p>
   </details>;
+}
+
+function YouTubeThumbnail({ url }: { url: string }) {
+  let id = "";
+  try {
+    const parsed = new URL(url);
+    const host = parsed.hostname.toLowerCase();
+    if (["youtu.be", "www.youtu.be"].includes(host)) id = parsed.pathname.split("/")[1] || "";
+    else if (["youtube.com", "www.youtube.com", "m.youtube.com", "music.youtube.com"].includes(host))
+      id = parsed.searchParams.get("v") || (/^\/(shorts|embed|live)\//.test(parsed.pathname) ? parsed.pathname.split("/")[2] : "");
+  } catch { /* Wait for a valid YouTube link. */ }
+  if (!/^[A-Za-z0-9_-]{11}$/.test(id)) return null;
+  return <div style={{ gridColumn: "1 / -1" }}>
+    <img key={id} src={`https://i.ytimg.com/vi/${id}/hqdefault.jpg`} alt="Thumbnail gốc YouTube" width={240} style={{ maxWidth: "100%", borderRadius: 10 }} />
+    <div className="toolbar"><a className="secondary-button" href={`/api/youtube-thumbnail?id=${id}`}>Tải thumbnail gốc</a></div>
+  </div>;
 }
