@@ -33,3 +33,6 @@ Nút Chạy toàn bộ tự phân tích nguồn → nhận diện nhân vật �
 
 ## Đồng bộ nhân vật
 Chế độ xuất mặc định Đồng bộ nhân vật: ZIP yêu cầu ảnh tham chiếu của các nhân vật xuất hiện, không yêu cầu ảnh đầu cảnh. Nạp ảnh characters/ vào Phúc Anh, đặt tên đúng tên file, dán prompts.txt (mỗi dòng một đoạn). Nút Tải prompt VIDEO xuất riêng không cần ZIP. Prompt ảnh image-prompts.txt chỉ dùng tạo ảnh ngoài. Các tên vắng mặt được thay bằng mô tả người ngoài khung trong chỉ dẫn hình ảnh; thoại giữ nguyên. Nếu prompt còn nhắc trên 3 tên trong thoại, xuất bị chặn kèm mã đoạn để sửa/tách, không tự sửa nghĩa lời thoại. Chưa kiểm thử trực tiếp trong Phúc Anh.
+
+## Kiểm tra người nói và lời thoại
+Sau khi tạo đoạn phim, app tự kiểm tra theo lô tối đa 8 đoạn với ngữ cảnh liền kề và nguồn văn bản (nguồn dài dùng ghi chú phân tích). Nút Kiểm tra người nói / lời thoại dùng cho dự án cũ. Chỉ sửa người nói nếu AI đưa căn cứ và người đó có trong khung hình; giữ nguyên câu thoại. Hiện lý do/căn cứ trong từng đoạn. Câu chưa rõ, nghi nhiều người nói hoặc trùng nguyên câu được đánh dấu cần xác nhận và chặn xuất video/ZIP. Có nút xác nhận thủ công sau khi đối chiếu. Sửa thoại/người nói yêu cầu kiểm tra lại. Kết quả/checkpoint lưu cùng JSON. Đây là kiểm tra bằng AI trên văn bản, không phải nhận diện giọng nói/hình ảnh và không bảo đảm đúng tuyệt đối. Tăng số lượt gọi API.

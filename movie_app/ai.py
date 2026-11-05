@@ -36,6 +36,24 @@ def check_shots(d,cast,maximum):
         s.update(duration=8,status='Chờ tạo',transition='cut',image='')
     return d
 
+def check_audit(d,shots,cast):
+    reviews=d.get('reviews')
+    if not isinstance(reviews,list) or len(reviews)!=len(shots):raise ValueError('Thiếu kết quả kiểm tra lời thoại.')
+    expected={s['id']:s for s in shots};seen=set();names={c['name'] for c in cast}
+    for r in reviews:
+        sid=r.get('id')
+        if sid not in expected or sid in seen:raise ValueError('Mã đoạn kiểm tra sai hoặc trùng.')
+        seen.add(sid);shot=expected[sid]
+        if r.get('status') not in ('confirmed','corrected','needs_confirmation'):raise ValueError('Trạng thái kiểm tra không hợp lệ.')
+        for k in ('speaker','reason','evidence'):
+            if not isinstance(r.get(k),str):raise ValueError('Thiếu căn cứ kiểm tra lời thoại.')
+        if r['status']!='needs_confirmation' and shot.get('dialogue'):
+            if r['speaker'] not in names or r['speaker'] not in shot['characters']:raise ValueError('Người nói được sửa phải có trong khung hình.')
+            if not r['evidence'].strip():raise ValueError('Thiếu bằng chứng gán người nói.')
+        if r['status']=='confirmed' and r['speaker']!=shot.get('speaker',''):raise ValueError('Xác nhận phải giữ người nói hiện tại.')
+        if not shot.get('dialogue') and r['speaker']:raise ValueError('Đoạn không thoại phải để trống người nói.')
+    return {'reviews':reviews}
+
 def generate(data,call=None):
     mode=data.get('mode');language=str(data.get('language','Vietnamese'))[:100]
     if call is None:
@@ -50,6 +68,11 @@ def generate(data,call=None):
     elif mode=='cast':instruction='Return JSON {"characters":[{"name":"LatinIdentifier","appearance":"consistent proposed English design","voice":"proposed consistent voice specification","evidence":"source role, aliases, evidence and uncertainty"}]}. Merge aliases only when supported. Extract cast from all notes.'
     elif mode=='plan':
         instruction='Create a complete chronological adaptation outline of 6 to 12 scenes covering ALL decisive events and ending. Return JSON {"scenes":[{"title":"scene name","events":"detailed scene evidence and necessary action","characters":["LatinIdentifier"]}]}. Use only supplied cast. Do not omit ending. No more than 12 scenes.'
+    elif mode=='audit':
+        shots=data.get('shots')
+        if not isinstance(shots,list) or not 1<=len(shots)<=8:raise ValueError('Kiểm tra tối đa 8 đoạn mỗi lượt.')
+        if len({s.get('id') for s in shots})!=len(shots):raise ValueError('Trùng mã đoạn kiểm tra.')
+        instruction='Audit ONLY the supplied target shots against source evidence and neighboring dialogue. Return JSON {"reviews":[{"id":"exact target id","status":"confirmed|corrected|needs_confirmation","speaker":"cast identifier or empty","reason":"Vietnamese explanation","evidence":"specific source excerpt or evidence, acknowledge inference for adapted dialogue"}]}. Exactly one review per target id. Do not rewrite dialogue, invent evidence, or add visible characters. Correct speaker only when strong evidence identifies a visible cast member; if uncertain or the actual speaker is absent, use needs_confirmation and retain the original speaker. Check relationships, address terms, response order, duplicate/repeated lines, multi-speaker lines and words attributed to another character. Mark those issues needs_confirmation; never silently delete or rewrite speech. A repeated phrase can be intentional; explain context. No dialogue means empty speaker. Source prose adaptations are not verbatim quotations. Do not claim voice/image recognition. TARGET SHOTS: '+json.dumps(shots,ensure_ascii=False)
     elif mode=='shots':
         maximum=int(data.get('maximum',10))
         if not 1<=maximum<=25:raise ValueError('Ngân sách đoạn không hợp lệ.')
@@ -57,6 +80,7 @@ def generate(data,call=None):
     else:raise ValueError('Bước AI không hợp lệ.')
     prompt=RULES+'\nTARGET LANGUAGE: '+language+'\nCAST: '+json.dumps(cast,ensure_ascii=False)+'\n'+instruction+'\nSOURCE/NOTES:\n'+context
     d=obj(call(prompt))
+    if mode=='audit':return check_audit(d,shots,cast)
     if mode=='cast':return check_cast(d)
     if mode=='shots':return check_shots(d,cast,maximum)
     if mode=='analyze' and (not isinstance(d.get('notes'),str) or not d['notes'].strip() or len(d['notes'])>18000):raise ValueError('Bản phân tích không hợp lệ hoặc quá dài.')
