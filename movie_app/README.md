@@ -30,3 +30,6 @@ Mỗi nhân vật có prompt ảnh tham chiếu riêng; mỗi đoạn có prompt
 
 ## Chạy liên tiếp
 Nút Chạy toàn bộ tự phân tích nguồn → nhận diện nhân vật → lập dàn ý → tạo mọi đoạn phim. Hiện phần trăm theo các bước hoàn tất, không phải ước tính thời gian hoặc tiến độ xử lý bên trong máy chủ AI. Hai nút chạy riêng vẫn dùng được. Lỗi/dừng giữ checkpoint để thử lại; tải JSON để lưu trước khi đóng trang. Giữ trang và máy chủ đang chạy đến hết. Chưa bao gồm tạo ảnh/video MP4.
+
+## Đồng bộ nhân vật
+Chế độ xuất mặc định Đồng bộ nhân vật: ZIP yêu cầu ảnh tham chiếu của các nhân vật xuất hiện, không yêu cầu ảnh đầu cảnh. Nạp ảnh characters/ vào Phúc Anh, đặt tên đúng tên file, dán prompts.txt (mỗi dòng một đoạn). Nút Tải prompt VIDEO xuất riêng không cần ZIP. Prompt ảnh image-prompts.txt chỉ dùng tạo ảnh ngoài. Các tên vắng mặt được thay bằng mô tả người ngoài khung trong chỉ dẫn hình ảnh; thoại giữ nguyên. Nếu prompt còn nhắc trên 3 tên trong thoại, xuất bị chặn kèm mã đoạn để sửa/tách, không tự sửa nghĩa lời thoại. Chưa kiểm thử trực tiếp trong Phúc Anh.
