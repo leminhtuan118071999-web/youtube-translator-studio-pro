@@ -1,0 +1,107 @@
+<!doctype html><html lang="vi"><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>LMT Film Builder</title><style>
+*{box-sizing:border-box}body{background:#0c1420;color:#e7edf7;font:15px system-ui;max-width:1100px;margin:auto;padding:24px}h1{margin-bottom:5px}p{color:#aabbd0}section{background:#142033;padding:20px;border-radius:14px;margin:16px 0}label{display:block;margin:12px 0 5px}input,textarea,select{background:#0c1420;color:#eef4ff;border:1px solid #3a4b63;border-radius:7px;padding:10px;width:100%;font:inherit}textarea{min-height:90px}button{background:#2266cf;color:white;border:0;border-radius:7px;padding:11px 16px;margin:6px;cursor:pointer;font:inherit}summary{cursor:pointer;padding:12px}details{border:1px solid #3a4b63;border-radius:8px;margin:8px 0;padding:8px}.card{display:inline-flex;vertical-align:top;flex-direction:column;width:160px;padding:8px}.card img{height:160px;object-fit:contain;background:white}#pick label{display:inline-block;margin:10px}input[type=checkbox]{width:auto}#message{position:sticky;top:0;background:#203f68;padding:12px;white-space:pre-wrap}small{color:#aabbd0}.row{display:flex;gap:8px;flex-wrap:wrap}
+</style><h1>LMT Film Builder</h1><p>Bản thử nghiệm quản lý và xuất dự án · 16:9 · Tối đa 20 phút</p><div id="message" role="status">Dữ liệu ở trong phiên trình duyệt. Tải JSON trước khi đóng hoặc tải lại trang.</div>
+<div class="row"><button id="new">Dự án mới</button><button id="save">Lưu JSON kèm ảnh</button><label>Mở JSON <input id="load" type="file" accept=".json"></label></div>
+<section><label>Tên dự án<input id="name" value="Dự án mới"></label><label>Ngôn ngữ thoại<input id="language" value="Vietnamese"></label><label>Nguồn câu chuyện / phụ đề<textarea id="source"></textarea></label><small>Bản này lưu nguồn, chưa tự phân tích nguồn hoặc tải YouTube.</small></section>
+<section><h2>1 · Nhân vật</h2><div id="cast"></div><form id="characterForm"><label>Tên Latin, 4–40 ký tự<input id="cname" required pattern="[A-Za-z][A-Za-z0-9_]{3,39}"></label><label>Ngoại hình / trang phục chuẩn<textarea id="appearance" required></textarea></label><label>Mô tả giọng cố định<textarea id="voice"></textarea></label><label>Ảnh nhân vật PNG/JPG<input id="cimage" type="file" accept="image/png,image/jpeg"></label><button>Thêm nhân vật</button></form></section>
+<section><h2>2 · Đoạn phim</h2><p id="stats"></p><div id="shots"></div><form id="shotForm"><label>Mã đoạn<input id="sid" required pattern="[A-Za-z0-9_-]{1,40}" placeholder="SC001_01"></label><div id="pick"></div><label>Người nói<select id="speaker"></select></label><label>Nguyên văn thoại<textarea id="dialogue"></textarea></label><label>Bối cảnh<input id="location" required></label><label>Trang phục trong đoạn<input id="wardrobe"></label><label>Hành động (nên viết tiếng Anh)<textarea id="action" required></textarea></label><label>Góc máy<input id="camera" value="locked medium close-up"></label><label>Giây giữ lại khi dựng<input id="duration" type="number" min="0.1" max="8" step="0.1" value="8" required></label><label>Chuyển sang đoạn sau<select id="transition"><option value="cut">Cắt thẳng</option><option value="dissolve">Hòa tan</option><option value="fade_black">Mờ đen</option></select></label><label>Ảnh đầu cảnh<input id="simage" type="file" accept="image/png,image/jpeg"></label><button>Thêm đoạn</button></form></section>
+<section><h2>3 · Xuất cho Phúc Anh Video</h2><p>Một ảnh khớp một dòng prompt. Gói gồm ảnh, TXT, CSV và JSON. Yêu cầu đủ ảnh đầu cảnh trước khi xuất ZIP.</p><button id="export">Tải bộ ZIP</button><p>Chưa kết nối Veo/Phúc Anh, chưa tạo ảnh hoặc clip và chưa ghép MP4. Chuyển cảnh lưu trong CSV để dùng khi dựng.</p></section>
+<script>
+const enc=new TextEncoder();
+function validate(p){
+if(!p||p.version!==1||!Array.isArray(p.characters)||!Array.isArray(p.shots))throw Error('JSON dự án không hợp lệ');
+const names=p.characters.map(c=>c.name);
+if(names.length>10||new Set(names.map(n=>n.toLowerCase())).size!==names.length||names.some(n=>! /^[A-Za-z][A-Za-z0-9_]{3,39}$/.test(n)))throw Error('Tối đa 10 tên Latin, 4–40 ký tự, không trùng');
+const ids=new Set();let total=0;
+for(const s of p.shots){
+if(!/^[A-Za-z0-9_-]{1,40}$/.test(s.id)||ids.has(s.id))throw Error('Mã đoạn sai hoặc trùng');ids.add(s.id);
+if(!Array.isArray(s.characters)||s.characters.length>3||s.characters.some(n=>!names.includes(n)))throw Error('Đoạn chỉ có tối đa 3 nhân vật đã khai báo');
+if(s.dialogue&& !s.characters.includes(s.speaker))throw Error('Thiếu người nói trong đoạn');
+if(!s.action||!s.action.trim())throw Error('Thiếu hành động');
+if(!Number.isFinite(s.duration)||s.duration<=0||s.duration>8)throw Error('Mỗi đoạn từ trên 0 đến 8 giây');
+total+=s.duration;
+for(const img of [s.image,...p.characters.map(c=>c.image)])if(img&&!/^data:image\/(png|jpeg);base64,[A-Za-z0-9+/=]+$/.test(img))throw Error('Ảnh phải là PNG/JPG');
+}if(total>1200)throw Error('Tổng dự kiến vượt 20 phút');return total;
+}
+function prompt(p,s){
+const cast=s.characters.map(n=>{const c=p.characters.find(x=>x.name===n);return n+': '+c.appearance;}).join('. ');
+const voice=p.characters.find(c=>c.name===s.speaker)?.voice||'';
+const speech=s.dialogue?'Only '+s.speaker+' speaks exactly in '+p.language+': '+JSON.stringify(s.dialogue)+'. Voice: '+voice+'. Natural synchronized lip movements. Other characters remain silent.':'No speech, narration or speaking mouth movements.';
+return ('Cinematic film, 16:9, 8 seconds. Preserve supplied image composition and character identities. '+cast+'. Wardrobe: '+s.wardrobe+'. Location: '+s.location+'. Action: '+s.action+'. Camera: '+s.camera+'. '+speech+' Quiet location ambience. No music, subtitles or invented dialogue. Short silent pause at the end.').replace(/\s+/g,' ').trim();
+}
+function csv(p){
+const q=x=>'"'+String(x??'').replaceAll('"','""')+'"';
+return '\ufeff'+[['order','id','characters','speaker','dialogue','keep_seconds','status','transition'],...p.shots.map((s,i)=>[i+1,s.id,s.characters.join('|'),s.speaker,s.dialogue,s.duration,s.status,s.transition])].map(r=>r.map(q).join(',')).join('\r\n');
+}
+function crc(bytes){let c=0xffffffff;for(const b of bytes){c^=b;for(let i=0;i<8;i++)c=(c>>>1)^((c&1)?0xedb88320:0);}return(c^0xffffffff)>>>0;}
+function zip(files){
+let offset=0;const locals=[],central=[];const head=(n,fill)=>{const a=new Uint8Array(n);fill(new DataView(a.buffer));return a;};
+for(const [name,bytes] of files){
+const n=enc.encode(name),sum=crc(bytes);
+const l=head(30,v=>{v.setUint32(0,0x04034b50,true);v.setUint16(4,20,true);v.setUint16(6,0x800,true);v.setUint32(14,sum,true);v.setUint32(18,bytes.length,true);v.setUint32(22,bytes.length,true);v.setUint16(26,n.length,true);});
+locals.push(l,n,bytes);
+const c=head(46,v=>{v.setUint32(0,0x02014b50,true);v.setUint16(4,20,true);v.setUint16(6,20,true);v.setUint16(8,0x800,true);v.setUint32(16,sum,true);v.setUint32(20,bytes.length,true);v.setUint32(24,bytes.length,true);v.setUint16(28,n.length,true);v.setUint32(42,offset,true);});
+central.push(c,n);offset+=l.length+n.length+bytes.length;
+}
+const size=central.reduce((a,b)=>a+b.length,0);
+const end=head(22,v=>{v.setUint32(0,0x06054b50,true);v.setUint16(8,files.length,true);v.setUint16(10,files.length,true);v.setUint32(12,size,true);v.setUint32(16,offset,true);});
+return new Blob([...locals,...central,end],{type:'application/zip'});
+}
+
+
+let p={version:1,name:'Dự án mới',language:'Vietnamese',source:'',characters:[],shots:[]};
+const $=id=>document.getElementById(id);
+function say(t){$('message').textContent=t;}
+function dl(blob,name){const a=document.createElement('a');a.href=URL.createObjectURL(blob);a.download=name;a.click();setTimeout(()=>URL.revokeObjectURL(a.href),5000);}
+async function imageData(file){if(!file)return '';if(!['image/png','image/jpeg'].includes(file.type)||file.size>8e6)throw Error('Ảnh PNG/JPG tối đa 8 MB');return await new Promise((ok,no)=>{const r=new FileReader();r.onload=()=>ok(r.result);r.onerror=no;r.readAsDataURL(file);});}
+function sync(){p.name=$('name').value;p.language=$('language').value;p.source=$('source').value;}
+function render(){
+$('name').value=p.name;$('language').value=p.language;$('source').value=p.source;
+$('cast').textContent='';$('pick').textContent='';$('speaker').textContent='';
+const blank=document.createElement('option');blank.value='';blank.textContent='Không thoại';$('speaker').append(blank);
+for(const c of p.characters){
+const item=document.createElement('div');item.className='card';
+if(c.image){const im=document.createElement('img');im.src=c.image;item.append(im);}
+const label=document.createElement('strong');label.textContent=c.name;item.append(label);
+const edit=document.createElement('button');edit.textContent='Sửa mô tả';edit.onclick=()=>{const a=window.prompt('Ngoại hình',c.appearance);if(a===null)return;const v=window.prompt('Giọng',c.voice);if(v===null)return;c.appearance=a;c.voice=v;render();};item.append(edit);$('cast').append(item);
+const l=document.createElement('label'),check=document.createElement('input');check.type='checkbox';check.value=c.name;check.className='castcheck';l.append(check,document.createTextNode(c.name));$('pick').append(l);
+const op=document.createElement('option');op.value=c.name;op.textContent=c.name;$('speaker').append(op);
+}
+$('shots').textContent='';
+p.shots.forEach((s,i)=>{
+const d=document.createElement('details'),summary=document.createElement('summary');summary.textContent=s.id+' · '+s.status+' · '+s.duration+' giây';d.append(summary);
+const t=document.createElement('p');t.textContent=s.action+' | '+s.dialogue;d.append(t);
+if(s.image){const im=document.createElement('img');im.src=s.image;im.style.width='200px';d.append(im);}
+const status=document.createElement('select');['Chờ tạo','Đang tạo','Cần kiểm tra','Đạt','Cần tạo lại'].forEach(x=>{const op=document.createElement('option');op.value=x;op.textContent=x;status.append(op);});status.value=s.status;status.onchange=()=>{s.status=status.value;summary.textContent=s.id+' · '+s.status+' · '+s.duration+' giây';};d.append(status);
+const replace=document.createElement('input');replace.type='file';replace.accept='image/png,image/jpeg';replace.onchange=async()=>{try{s.image=await imageData(replace.files[0]);render();}catch(e){say(e.message);}};d.append(replace);
+const edit=document.createElement('button');edit.textContent='Sửa thoại / hành động';edit.onclick=()=>{const a=window.prompt('Hành động',s.action);if(a===null)return;const line=window.prompt('Thoại (giữ người nói hiện tại)',s.dialogue);if(line===null)return;const next={...s,action:a,dialogue:line};try{validate({...p,shots:p.shots.map((x,j)=>j===i?next:x)});p.shots[i]=next;render();}catch(e){say(e.message);}};d.append(edit);
+for(const [label,delta] of [['↑',-1],['↓',1]]){const b=document.createElement('button');b.textContent=label;b.onclick=()=>{const j=i+delta;if(j<0||j>=p.shots.length)return;[p.shots[i],p.shots[j]]=[p.shots[j],p.shots[i]];render();};d.append(b);}
+const del=document.createElement('button');del.textContent='Xóa đoạn';del.onclick=()=>{if(confirm('Xóa '+s.id+'?')){p.shots.splice(i,1);render();}};d.append(del);$('shots').append(d);
+});
+$('stats').textContent=p.shots.length+' đoạn · '+p.shots.reduce((n,s)=>n+s.duration,0)+' / 1200 giây dự kiến';
+}
+$('characterForm').onsubmit=async e=>{e.preventDefault();try{
+sync();const c={name:$('cname').value.trim(),appearance:$('appearance').value,voice:$('voice').value,image:await imageData($('cimage').files[0])};
+const next={...p,characters:[...p.characters,c]};validate(next);p=next;e.target.reset();render();say('Đã thêm nhân vật. Tải JSON để lưu dự án.');
+}catch(e){say(e.message);}};
+$('shotForm').onsubmit=async e=>{e.preventDefault();try{sync();
+const s={id:$('sid').value.trim(),characters:[...document.querySelectorAll('.castcheck:checked')].map(x=>x.value),speaker:$('speaker').value,dialogue:$('dialogue').value,location:$('location').value,wardrobe:$('wardrobe').value,action:$('action').value,camera:$('camera').value,duration:Number($('duration').value),transition:$('transition').value,status:'Chờ tạo',image:await imageData($('simage').files[0])};
+validate({...p,shots:[...p.shots,s]});p.shots.push(s);e.target.reset();render();say('Đã thêm đoạn. Tải JSON để lưu dự án.');
+}catch(e){say(e.message);}};
+$('save').onclick=()=>{try{sync();validate(p);dl(new Blob([JSON.stringify(p,null,2)],{type:'application/json'}),'project.json');say('Đã yêu cầu tải bản lưu JSON, gồm cả ảnh.');}catch(e){say(e.message);}};
+$('load').onchange=async e=>{try{if(!e.target.files[0])return;const n=JSON.parse(await e.target.files[0].text());validate(n);if(!confirm('Thay dự án đang mở bằng JSON này?'))return;p=n;render();say('Đã mở dự án.');}catch(e){say(e.message);}e.target.value='';};
+$('new').onclick=()=>{if(confirm('Tạo mới? Hãy tải JSON trước để giữ dự án hiện tại.')){p={version:1,name:'Dự án mới',language:'Vietnamese',source:'',characters:[],shots:[]};render();}};
+$('export').onclick=()=>{
+try{sync();validate(p);if(!p.shots.length)throw Error('Chưa có đoạn phim');
+const text=p.shots.map(s=>prompt(p,s)).join('\n');
+const files=[['project.json',enc.encode(JSON.stringify(p,null,2))],['prompts.txt',enc.encode(text)],['shots.csv',enc.encode(csv(p))]];
+let missing=[];function addImage(name,data){const b=atob(data.split(',')[1]);files.push([name,Uint8Array.from(b,c=>c.charCodeAt(0))]);}
+p.shots.forEach((s,i)=>{if(s.image)addImage('images/'+String(i+1).padStart(3,'0')+'_'+s.id+(s.image.startsWith('data:image/png')?'.png':'.jpg'),s.image);else missing.push(s.id);});
+p.characters.forEach(c=>{if(c.image)addImage('characters/'+c.name+(c.image.startsWith('data:image/png')?'.png':'.jpg'),c.image);});
+if(missing.length)throw Error('Chưa đủ ảnh đầu cảnh: '+missing.join(', ')+'. Thêm ảnh để xuất bộ Image to Video đúng thứ tự.');
+files.push(['README.txt',enc.encode('Ảnh images/ xếp theo số, khớp từng dòng prompts.txt. Chọn Image to Video, 16:9, 8 giây trong Phúc Anh. shots.csv quy định giây giữ lại sau dựng. Chưa tự ghép MP4 hoặc thêm chuyển cảnh. Kiểm tra thoại và khẩu hình từng clip. project.json gồm ảnh để mở lại app. Không tự lấy YouTube hoặc gọi AI trong bản này.')]);
+dl(zip(files),'LMT-Film-Project.zip');say('Đã yêu cầu tải ZIP.');
+}catch(e){say(e.message);}
+};
+render();
+</script></html>

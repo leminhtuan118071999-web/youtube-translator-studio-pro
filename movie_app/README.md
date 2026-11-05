@@ -1,0 +1,2 @@
+# LMT Film Builder alpha
+Download index.html and open in a modern browser. No installation or external dependencies. Local in-memory editing; download JSON before closing. Supports characters, per-shot keyframes and statuses, duration validation and ZIP export with PNG/JPG + one-line TXT prompts + CSV + JSON. JSON includes images. No automatic source analysis, video generation or rendering yet. Transitions are metadata only. No credentials or network calls. Do not overwrite V2/V3 installations.
