@@ -44,3 +44,6 @@ Mở đoạn → Tách đoạn thành 2 form. Chia hành động/thoại, chọn
 
 ## Sửa/tách tự động
 Mỗi đoạn có nút Tự sửa / tách bằng AI. Dựa vào nguồn và đoạn liền kề, trả 1–4 form nối tiếp tùy cần; tự kiểm tra lại thoại sau khi áp dụng. Giữ bản gốc trong repairHistory của JSON, không dùng lại ảnh đầu cảnh cũ cho hành động mới. Mỗi form mới 8 giây; ngân sách bị giới hạn bởi trần 20 phút, không tự cắt thoại bằng cách giảm thời gian giữ lại. Lỗi xác thực trước áp dụng giữ nguyên đoạn gốc; lỗi kiểm tra thoại sau áp dụng giữ bản mới và đánh dấu cần xác nhận. Có thể phát sinh phí API; AI vẫn cần duyệt về nội dung.
+
+## Xác thực theo nguồn
+Nút Kiểm tra và xác thực theo nguồn luôn chạy lại, không dùng kết quả xác nhận cũ và không tự chấp nhận cảnh báo dù đang bật tùy chọn bỏ qua. AI kiểm tra nghĩa câu, người nói, xưng hô, ngôn ngữ và ngữ cảnh; phải kèm trích đoạn nguồn. Máy chủ kiểm tra trích đoạn thực sự nằm trong nội dung cung cấp. Thiếu căn cứ hợp lệ đánh dấu chưa xác thực, không áp dụng đề xuất sửa người nói. Nguồn dài dùng ghi chú phân tích (không phải đối chiếu toàn bộ bản gốc trực tiếp); kết quả dựa văn bản, không bảo đảm tuyệt đối và không nhận diện giọng/hình.

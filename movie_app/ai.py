@@ -74,11 +74,15 @@ def generate(data,call=None):
         maximum=int(data.get('maximum',4))
         if not 1<=maximum<=4:raise ValueError('Ngân sách tách đoạn không hợp lệ.')
         instruction='Repair ONLY the ORIGINAL SHOT into 1 to '+str(maximum)+' consecutive video shots. Use one if splitting is unnecessary. Preserve ALL its factual story content, speech meaning, relationships and chronology; do not summarize away or invent events, repeat dialogue, or redo neighboring events. Split overloaded actions and speaker turns naturally into eight-second clips. Each shot <=3 visible cast members and one speaker. Mention <=3 total cast identifiers anywhere in each shot INCLUDING dialogue: refer to absent people using accurate relationship/role phrases when needed, preserving who did what. Never turn reported events into visible reenactments. Resolve missing cast only with source evidence; never add arbitrary people. Environment-only shots may have characters=[], empty speaker/dialogue. Visual action should start from previous ending and lead to the next shot. Keep consistent wardrobe, props, position, emotional state. Return JSON {"shots":[{"characters":["LatinIdentifier"],"speaker":"LatinIdentifier or empty","dialogue":"target-language speech or empty","action":"English action","location":"English location","camera":"English camera","wardrobe":"English wardrobe"}]}. Dialogue <=24 whitespace words per shot. ORIGINAL SHOT: '+json.dumps(original,ensure_ascii=False)
-    elif mode=='audit':
+    elif mode in ('audit','verify'):
         shots=data.get('shots')
         if not isinstance(shots,list) or not 1<=len(shots)<=8:raise ValueError('Kiểm tra tối đa 8 đoạn mỗi lượt.')
         if len({s.get('id') for s in shots})!=len(shots):raise ValueError('Trùng mã đoạn kiểm tra.')
         instruction='Audit ONLY the supplied target shots against source evidence and neighboring dialogue. Return JSON {"reviews":[{"id":"exact target id","status":"confirmed|corrected|needs_confirmation","speaker":"cast identifier or empty","reason":"Vietnamese explanation","evidence":"specific source excerpt or evidence, acknowledge inference for adapted dialogue"}]}. Exactly one review per target id. Do not rewrite dialogue, invent evidence, or add visible characters. Correct speaker only when strong evidence identifies a visible cast member; if uncertain or the actual speaker is absent, use needs_confirmation and retain the original speaker. Check relationships, address terms, response order, duplicate/repeated lines, multi-speaker lines and words attributed to another character. Mark those issues needs_confirmation; never silently delete or rewrite speech. A repeated phrase can be intentional; explain context. No dialogue means empty speaker. Source prose adaptations are not verbatim quotations. Do not claim voice/image recognition. TARGET SHOTS: '+json.dumps(shots,ensure_ascii=False)
+        if mode=='verify':
+            source=data.get('sourceEvidence')
+            if not isinstance(source,str) or not source.strip() or len(source)>110000:raise ValueError('Thiếu nội dung để đối chiếu chứng cứ.')
+            instruction+=' For verification, each review must ALSO include source_quote (an exact short excerpt copied from SOURCE EVIDENCE, not from generated shots) and attribution (explicit|adapted|uncertain). Check whether the SPEECH MEANING is supported, not only whether a cast name appears. Distinguish adapted prose dialogue from verbatim speech. Check target language, pronouns, knowledge available to that character at this point, and continuity of response. Without reliable support mark needs_confirmation, attribution uncertain. Do not mark successful merely because the current shot already names a speaker. SOURCE EVIDENCE TO QUOTE: '+source
     elif mode=='shots':
         maximum=int(data.get('maximum',10))
         if not 1<=maximum<=25:raise ValueError('Ngân sách đoạn không hợp lệ.')
@@ -86,7 +90,17 @@ def generate(data,call=None):
     else:raise ValueError('Bước AI không hợp lệ.')
     prompt=RULES+'\nTARGET LANGUAGE: '+language+'\nCAST: '+json.dumps(cast,ensure_ascii=False)+'\n'+instruction+'\nSOURCE/NOTES:\n'+context
     d=obj(call(prompt))
-    if mode=='audit':return check_audit(d,shots,cast)
+    if mode in ('audit','verify'):
+        result=check_audit(d,shots,cast)
+        if mode=='verify':
+            normalize=lambda t:re.sub(r'\s+',' ',t).strip()
+            for review in result['reviews']:
+                quote=review.get('source_quote','');attribution=review.get('attribution')
+                valid=isinstance(quote,str) and bool(quote.strip()) and normalize(quote) in normalize(source) and attribution in ('explicit','adapted')
+                if not valid:
+                    review.update(status='needs_confirmation',speaker=next(s.get('speaker','') for s in shots if s['id']==review['id']),reason=review['reason']+' Chưa có trích đoạn nguồn hợp lệ để xác thực.')
+                review['verification']='source_supported' if valid and review['status']!='needs_confirmation' else 'unverified'
+        return result
     if mode=='cast':return check_cast(d)
     if mode in ('shots','repair'):
         result=check_shots(d,cast,maximum)
