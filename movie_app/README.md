@@ -27,3 +27,6 @@ Checkpoint giữ trong dự án, tải JSON trước khi đóng. Thử lại cù
 
 ## Prompt tạo ảnh bên ngoài
 Mỗi nhân vật có prompt ảnh tham chiếu riêng; mỗi đoạn có prompt ảnh đầu cảnh 16:9, nêu tên ảnh nhân vật cần đính kèm. Mở prompt rồi Sao chép; tạo ảnh bằng công cụ ngoài và tải PNG/JPG về đúng nhân vật/đoạn. Nút Tải prompt tạo ảnh (TXT) hoạt động trước khi có ảnh; ZIP cũng gồm image-prompts.txt. Prompt dùng mô tả hiện tại và cập nhật khi sửa mô tả. App chưa tự gọi API tạo ảnh.
+
+## Chạy liên tiếp
+Nút Chạy toàn bộ tự phân tích nguồn → nhận diện nhân vật → lập dàn ý → tạo mọi đoạn phim. Hiện phần trăm theo các bước hoàn tất, không phải ước tính thời gian hoặc tiến độ xử lý bên trong máy chủ AI. Hai nút chạy riêng vẫn dùng được. Lỗi/dừng giữ checkpoint để thử lại; tải JSON để lưu trước khi đóng trang. Giữ trang và máy chủ đang chạy đến hết. Chưa bao gồm tạo ảnh/video MP4.

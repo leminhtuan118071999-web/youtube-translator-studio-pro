@@ -3,7 +3,7 @@
 </style><h1>LMT Film Builder</h1><p>Bản thử nghiệm quản lý và xuất dự án · 16:9 · Tối đa 20 phút</p><div id="message" role="status">Dữ liệu ở trong phiên trình duyệt. Tải JSON trước khi đóng hoặc tải lại trang.</div>
 <div class="row"><button id="new">Dự án mới</button><button id="save">Lưu JSON kèm ảnh</button><label>Mở JSON <input id="load" type="file" accept=".json"></label></div>
 <section><label>Tên dự án<input id="name" value="Dự án mới"></label><label>Ngôn ngữ thoại<select id="language"><option value="Vietnamese">Tiếng Việt</option><option value="English">Tiếng Anh</option><option value="Italian">Tiếng Ý</option><option value="French">Tiếng Pháp</option><option value="German">Tiếng Đức</option><option value="Spanish">Tiếng Tây Ban Nha</option><option value="Portuguese (Brazil)">Tiếng Bồ Đào Nha (Brazil)</option><option value="Portuguese (Portugal)">Tiếng Bồ Đào Nha (Bồ Đào Nha)</option><option value="Polish">Tiếng Ba Lan</option><option value="Hungarian">Tiếng Hungary</option><option value="Dutch">Tiếng Hà Lan</option><option value="Russian">Tiếng Nga</option><option value="Ukrainian">Tiếng Ukraina</option><option value="Czech">Tiếng Séc</option><option value="Slovak">Tiếng Slovakia</option><option value="Romanian">Tiếng Romania</option><option value="Bulgarian">Tiếng Bulgaria</option><option value="Greek">Tiếng Hy Lạp</option><option value="Turkish">Tiếng Thổ Nhĩ Kỳ</option><option value="Swedish">Tiếng Thụy Điển</option><option value="Norwegian">Tiếng Na Uy</option><option value="Danish">Tiếng Đan Mạch</option><option value="Finnish">Tiếng Phần Lan</option><option value="Croatian">Tiếng Croatia</option><option value="Serbian">Tiếng Serbia</option><option value="Chinese (Mandarin)">Tiếng Trung (Quan thoại)</option><option value="Chinese (Cantonese)">Tiếng Trung (Quảng Đông)</option><option value="Japanese">Tiếng Nhật</option><option value="Korean">Tiếng Hàn</option><option value="Thai">Tiếng Thái</option><option value="Indonesian">Tiếng Indonesia</option><option value="Malay">Tiếng Mã Lai</option><option value="Filipino">Tiếng Philippines</option><option value="Khmer">Tiếng Khmer</option><option value="Lao">Tiếng Lào</option><option value="Burmese">Tiếng Myanmar</option><option value="Hindi">Tiếng Hindi</option><option value="Bengali">Tiếng Bengal</option><option value="Tamil">Tiếng Tamil</option><option value="Telugu">Tiếng Telugu</option><option value="Urdu">Tiếng Urdu</option><option value="Arabic">Tiếng Ả Rập</option><option value="Hebrew">Tiếng Do Thái</option><option value="Persian">Tiếng Ba Tư</option><option value="Swahili">Tiếng Swahili</option><option value="Afrikaans">Tiếng Afrikaans</option></select></label><label>Link YouTube<input id="youtube" type="url" placeholder="https://www.youtube.com/watch?v=..."></label><button id="fetchYoutube" type="button">Lấy phụ đề YouTube</button><p id="youtubeStatus">Chỉ lấy phụ đề nguồn, chưa phân tích hình ảnh hoặc nhận diện người nói.</p><label>Hoặc tải TXT / SRT / VTT<input id="sourceFile" type="file" accept=".txt,.srt,.vtt"></label><label>Nội dung / phụ đề nguồn<textarea id="source"></textarea></label><small>Ngôn ngữ đích dùng trong prompt xuất. Dùng hai nút AI bên dưới để chuyển thể nguồn thành nhân vật và đoạn phim. Chất lượng giọng phụ thuộc công cụ tạo video.</small></section>
-<section><h2>AI · Tự tạo nhân vật và đoạn phim</h2><details><summary>Cấu hình AI</summary><label>URL API tương thích OpenAI<input id="aiUrl" placeholder="https://…/v1"></label><label>Model ID<input id="aiModel"></label><label>API key<input id="aiKey" type="password" autocomplete="off"></label><small>URL, model và khóa tự lưu trong trình duyệt trên máy này đến khi bạn thay đổi; không đưa vào JSON/ZIP. Không dùng trên máy dùng chung. Nội dung nguồn sẽ được gửi tới nhà cung cấp bạn cấu hình.</small><p id="apiSaveStatus" role="status"></p><button id="clearApi" type="button">Xóa cấu hình API đã lưu</button></details><button id="autoCast">Nhận diện nhân vật từ nguồn</button><button id="autoShots">Tự tạo đoạn phim</button><button id="stopAI">Dừng sau yêu cầu hiện tại</button><progress id="aiProgress" max="100" value="0" style="width:100%"></progress><p id="aiStatus">Phân tích văn bản/phụ đề; chưa nhận diện hình ảnh. Ngoại hình và giọng là thiết kế đề xuất có thể sửa.</p></section><section><h2>1 · Nhân vật</h2><div id="cast"></div><form id="characterForm"><label>Tên Latin, 4–40 ký tự<input id="cname" required pattern="[A-Za-z][A-Za-z0-9_]{3,39}"></label><label>Ngoại hình / trang phục chuẩn<textarea id="appearance" required></textarea></label><label>Mô tả giọng cố định<textarea id="voice"></textarea></label><label>Ảnh nhân vật PNG/JPG<input id="cimage" type="file" accept="image/png,image/jpeg"></label><button>Thêm nhân vật</button></form></section>
+<section><h2>AI · Tự tạo nhân vật và đoạn phim</h2><details><summary>Cấu hình AI</summary><label>URL API tương thích OpenAI<input id="aiUrl" placeholder="https://…/v1"></label><label>Model ID<input id="aiModel"></label><label>API key<input id="aiKey" type="password" autocomplete="off"></label><small>URL, model và khóa tự lưu trong trình duyệt trên máy này đến khi bạn thay đổi; không đưa vào JSON/ZIP. Không dùng trên máy dùng chung. Nội dung nguồn sẽ được gửi tới nhà cung cấp bạn cấu hình.</small><p id="apiSaveStatus" role="status"></p><button id="clearApi" type="button">Xóa cấu hình API đã lưu</button></details><button id="autoAll">▶ Chạy toàn bộ: Nhân vật → Đoạn phim</button><button id="autoCast">Nhận diện nhân vật từ nguồn</button><button id="autoShots">Tự tạo đoạn phim</button><button id="stopAI">Dừng sau yêu cầu hiện tại</button><progress id="aiProgress" max="100" value="0" style="width:100%"></progress><strong id="aiPercent" role="status">0% · Chưa chạy</strong><p id="aiStatus">Phân tích văn bản/phụ đề; chưa nhận diện hình ảnh. Ngoại hình và giọng là thiết kế đề xuất có thể sửa.</p></section><section><h2>1 · Nhân vật</h2><div id="cast"></div><form id="characterForm"><label>Tên Latin, 4–40 ký tự<input id="cname" required pattern="[A-Za-z][A-Za-z0-9_]{3,39}"></label><label>Ngoại hình / trang phục chuẩn<textarea id="appearance" required></textarea></label><label>Mô tả giọng cố định<textarea id="voice"></textarea></label><label>Ảnh nhân vật PNG/JPG<input id="cimage" type="file" accept="image/png,image/jpeg"></label><button>Thêm nhân vật</button></form></section>
 <section><h2>2 · Đoạn phim</h2><p id="stats"></p><div id="shots"></div><form id="shotForm"><label>Mã đoạn<input id="sid" required pattern="[A-Za-z0-9_-]{1,40}" placeholder="SC001_01"></label><div id="pick"></div><label>Người nói<select id="speaker"></select></label><label>Nguyên văn thoại<textarea id="dialogue"></textarea></label><label>Bối cảnh<input id="location" required></label><label>Trang phục trong đoạn<input id="wardrobe"></label><label>Hành động (nên viết tiếng Anh)<textarea id="action" required></textarea></label><label>Góc máy<input id="camera" value="locked medium close-up"></label><label>Giây giữ lại khi dựng<input id="duration" type="number" min="0.1" max="8" step="0.1" value="8" required></label><label>Chuyển sang đoạn sau<select id="transition"><option value="cut">Cắt thẳng</option><option value="dissolve">Hòa tan</option><option value="fade_black">Mờ đen</option></select></label><label>Ảnh đầu cảnh<input id="simage" type="file" accept="image/png,image/jpeg"></label><button>Thêm đoạn</button></form></section>
 <section><h2>3 · Xuất cho Phúc Anh Video</h2><p>Một ảnh khớp một dòng prompt. Gói gồm ảnh, TXT, CSV và JSON. Yêu cầu đủ ảnh đầu cảnh trước khi xuất ZIP.</p><button id="imagePrompts">Tải prompt tạo ảnh (TXT)</button><button id="export">Tải bộ ZIP</button><p>Chưa kết nối Veo/Phúc Anh, chưa tạo ảnh hoặc clip và chưa ghép MP4. Chuyển cảnh lưu trong CSV để dùng khi dựng.</p></section>
 <script>
@@ -145,7 +145,7 @@ if(!config.url||!config.model||!config.key)throw Error('Nhập URL API, Model ID
 const res=await fetch('/api/ai',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({mode,context,language:p.language,characters:p.characters.map(({image,...c})=>c),config,...extra})});
 const data=await res.json();if(!res.ok)throw Error(data.error||'Yêu cầu AI lỗi');return data;
 }
-function progressAI(n,t){$('aiProgress').value=n;$('aiStatus').textContent=t;}
+function progressAI(n,t){$('aiProgress').value=n;$('aiPercent').textContent=n+'% · '+(aiBusy?'Đang xử lý':'');$('aiStatus').textContent=t;}
 async function prepareNotes(){
 const fingerprint=JSON.stringify([p.source,p.language]);
 if(!p.aiCheckpoint||p.aiCheckpoint.fingerprint!==fingerprint)p.aiCheckpoint={fingerprint,notes:[]};
@@ -160,23 +160,27 @@ return context;
 }
 async function auto(mode){
 if(aiBusy)return;sync();if(!p.source.trim()){say('Nhập nội dung hoặc lấy phụ đề trước.');return;}
-if(mode==='cast'&&p.characters.length&&!confirm('Thay danh sách nhân vật và xóa các đoạn hiện tại? Hãy lưu JSON trước.'))return;
+if((mode==='cast'||mode==='all')&&p.characters.length&&!confirm('Thay danh sách nhân vật và xóa các đoạn hiện tại? Hãy lưu JSON trước.'))return;
 if(mode==='shots'&&!p.characters.length){say('Nhận diện nhân vật trước khi tạo đoạn phim.');return;}
 if(mode==='shots'&&p.shots.length&&!confirm('Thay các đoạn hiện tại bằng kết quả AI? Hãy lưu JSON trước.'))return;
 aiBusy=true;stopAI=false;const locked=[...document.querySelectorAll('input,textarea,select,button')].filter(x=>!['stopAI','save'].includes(x.id));const prior=locked.map(x=>x.disabled);locked.forEach(x=>x.disabled=true);
 try{
+progressAI(0,'Bắt đầu phân tích nguồn…');
 const context=await prepareNotes();
-if(mode==='cast'){
-progressAI(40,'Đang nhận diện nhân vật và thống nhất tên…');
+if(mode==='cast'||(mode==='all'&&!p.aiCheckpoint.autoCastDone)){
+progressAI(32,'Đang nhận diện nhân vật và thống nhất tên…');
 const result=await aiRequest('cast',context);
-const candidate={...p,characters:result.characters,shots:[]};validate(candidate);p=candidate;delete p.aiCheckpoint.plan;delete p.aiCheckpoint.batches;
-}else{
+const candidate={...p,characters:result.characters,shots:[]};validate(candidate);p=candidate;delete p.aiCheckpoint.plan;delete p.aiCheckpoint.batches;p.aiCheckpoint.autoCastDone=true;
+}
+if(mode!=='cast'){
 const cp=p.aiCheckpoint;const castKey=JSON.stringify(p.characters.map(c=>({name:c.name,appearance:c.appearance,voice:c.voice})));
 if(cp.castKey!==castKey){cp.castKey=castKey;delete cp.plan;cp.batches=[];}
-if(!cp.plan){progressAI(35,'Đang lập dàn ý toàn bộ câu chuyện…');cp.plan=(await aiRequest('plan',context)).scenes;}
+if(!cp.plan){progressAI(38,'Đang lập dàn ý toàn bộ câu chuyện…');cp.plan=(await aiRequest('plan',context)).scenes;}
+progressAI(42,'Đã lập dàn ý. Đang chuẩn bị các đoạn phim…');
 cp.batches=cp.batches||[];const limit=Math.min(25,Math.floor(150/cp.plan.length));
 for(let i=0;i<cp.plan.length;i++){
-progressAI(40+Math.floor(i/cp.plan.length*55),'Đang tạo cảnh '+(i+1)+'/'+cp.plan.length+' · '+cp.plan[i].title);
+if(stopAI)throw Error('Đã dừng theo yêu cầu; checkpoint được giữ.');
+progressAI(42+Math.floor(i/cp.plan.length*53),'Đang tạo cảnh '+(i+1)+'/'+cp.plan.length+' · '+cp.plan[i].title);
 if(!cp.batches[i]){
 const sceneContext='FULL OUTLINE: '+JSON.stringify(cp.plan)+'\nCURRENT SCENE '+(i+1)+': '+JSON.stringify(cp.plan[i])+'\nSOURCE NOTES:\n'+context;
 cp.batches[i]=(await aiRequest('shots',sceneContext,{maximum:limit})).shots;
@@ -185,11 +189,11 @@ cp.batches[i]=(await aiRequest('shots',sceneContext,{maximum:limit})).shots;
 const shots=cp.batches.flat().map((s,i)=>({...s,id:'SC'+String(i+1).padStart(3,'0')}));
 const candidate={...p,shots};validate(candidate);p=candidate;
 }
-render();progressAI(100,'Đã tạo bản nháp. Kiểm tra tên, người nói, lời thoại và diễn biến trước khi tạo video. Ảnh cần thêm riêng.');say('Đã hoàn thành. Tải JSON để lưu cả checkpoint.');
-}catch(e){say(e.message);progressAI($('aiProgress').value,'Chưa hoàn thành. Dữ liệu cũ và checkpoint được giữ. Có thể thử lại cùng nguồn/ngôn ngữ.');}
+render();aiBusy=false;progressAI(100,'Đã tạo bản nháp. Kiểm tra tên, người nói, lời thoại và diễn biến trước khi tạo video. Ảnh cần thêm riêng.');$('aiPercent').textContent='100% · Hoàn thành';say('Đã hoàn thành '+p.characters.length+' nhân vật và '+p.shots.length+' đoạn phim. Tải JSON để lưu cả checkpoint.');
+}catch(e){say(e.message);const percent=$('aiProgress').value;aiBusy=false;progressAI(percent,e.message+' Các bước đã nhận được giữ trong checkpoint để thử lại.');$('aiPercent').textContent=percent+'% · '+(stopAI?'Đã dừng':'Có lỗi — chưa hoàn thành');}
 finally{aiBusy=false;locked.forEach((x,i)=>x.disabled=prior[i]);$('autoCast').disabled=false;$('autoShots').disabled=false;}
 }
-$('autoCast').onclick=()=>auto('cast');$('autoShots').onclick=()=>auto('shots');
+$('autoAll').onclick=()=>auto('all');$('autoCast').onclick=()=>auto('cast');$('autoShots').onclick=()=>auto('shots');
 const apiStorageKey='lmt-film-builder.api.v1';
 function saveApiConfig(){
 try{localStorage.setItem(apiStorageKey,JSON.stringify({url:$('aiUrl').value,model:$('aiModel').value,key:$('aiKey').value}));$('apiSaveStatus').textContent='Đã tự lưu cấu hình API trên máy này.';}
