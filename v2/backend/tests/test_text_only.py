@@ -5,6 +5,7 @@ from app.main import app
 def test_removed_features_not_registered():
     paths=set(TestClient(app).get('/openapi.json').json()['paths'])
     assert '/v1/migration/legacy/import' not in paths
+    assert '/v1/migration/legacy/dry-run' not in paths
     assert '/v1/sessions/{sid}/images' not in paths
     assert '/v1/sessions/{sid}/images.zip' not in paths
     assert '/v1/sessions/{sid}/thumbnail' not in paths
