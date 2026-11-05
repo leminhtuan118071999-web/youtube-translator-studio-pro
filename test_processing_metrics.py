@@ -67,4 +67,4 @@ class MetricsTests(unittest.TestCase):
             p.publish('optimization_review_json',json.dumps(dict(target_language='English',output_sha256=hash_value,reviewed_parts=1,seo_contexts=contexts)))
             with patch('background_jobs.overview',return_value='Full context') as overview,patch('background_jobs.generate_youtube_metadata',return_value=('Title','Description','Tags')):
                 metadata_for_job(text,'','','English',lambda _:None,p)
-                overview.assert_called_once_with(text,unittest.mock.ANY,p)
+                overview.assert_called_once_with(text,unittest.mock.ANY,p,context_limit=7000)

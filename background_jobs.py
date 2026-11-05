@@ -103,13 +103,14 @@ def parse_object(value, field):
     return data
 
 
-def overview(text, call, progress):
+def overview(text, call, progress, *, context_limit=7000):
     """Keep story context under the 8K TPM ceiling with hierarchical summaries."""
-    max_brief = 7000
+    max_brief = max(7000, min(24000, context_limit))
+    piece_limit = max_brief - 1000
     if len(text) <= max_brief:
         return text
 
-    pieces = list(chunk_text(text, 6000))
+    pieces = list(chunk_text(text, piece_limit))
     summaries = []
     for idx, section in enumerate(pieces, 1):
         progress.check_cancelled()
@@ -128,7 +129,7 @@ def overview(text, call, progress):
         if len(combined) <= max_brief:
             return combined
         progress.check_cancelled()
-        groups = list(chunk_text(combined, 6000))
+        groups = list(chunk_text(combined, piece_limit))
         short = []
         for idx, group in enumerate(groups, 1):
             short.append(call(
@@ -141,7 +142,7 @@ def overview(text, call, progress):
         if len(updated) >= len(combined):
             break
         combined = updated
-    if len(combined) > 9000:
+    if len(combined) > max_brief + 2000:
         raise ValueError(
             "Không thể tóm tắt toàn bộ video vừa giới hạn token của model. "
             "Hãy thử model có hạn mức lớn hơn."
@@ -150,8 +151,8 @@ def overview(text, call, progress):
 
 
 
-def metadata_for_job(text, title, description, language, call, progress, *, fast=False):
-    identity = source_hash(json.dumps([text, title, description, language, "faithful-title-hook-v1", fast], ensure_ascii=False))
+def metadata_for_job(text, title, description, language, call, progress, *, fast=False, context_limit=7000):
+    identity = source_hash(json.dumps([text, title, description, language, "faithful-title-hook-v1", fast, context_limit], ensure_ascii=False))
     try:
         work = json.loads(progress.partial_result().get('seo_work_json') or '{}')
     except (ValueError, TypeError):
@@ -168,9 +169,9 @@ def metadata_for_job(text, title, description, language, call, progress, *, fast
         if (report.get('output_sha256') == source_hash(text) and report.get('target_language') == language
                 and isinstance(contexts,list) and contexts and len(contexts)==report.get('reviewed_parts')
                 and all(isinstance(v,str) and 0<len(v)<=1800 for v in contexts)):
-            brief = overview('\n\n'.join(contexts), call, progress)
+            brief = overview('\n\n'.join(contexts), call, progress, context_limit=context_limit)
         else:
-            brief = overview(text, call, progress)
+            brief = overview(text, call, progress, context_limit=context_limit)
     def checkpoint(candidate):
         progress.publish('seo_work_json', json.dumps(dict(identity=identity, context=brief, candidate=candidate), ensure_ascii=False))
     progress.update(97, 'Đang tạo và đối chiếu SEO; tự khôi phục kết quả đã lưu khi cần')

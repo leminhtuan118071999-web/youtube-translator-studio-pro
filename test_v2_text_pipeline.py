@@ -46,4 +46,25 @@ class TextPipelineTests(unittest.TestCase):
         with patch('app.text_pipeline.generate_text',return_value='{"title":"Xin chào","description":"Lời chào.","tags":["xin chào"]}') as call:
             result=run_text_job('seo',self.config(),JobProgress())
         self.assertTrue(result['ok'],result['error']);self.assertEqual(call.call_count,1);self.assertNotIn('translated',result['fields'])
+    def test_openai_seo_uses_full_medium_source_in_one_call(self):
+        source = "Anna tells her story. " * 900
+        config = dict(self.config(), provider='OpenAI', source=source, uploaded_source=source)
+        with patch('app.text_pipeline.generate_text', return_value='{"title":"Xin chào","description":"Lời chào.","tags":["xin chào"]}') as call:
+            result = run_text_job('seo', config, JobProgress())
+        self.assertTrue(result['ok'], result['error'])
+        self.assertEqual(call.call_count, 1)
+        self.assertIn(source.strip(), call.call_args.args[4])
+
+    def test_larger_seo_chunks_cover_all_source_without_truncation(self):
+        from background_jobs import overview
+        from faithful_summary import source_hash
+        source = ''.join(f"Event {i:05d}. " for i in range(5000))
+        chunks = []
+        def summarize(prompt):
+            chunks.append(prompt.split('\n', 1)[1])
+            return 'Ordered story events.'
+        overview(source, summarize, JobProgress(), context_limit=24000)
+        self.assertEqual(source_hash(''.join(chunks)), source_hash(source))
+        self.assertLess(len(chunks), 5)
+
 if __name__=='__main__':unittest.main()

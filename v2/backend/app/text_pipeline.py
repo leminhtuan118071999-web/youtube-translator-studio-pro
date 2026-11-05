@@ -106,7 +106,8 @@ def run_text_job(kind,snapshot,progress):
                 bp.update(100,'Đã khôi phục SEO xong từ checkpoint')
                 return {key:fields[key] for key in ('new_title','new_description','seo_tags','metadata')}
             # Uses ORIGINAL source independently; never waits for the translation.
-            values=metadata_for_job(source,title,snapshot.get('description',''),language,lambda p:shared.call(snapshot,p),bp,fast=True)
+            values=metadata_for_job(source,title,snapshot.get('description',''),language,lambda p:shared.call(snapshot,p),bp,fast=True,
+                context_limit=24000 if snapshot.get('provider') == 'OpenAI' else 7000)
             result=dict(zip(('new_title','new_description','seo_tags'),values));result['metadata']='\n\n'.join(values)
             for key,value in result.items():bp.publish(key,value)
             bp.update(100,'Tiêu đề, mô tả và tag đã lưu');return result
