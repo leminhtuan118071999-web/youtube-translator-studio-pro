@@ -17,6 +17,19 @@ class StreamlitSmokeTests(unittest.TestCase):
         self.app.session_state["_browser_api_restored"] = True
         self.app.session_state["_session_name_test_fallback"] = True
 
+    def delete_from_session_context_menu(self, sid):
+        """Simulate the acknowledged browser component event (AppTest has no JS)."""
+        from unittest.mock import patch
+        self.app.session_state['_session_name_test_fallback'] = False
+        def event(*args, **kwargs):
+            if kwargs.get('key') == f'session_name_control_{sid}':
+                return {'seq': f'delete-{sid}', 'action': 'delete'}
+            return None
+        with patch('session_name_controls.session_name_control', side_effect=event):
+            self.app.run()
+        self.app.session_state['_session_name_test_fallback'] = True
+        self.app.run()
+
     def test_character_profile_form_saves_each_character_independently(self):
         import json
         app = self.app
@@ -58,7 +71,7 @@ class StreamlitSmokeTests(unittest.TestCase):
             source,
         )
         self.assertIn("↗ Mở AI33 trực tiếp nếu khung không hoạt động", source)
-        self.assertIn("miễn là máy chủ vẫn hoạt động", source)
+        self.assertIn('st.progress(pct, text=f"{name}: {stage}")', source)
         self.assertIn('st.subheader("🖼️ Thumbnail gốc chất lượng cao")', source)
         self.assertIn('["🌍 Bản dịch", "📝 Tiêu đề • Mô tả • SEO",\n         "🎬 Form video 8 giây", "🖼️ Ảnh nhân vật"]', source)
         self.assertIn('key="api_provider"', source)
@@ -119,9 +132,10 @@ class StreamlitSmokeTests(unittest.TestCase):
             'rerun_target_rewrite(', 'rerun_seo(', 'portrait_retry_specs(',
         ):
             self.assertIn(snippet, main)
-        self.assertIn('"🔄 Chạy lại riêng — Form video 8 giây"', forms)
-        self.assertIn('key=f"retry_video_forms_{sid}"', forms)
-        self.assertIn('if generate_clicked or retry_clicked:', forms)
+        self.assertIn('"🎬 Tạo form 8 giây theo giọng đọc"', forms)
+        self.assertIn('key=f"create_video_forms_{sid}"', forms)
+        self.assertIn('if generate_clicked:', forms)
+        self.assertIn('_completed_count(plan) < len(plan["scenes"])', forms)
         self.assertIn('launch_video_job(', forms)
         self.assertIn('run_video_forms_job', main)
 
@@ -165,8 +179,8 @@ class StreamlitSmokeTests(unittest.TestCase):
         self.assertIn('video_job_state', forms)
         self.assertIn('if plan is not None and not stale:', forms)
         self.assertIn('f"📋 Copy toàn bộ ô {group[\'panel\']}"', forms)
-        self.assertNotIn('Hồ sơ nhân vật/bối cảnh cố định cho mọi form', forms)
-        self.assertIn('"📌 Hồ sơ nhân vật/bối cảnh cố định cho mọi form"', source)
+        self.assertIn('Hồ sơ nhân vật/bối cảnh cố định cho mọi form', forms)
+        self.assertIn('"📌 Hồ sơ nhân vật/bối cảnh cố định cho mọi form"', forms)
         self.assertIn('Hồ sơ ảnh tham chiếu theo từng nhân vật', source)
         self.assertIn('key=f"regenerate_detailed_characters_{sid}"', source)
         self.assertIn('for idx, sheet in enumerate(saved_sheets, start=1):', source)
@@ -177,18 +191,17 @@ class StreamlitSmokeTests(unittest.TestCase):
         self.assertIn('saved_video_plan.get("character_bible")', source)
         self.assertIn('grouped_video_forms(plan)', forms)
         self.assertIn('with st.expander(', forms)
-        self.assertIn('continuous_video_forms_text(plan)', forms)
+        self.assertIn('continuous_combined_forms_text(plan)', forms)
         self.assertIn('key=f"copy_all_video_forms_{sid}_{group[\'panel\']}"', forms)
         self.assertIn('source_fingerprint(translated, language)', forms)
         self.assertNotIn('st.number_input(', forms)
         self.assertNotIn('key=f"video_prompt_{sid}_{n}"', forms)
         self.assertNotIn('key=f"video_transition_{sid}_{n}"', forms)
-        self.assertIn('type=["mp3", "wav", "m4a", "ogg"]', forms)
-        self.assertIn('audio_error or upload is None or not translated', forms)
+        self.assertIn('not translated', forms)
+        self.assertNotIn('upload is None', forms)
         self.assertIn('disabled=cannot_generate', forms)
         self.assertNotIn('whisper_word_timestamps(', forms)
         self.assertIn('launch_video_job(', forms)
-        self.assertIn('Không phân tích hay gửi nội dung file âm thanh tới Whisper.', forms)
         self.assertNotIn('whisper_word_timestamps(', forms)
         self.assertNotIn('audio_aligned_plan(', forms)
         self.assertIn('"🎬 Tạo form 8 giây theo giọng đọc"', forms)
@@ -207,7 +220,7 @@ class StreamlitSmokeTests(unittest.TestCase):
         self.assertFalse(any(
             slider.key == f"video_wpm_{sid}" for slider in app.slider
         ))
-        self.assertIn('key=f"video_audio_{sid}"', forms)
+        self.assertNotIn('key=f"video_audio_{sid}"', forms)
         app.session_state["workspaces"][sid]["video_forms"] = (
             '{"version":1,"language":"Tiếng Ba Lan","scenes":[]}'
         )
@@ -472,16 +485,7 @@ class StreamlitSmokeTests(unittest.TestCase):
         second_id = app.session_state["selected_session"]
         app.session_state["workspaces"][second_id]["processed"] = True
         app.run()
-        next(button for button in app.button
-             if button.key == f"delete_session_{first_id}").click()
-        app.run()
-        self.assertIn(first_id, app.session_state["workspaces"])
-        self.assertTrue(any(
-            button.key == f"confirm_delete_{first_id}" for button in app.button
-        ))
-        next(button for button in app.button
-             if button.key == f"confirm_delete_{first_id}").click()
-        app.run()
+        self.delete_from_session_context_menu(first_id)
         self.assertFalse(app.exception, [str(x.message) for x in app.exception])
         self.assertNotIn(first_id, app.session_state["workspaces"])
         self.assertIn(second_id, app.session_state["workspaces"])
@@ -491,12 +495,7 @@ class StreamlitSmokeTests(unittest.TestCase):
         selected = app.session_state["selected_session"]
         app.session_state["workspaces"][selected]["processed"] = True
         app.run()
-        next(button for button in app.button
-             if button.key == f"delete_session_{selected}").click()
-        app.run()
-        next(button for button in app.button
-             if button.key == f"confirm_delete_{selected}").click()
-        app.run()
+        self.delete_from_session_context_menu(selected)
         self.assertFalse(app.exception, [str(x.message) for x in app.exception])
         self.assertNotIn(selected, app.session_state["workspaces"])
         self.assertEqual(len(app.session_state["workspaces"]), 1)
@@ -520,10 +519,7 @@ class StreamlitSmokeTests(unittest.TestCase):
         second = app.session_state["selected_session"]
         app.session_state["workspaces"][second]["processed"] = True
         app.run()
-        next(btn for btn in app.button if btn.key == f"delete_session_{first}").click()
-        app.run()
-        next(btn for btn in app.button if btn.key == f"confirm_delete_{first}").click()
-        app.run()
+        self.delete_from_session_context_menu(first)
         state = app.session_state
         self.assertFalse(app.exception, [str(x.message) for x in app.exception])
         self.assertNotIn(first, state["workspaces"])
@@ -901,7 +897,7 @@ class StreamlitSmokeTests(unittest.TestCase):
         self.assertFalse(app.exception, [str(exc.message) for exc in app.exception])
         panels = [
             panel for panel in app.get("expander")
-            if panel.label.startswith(("🌍 Bản viết lại hoàn chỉnh", "📝 Mô tả đã dịch"))
+            if panel.label.startswith(("🌍 Bản dịch giọng đọc", "📝 Mô tả đã dịch"))
         ]
         self.assertEqual(len(panels), 2)
         self.assertTrue(all("Nhấn để xem toàn bộ" in p.label for p in panels))
@@ -910,7 +906,7 @@ class StreamlitSmokeTests(unittest.TestCase):
         from pathlib import Path
         code = Path("streamlit_app.py").read_text(encoding="utf-8")
         self.assertIn(
-            'with st.expander(f"🌍 Bản viết lại hoàn chỉnh ({language}) — '
+            'with st.expander(f"🌍 Bản dịch giọng đọc ({language}) — '
             'Nhấn để xem toàn bộ", expanded=False):', code
         )
         self.assertIn(

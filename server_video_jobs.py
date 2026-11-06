@@ -199,10 +199,18 @@ def run_video_forms_job(snapshot, progress):
             if not bible:
                 progress.update(0, "👤 Đang tạo hồ sơ nhân vật cố định")
                 response = parse_json_object(
-                    call_with_retry(character_bible_prompt(
-                        snapshot["translated"], snapshot["language"],
-                        snapshot["style"],
-                    )),
+                    call_with_retry(
+                        "FORM_CONTINUITY_REFERENCE. Write a brief English continuity note (at most 2000 characters) "
+                        "for the following narration. Preserve exact character names, relationships, settings and "
+                        "appearance facts stated in the story. Keep unspecified details unspecified. "
+                        "Do not create detailed character sheets, reference-image prompts or images. "
+                        f"Visual direction: {snapshot['style']}. "
+                        'Return ONLY JSON {"character_bible":"nonempty concise continuity note"}. NARRATION:\n'
+                        + snapshot["translated"]
+                        if snapshot.get("lightweight_form_reference") else character_bible_prompt(
+                            snapshot["translated"], snapshot["language"], snapshot["style"],
+                        )
+                    ),
                     "character_bible",
                 )
                 bible = response["character_bible"]
@@ -259,7 +267,11 @@ def run_video_forms_job(snapshot, progress):
             progress.check_cancelled()
             add_scene_subtitles(current)
             encoded = json.dumps(current, ensure_ascii=False)
-            if len(encoded) > 390000:
+            validate_checkpoint = getattr(progress, "validate_form_checkpoint", None)
+            if callable(validate_checkpoint):
+                # External durable stores enforce their own serialized limits.
+                validate_checkpoint(encoded)
+            elif len(encoded) > 390000:
                 raise ValueError("Form video quá lớn để lưu trong phiên.")
             fields["video_forms"] = encoded
             progress.publish("video_forms", encoded)

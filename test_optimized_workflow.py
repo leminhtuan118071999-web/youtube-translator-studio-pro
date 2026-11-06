@@ -6,7 +6,7 @@ from background_jobs import optimize_source_script, run_full_job, JobProgress, M
 
 
 class OptimizedScriptWorkflowTests(unittest.TestCase):
-    def test_rewrites_original_directly_and_keeps_seo_without_auto_video(self):
+    def test_translates_original_to_narration_and_keeps_seo_without_auto_video(self):
         transcript = "The original tale with characters, events and a conclusion."
         calls = []
         def provider(_p, _b, _m, _k, prompt):
@@ -21,7 +21,7 @@ class OptimizedScriptWorkflowTests(unittest.TestCase):
                 return json.dumps({"summary":"Een beknopt verhaal met de personages, gebeurtenissen en afloop.",
                     "entities":[],"edits":[],"unresolved":[],
                     "anchors":[{"fact":"Original tale","quote":transcript}]})
-            if "CHỈ xuất bản dịch" in prompt:
+            if prompt.startswith("NARRATION_TRANSLATION."):
                 self.assertIn("original tale", prompt)
                 return "Een beknopt verhaal met de personages, gebeurtenissen en afloop."
             if "CHARACTER/WORLD REFERENCE" in prompt:
@@ -32,7 +32,9 @@ class OptimizedScriptWorkflowTests(unittest.TestCase):
                     {"number":x["number"],"visual_prompt":"Een levendige scène.",
                      "transition_to_next":"zachte overgang"} for x in batch
                 ]})
-            if "Soạn YouTube tiêu đề" in prompt:
+            if prompt.startswith("TARGET_METADATA_REVIEW"):
+                return '{"ok":true,"issues":[]}'
+            if prompt.startswith("TARGET_METADATA."):
                 return '{"title":"Een titel","description":"Een beschrijving","tags":["tag"]}'
             self.fail("Unexpected provider request " + prompt[:80])
         cfg={"source":transcript,"url":"","title":"Original","description":"",
@@ -47,17 +49,15 @@ class OptimizedScriptWorkflowTests(unittest.TestCase):
         self.assertNotIn("video_forms", result["fields"])
         self.assertEqual(result["fields"]["optimized_script"], result["fields"]["translated"])
         self.assertEqual(result["fields"]["source"], transcript)
-        self.assertTrue(any("TARGET_STORY_REWRITE" in p for p in calls))
+        self.assertTrue(any(p.startswith("NARRATION_TRANSLATION.") for p in calls))
         self.assertFalse(any("CHỈ xuất bản dịch" in p for p in calls))
         self.assertTrue(any(p.startswith("FAITHFULNESS_REVIEW") for p in calls))
-        self.assertTrue(any("CHARACTER/WORLD REFERENCE" in p for p in calls))
-        # Character profile creation is now a standard text stage, even
-        # when image generation is not configured. Video forms still wait
-        # for the separately uploaded completed narration audio.
+        # Profiles, images and video are separate durable jobs in the current flow.
+        self.assertFalse(any("CHARACTER/WORLD REFERENCE" in p for p in calls))
         self.assertFalse(any("self-contained scene-generation prompts" in p for p in calls))
         self.assertEqual(result["fields"]["new_title"], "Een titel")
 
-    def test_automatically_generates_session_scoped_portraits_after_bible(self):
+    def test_narration_job_does_not_start_legacy_automatic_portrait_work(self):
         from character_images import IMAGE_STORE
         source = "The hero Ala meets Ola at the lake."
         calls = []
@@ -72,7 +72,7 @@ class OptimizedScriptWorkflowTests(unittest.TestCase):
             if prompt.startswith("SOURCE_GROUNDED_SUMMARY"):
                 return json.dumps({"summary":"Ala meets Ola in the lake.","entities":[],"edits":[],"unresolved":[],
                     "anchors":[{"fact":"Meeting","quote":source}]})
-            if "CHỈ xuất bản dịch" in prompt:
+            if prompt.startswith("NARRATION_TRANSLATION."):
                 return "Ala meets Ola in the lake."
             if "CHARACTER/WORLD REFERENCE" in prompt:
                 return json.dumps({
@@ -89,7 +89,9 @@ class OptimizedScriptWorkflowTests(unittest.TestCase):
                      "transition_to_next": "crossfade"}
                     for row in batch
                 ]})
-            if "Soạn YouTube tiêu đề" in prompt:
+            if prompt.startswith("TARGET_METADATA_REVIEW"):
+                return '{"ok":true,"issues":[]}'
+            if prompt.startswith("TARGET_METADATA."):
                 return '{"title":"Title","description":"Description","tags":["tag"]}'
             self.fail("Unexpected prompt")
         config = {
@@ -108,17 +110,17 @@ class OptimizedScriptWorkflowTests(unittest.TestCase):
             try:
                 result = run_full_job(config, JobProgress())
                 self.assertTrue(result["ok"], result["error"])
-                self.assertEqual(images.call_count, 2)
-                self.assertEqual(result["fields"]["character_images_count"], 2)
+                images.assert_not_called()
+                self.assertNotIn("character_images_count", result["fields"])
                 self.assertEqual(
                     list(IMAGE_STORE.images("account:owner", "a" * 32)),
-                    ["Ala", "Ola"],
+                    [],
                 )
                 self.assertNotIn("video_forms", result["fields"])
-                self.assertIn("character_bible", result["fields"])
+                self.assertNotIn("character_bible", result["fields"])
                 self.assertNotIn("PNG_BYTES", repr(result))
                 self.assertNotIn("image-secret", repr(result))
-                self.assertTrue(any("CHARACTER/WORLD REFERENCE" in prompt for prompt in calls))
+                self.assertFalse(any("CHARACTER/WORLD REFERENCE" in prompt for prompt in calls))
                 self.assertFalse(any("self-contained scene-generation prompts" in prompt for prompt in calls))
             finally:
                 IMAGE_STORE.clear("account:owner", "a" * 32)

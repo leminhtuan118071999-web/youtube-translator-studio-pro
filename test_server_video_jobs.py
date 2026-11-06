@@ -29,7 +29,7 @@ class BackgroundVideoTests(unittest.TestCase):
         }
 
     def ai(self, _snapshot, prompt):
-        rows = json.loads(prompt.split("Input scenes:\n", 1)[1])
+        rows, _ = json.JSONDecoder().raw_decode(prompt.split("Input scenes:\n", 1)[1].lstrip())
         return json.dumps({"scenes": [
             {"number": row["number"], "visual_prompt": "Ala walks.",
              "transition_to_next": "crossfade 1.0s"} for row in rows
@@ -45,6 +45,27 @@ class BackgroundVideoTests(unittest.TestCase):
         self.assertEqual(vendor.call_count, 19)
         self.assertTrue(all(s["visual_prompt"] for s in plan["scenes"]))
         self.assertEqual(progress.snapshot()[0], 100)
+
+    def test_external_store_accepts_large_plan_while_v1_keeps_its_limit(self):
+        def long_forms(snapshot, prompt):
+            data = json.loads(self.ai(snapshot, prompt))
+            for scene in data['scenes']:
+                scene['visual_prompt'] = 'Ala walks beside the trees. ' * 200
+            return json.dumps(data)
+
+        class ExternalProgress(JobProgress):
+            def validate_form_checkpoint(self, encoded):
+                if len(json.dumps({'video_forms': encoded})) > 8_000_000:
+                    raise ValueError('External checkpoint exceeds storage limit')
+
+        with patch('server_video_jobs._provider_call', side_effect=long_forms):
+            result = run_video_forms_job(self.snapshot, ExternalProgress())
+        self.assertTrue(result['ok'], result['error'])
+        self.assertGreater(len(result['fields']['video_forms']), 390000)
+        with patch('server_video_jobs._provider_call', side_effect=long_forms):
+            legacy = run_video_forms_job(self.snapshot, JobProgress())
+        self.assertFalse(legacy['ok'])
+        self.assertIn('quá lớn', legacy['error'])
 
     def test_error_keeps_completed_batches_then_resumes(self):
         called = 0
@@ -82,7 +103,9 @@ class BackgroundVideoTests(unittest.TestCase):
         self.assertTrue(result["ok"], result["error"])
         self.assertEqual(calls[1], calls[2])
         self.assertEqual(len(calls), 20)
-        self.assertEqual(sleep.call_count, 3)
+        self.assertGreaterEqual(sum(call.args[0] for call in sleep.call_args_list), 3)
+        self.assertLessEqual(sum(call.args[0] for call in sleep.call_args_list), 180)
+        self.assertTrue(all(0 < call.args[0] <= 1 for call in sleep.call_args_list))
         self.assertEqual(len([x for x in json.loads(result["fields"]["video_forms"])["scenes"] if x["visual_prompt"]]), 109)
 
     def test_persistent_502_stops_after_bounded_retries_with_checkpoint(self):

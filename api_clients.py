@@ -248,11 +248,12 @@ def api_headers(kind, token, auth_mode="api_key"):
 
 def _request(method, url, headers, **kwargs):
     # Disable environment proxies; never follow redirects carrying credentials.
+    timeout = kwargs.pop("timeout", (10, 150))
     with requests.Session() as session:
         session.trust_env = False
         resp = session.request(
             method, url, headers=headers, allow_redirects=False,
-            timeout=(10, 150), **kwargs
+            timeout=timeout, **kwargs
         )
     if 300 <= resp.status_code < 400:
         raise RuntimeError("API trả về chuyển hướng. Hãy dùng đúng Base URL, không theo redirect vì bảo mật.")
@@ -537,6 +538,7 @@ def generate_text(
     # Streamlit background sessions from flooding Groq in the same minute.
     if provider == "Groq":
         groq_request_gate.acquire(token, model, prompt)
+    read_timeout = 300 if prompt.startswith("DIRECT_TRANSLATION") else 150
     try:
         # Only a connect timeout is safe to retry: the request has not reached
         # the provider. A read timeout/reset may follow a completed, billed POST.
@@ -544,6 +546,7 @@ def generate_text(
             try:
                 response = _request(
                     "POST", endpoint, api_headers(kind, token, selected_auth), json=body,
+                    timeout=(10, read_timeout),
                 )
                 break
             except requests.ConnectTimeout:
@@ -562,7 +565,7 @@ def generate_text(
         ) from exc
     except requests.Timeout as exc:
         raise ProviderReadTimeout(
-            "Nhà cung cấp AI phản hồi quá thời gian chờ (150 giây). "
+            f"Nhà cung cấp AI phản hồi quá thời gian chờ ({read_timeout} giây). "
             "Đây có thể là do model xử lý lâu hoặc gateway quá tải. "
             "Hãy thử model phản hồi nhanh hơn hoặc thử lại sau."
         ) from exc

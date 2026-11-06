@@ -3,7 +3,21 @@ name: Test Streamlit application
 on:
   push:
     branches: [main]
+    paths:
+      - "*.py"
+      - "requirements*.txt"
+      - "supabase_schema.sql"
+      - "migrations/**"
+      - "*frontend/**"
+      - "render.yaml"
   pull_request:
+    paths:
+      - "*.py"
+      - "requirements*.txt"
+      - "supabase_schema.sql"
+      - "migrations/**"
+      - "*frontend/**"
+      - "render.yaml"
 
 jobs:
   python-checks:

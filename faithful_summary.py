@@ -172,19 +172,19 @@ class ReviewFormatError(ValueError):
     """A malformed verdict must be retried without changing the story."""
 
 
-def _review(call, original, candidate, *, mode, context, anchors=None, previous=""):
+def _review(call, original, candidate, *, mode, context, anchors=None, previous="", on_context=None):
     error = ""
     for attempt in range(3):
         try:
             return _review_once(call, original, candidate, mode=mode,
                                 context=context, anchors=anchors, previous=previous,
-                                format_error=error)
+                                format_error=error, on_context=on_context)
         except ReviewFormatError as exc:
             error = str(exc)
     raise ReviewFormatError("AI vẫn trả đối soát không đúng cấu trúc sau 3 lần kiểm tra: " + error)
 
 
-def _review_once(call, original, candidate, *, mode, context, anchors=None, previous="", format_error=""):
+def _review_once(call, original, candidate, *, mode, context, anchors=None, previous="", format_error="", on_context=None):
     raw = call(
         "FAITHFULNESS_REVIEW. Independently compare the candidate with the ORIGINAL "
         "source, not with a previous rewrite. " + FACT_RULES +
@@ -208,6 +208,9 @@ def _review_once(call, original, candidate, *, mode, context, anchors=None, prev
             if isinstance(context, dict) and context.get("speech_mode") == "single_narrator_indirect"
             else ""
         ) +
+        ('For a passing translation, also return optional seo_context: 60-100 words in the target language '
+         'summarizing ONLY this core, retaining names, decisive events and ending. No invented facts. '
+         'This extra field never changes the pass criteria. ' if on_context is not None else '') +
         'Return concise JSON {"ok":true,"issues":[],"source_conflicts":[]}; '
         "list only material errors, not stylistic preferences. "
         "For target_rewrite, require the requested target language and a faithful "
@@ -238,6 +241,9 @@ def _review_once(call, original, candidate, *, mode, context, anchors=None, prev
         raise ReviewFormatError("AI trả kết quả đối soát thiếu trường dữ liệu hoặc sai kiểu ok/issues/source_conflicts.")
     if not data["ok"] or issues:
         raise ValueError("; ".join(issues)[:1600] or "Đối soát chưa xác nhận độ chính xác.")
+    brief = data.get('seo_context')
+    if on_context is not None and isinstance(brief,str) and 0 < len(brief.strip()) <= 1800:
+        on_context(brief.strip())
     return conflicts
 
 
