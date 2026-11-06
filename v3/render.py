@@ -36,7 +36,9 @@ def _probe(path, modified, size):
     duration = max(durations, default=0)
     if not math.isfinite(duration) or duration > 14400:
         raise ValueError('Thời lượng media không hợp lệ hoặc vượt 4 giờ.')
-    return dict(duration=duration, video=any(s.get('codec_type')=='video' for s in streams),
+    visual=next((s for s in streams if s.get('codec_type')=='video'),{})
+    return dict(width=int(visual.get('width',0)),height=int(visual.get('height',0)),
+                duration=duration, video=any(s.get('codec_type')=='video' for s in streams),
                 audio=any(s.get('codec_type')=='audio' for s in streams))
 
 
@@ -249,3 +251,4 @@ def render(project, assets_folder, output_folder, update):
     (output_folder/'output.pending.mp4').replace(output_folder/'output.mp4')
     update(100,'Hoàn thành và đã lưu MP4')
     return dict(duration=total,width=width,height=height,scenes=len(durations))
+

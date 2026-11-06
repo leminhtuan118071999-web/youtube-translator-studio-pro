@@ -125,3 +125,5 @@ Bản Windows cần qua kiểm tra runtime/renderer Windows và thử cài trên
 Khi bật tự tải Pixabay, V3 mở rộng từ khóa đã nhập hoặc chủ đề thumbnail được nhận diện thành các từ khóa gần nghĩa, giữ các điều kiện như ban đêm, mùa đông. Lấy kết quả từ tối đa 3 từ khóa trước rồi chọn xen kẽ đủ 15 video mới. Chỉ tìm thêm từ khóa/trang khi thiếu; tối đa 10 lượt tìm mỗi lần chọn. Không gọi thêm AI để mở rộng từ khóa. Chủ đề chưa có từ gần nghĩa giữ nguyên từ khóa gốc, không thay bằng chủ đề ngẫu nhiên.
 
 Lịch sử ID dùng chung loại video đã dùng giữa các dự án; danh sách đã chọn và các tệp tải xong được tái sử dụng khi chạy tiếp dự án. Kết quả tìm kiếm được giữ trong cache 24 giờ. Tiến trình hiển thị từ khóa đang tìm và số video đã chọn. Dự án đã có bộ video được giữ nguyên; cơ chế đa từ khóa áp dụng khi chọn bộ mới.
+
+Video Pixabay mới chỉ được tải khi tỷ lệ là 16:9 (chấp nhận sai số làm tròn 1 pixel). Lọc theo kích thước từng bản video, làm mới cache tìm kiếm cũ và kiểm tra lại kích thước tệp tải về trước khi lưu. Không cắt video dọc/vuông thành 16:9 để thay thế. Tệp cũ không bị xóa; bộ đã chọn cũ sai tỷ lệ cần tạo dự án mới.

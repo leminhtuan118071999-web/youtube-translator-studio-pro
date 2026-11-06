@@ -17,6 +17,13 @@ LIMIT=15
 MAX_BYTES=500*1024*1024
 
 
+def is_widescreen(video):
+    """16:9 with at most one pixel of encoder rounding; never generic landscape."""
+    width, height = video.get('width'), video.get('height')
+    return (type(width) is int and type(height) is int and width > height > 0
+            and abs(width * 9 - height * 16) <= 16)
+
+
 def save_key(value):
     value=value.strip()
     if not value or len(value)>300:raise ValueError('Khóa Pixabay không hợp lệ.')
@@ -35,8 +42,8 @@ def search(query, page=1):
     key=api_key()
     if not key:raise ValueError('Chưa lưu khóa Pixabay. Nhập khóa trong mục Cấu hình Pixabay.')
     cache=home()/'pixabay-cache';cache.mkdir(exist_ok=True)
-    filename=cache/(hashlib.sha256((query.casefold()+'|'+str(page)).encode()).hexdigest()+'.json')
-    if filename.exists() and time.time()-filename.stat().st_mtime<86400:return read(filename)['hits']
+    filename=cache/(hashlib.sha256(('16x9-v1|'+query.casefold()+'|'+str(page)).encode()).hexdigest()+'.json')
+    if filename.exists() and time.time()-filename.stat().st_mtime<86400:return [h for h in read(filename)['hits'] if is_widescreen(h)]
     url='https://pixabay.com/api/videos/?'+urlencode(dict(key=key,q=query,page=page,per_page=50,safesearch='true'))
     try:
         with urlopen(Request(url,headers={'User-Agent':'LMTStudioPro/3'}),timeout=25) as response:
@@ -48,7 +55,7 @@ def search(query, page=1):
     except (URLError,TimeoutError):raise ValueError('Chưa kết nối được Pixabay. Kiểm tra Internet và thử lại.') from None
     hits=[]
     for item in data.get('hits',[]):
-        choices=[v for v in item.get('videos',{}).values() if v.get('width',0)>=640 and v.get('size',MAX_BYTES+1)<=MAX_BYTES]
+        choices=[v for v in item.get('videos',{}).values() if is_widescreen(v) and v.get('width',0)>=640 and v.get('size',MAX_BYTES+1)<=MAX_BYTES]
         if not choices:continue
         hd=[v for v in choices if v['width']>=1280]
         video=min(hd or choices,key=lambda v:v.get('size',MAX_BYTES))
@@ -107,7 +114,10 @@ def select_for_project(folder, query, preferred=None, cancel=None, update=lambda
         fcntl.flock(lock, fcntl.LOCK_EX)
         if reservation.exists():
             update('Dùng lại 15 video Pixabay đã chọn cho dự án này')
-            return read(reservation)['hits']
+            hits = read(reservation)['hits']
+            if not all(is_widescreen(h) for h in hits):
+                raise ValueError('Bộ video cũ có video không phải 16:9 hoặc thiếu kích thước. Hãy tạo dự án mới để lấy bộ 15 video 16:9; nguyên liệu cũ vẫn được giữ.')
+            return hits
         history_file = home()/'pixabay-history.json'
         history = read(history_file) if history_file.exists() else {}
         for manifest in home().glob('*/pixabay-downloads.json'):
@@ -117,6 +127,7 @@ def select_for_project(folder, query, preferred=None, cancel=None, update=lambda
         chosen = []
         chosen_ids = set()
         def take(hit):
+            if not is_widescreen(hit): return False
             key = str(int(hit['id']))
             if key in used or key in chosen_ids: return False
             chosen.append(hit); chosen_ids.add(key)
@@ -162,7 +173,7 @@ def select_for_project(folder, query, preferred=None, cancel=None, update=lambda
             rng.shuffle(fresh); pools[i].extend(fresh)
             if requests >= initial: fill()
         if len(chosen) < LIMIT:
-            raise ValueError(f'Chỉ còn {len(chosen)} video Pixabay mới theo từ khóa này; cần 15 video không trùng phiên trước. Đã thử các từ khóa gần nghĩa phù hợp; hãy nhập chủ đề rộng hơn rồi dựng lại.')
+            raise ValueError(f'Chỉ còn {len(chosen)} video Pixabay mới theo từ khóa này; cần 15 video 16:9 không trùng phiên trước. Đã thử các từ khóa gần nghĩa phù hợp; hãy nhập chủ đề rộng hơn rồi dựng lại.')
         if cancel is not None and Path(cancel).exists(): raise Cancelled()
         rng.shuffle(chosen)
         for hit in chosen: history[str(hit['id'])] = folder.name
@@ -202,6 +213,8 @@ def download(folder, selected, cancel, update):
         if existing:
             try:asset(folder,existing['file']);result.append(existing['file']);continue
             except ValueError:pass
+        if not is_widescreen(hit):
+            raise ValueError('Chỉ tải video Pixabay 16:9. Hãy tìm lại video hoặc tạo dự án mới.')
         update(i/max(1,len(selected)),f'Đang tải video Pixabay {i+1}/{len(selected)}')
         url=safe_url(hit['url']);name=uuid4().hex+'.mp4';target=folder/'assets'/name;partial=target.with_suffix('.part')
         try:
@@ -214,7 +227,9 @@ def download(folder, selected, cancel, update):
                     size+=len(chunk)
                     if size>MAX_BYTES:raise ValueError('Video Pixabay vượt 500 MB.')
                     dest.write(chunk)
-            if not probe(partial)['video']:raise ValueError('Tệp Pixabay không phải video hợp lệ.')
+            media=probe(partial)
+            if not media['video']:raise ValueError('Tệp Pixabay không phải video hợp lệ.')
+            if not is_widescreen(media):raise ValueError('Video tải về không đúng tỷ lệ 16:9; không lưu vào dự án.')
             partial.replace(target)
             records[key]=dict(file=name,pageURL=hit.get('pageURL',''),user=hit.get('user',''))
             atomic(manifest,records);result.append(name)

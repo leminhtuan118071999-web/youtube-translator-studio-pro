@@ -19,7 +19,7 @@ class StoryTests(unittest.TestCase):
     def setUp(self):
         self.tmp=tempfile.TemporaryDirectory();self.env=patch.dict(os.environ,LMT_V3_HOME=self.tmp.name);self.env.start()
         self.p=projects.create('Kể chuyện');self.folder=projects.project_dir(self.p['id']);self.assets=self.folder/'assets'
-        command('-f','lavfi','-i','color=blue:s=240x180:r=30','-t','0.6','-an','-c:v','libx264','-threads','1','-pix_fmt','yuv420p',str(self.assets/'bg.mp4'))
+        command('-f','lavfi','-i','color=blue:s=320x180:r=30','-t','0.6','-an','-c:v','libx264','-threads','1','-pix_fmt','yuv420p',str(self.assets/'bg.mp4'))
         for name,freq,duration in [('intro',900,.4),('main',500,.8)]:
             command('-f','lavfi','-i',f'sine=frequency={freq}:sample_rate=48000','-t',str(duration),str(self.assets/(name+'.wav')))
         image=Image.new('RGBA',(100,100));image.paste((0,255,0,255),(20,20,80,80));image.save(self.assets/'person.png')
@@ -73,7 +73,7 @@ class StoryTests(unittest.TestCase):
         response.read.side_effect=[payload,b'']
         opener=MagicMock();opener.open.return_value=response
         with patch('urllib.request.build_opener',return_value=opener):
-            names=pixabay.download(self.folder,[dict(id=123,url=response.geturl.return_value,pageURL='https://pixabay.com/videos/id-123/')],self.folder/'cancel',lambda *a:None)
+            names=pixabay.download(self.folder,[dict(id=123,width=1920,height=1080,url=response.geturl.return_value,pageURL='https://pixabay.com/videos/id-123/')],self.folder/'cancel',lambda *a:None)
             self.assertTrue(probe(self.assets/names[0])['video'])
             again=pixabay.download(self.folder,[dict(id=123)],self.folder/'cancel',lambda *a:None)
             self.assertEqual(names,again);self.assertEqual(opener.open.call_count,1)
@@ -86,7 +86,7 @@ class StoryTests(unittest.TestCase):
         response=MagicMock();response.__enter__.return_value=response
         response.geturl.return_value='https://cdn.pixabay.com/video/test.mp4';response.read.side_effect=[payload,b'']*15
         opener=MagicMock();opener.open.return_value=response
-        hits=[dict(id=i,url=response.geturl.return_value,pageURL=f'https://pixabay.com/videos/id-{i}/') for i in range(15)]
+        hits=[dict(id=i,width=1920,height=1080,url=response.geturl.return_value,pageURL=f'https://pixabay.com/videos/id-{i}/') for i in range(15)]
         with patch('v3.pixabay.search',return_value=hits) as search,patch('urllib.request.build_opener',return_value=opener):
             prepare(run)
             self.assertEqual(search.call_count,3)
