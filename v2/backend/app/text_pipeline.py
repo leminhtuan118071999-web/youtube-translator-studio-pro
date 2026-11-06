@@ -72,7 +72,7 @@ def run_text_job(kind,snapshot,progress):
     try:
         # Restore only this immutable job's outputs; no old narration checkpoints.
         for key,value in (snapshot.get('resume_fields') or {}).items():
-            if key in ('source','caption_language','title','translated','translation_complete','optimization_work_json','optimization_review_json','seo_work_json','new_title','new_description','seo_tags','metadata'):
+            if key in ('tts_text','source','caption_language','title','translated','translation_complete','optimization_work_json','optimization_review_json','seo_work_json','new_title','new_description','seo_tags','metadata'):
                 fields[key]=value;progress.publish(key,value)
         source=(snapshot.get('uploaded_source') or snapshot.get('source') or fields.get('source') or '').strip()
         vid=youtube_id(snapshot.get('url',''))
@@ -95,11 +95,13 @@ def run_text_job(kind,snapshot,progress):
             try:report=json.loads(fields.get('optimization_review_json') or '{}')
             except (ValueError,TypeError):pass
             if not (isinstance(report,dict) and report.get('method')==METHOD and report.get('source_sha256')==source_hash(source)
+                    and report.get('numbers_as_words') is True
+                    and bool(fields.get('tts_text'))
                     and report.get('target_language')==language and isinstance(old,str) and old.strip() and report.get('output_sha256')==source_hash(old)):
-                old=translate_direct(source,language,lambda p:shared.call(snapshot,p),bp)
+                old=translate_direct(source,language,lambda p:shared.call(snapshot,p),bp,numbers_as_words=True)
             bp.publish('translated',old);bp.publish('translation_complete',True)
             bp.publish('optimization_work_json','');bp.update(100,'Bản dịch đã lưu')
-            return dict(translated=old,translation_complete=True,optimization_work_json='',optimization_review_json=bp.partial_result().get('optimization_review_json',''))
+            return dict(tts_text=bp.partial_result().get('tts_text',''),translated=old,translation_complete=True,optimization_work_json='',optimization_review_json=bp.partial_result().get('optimization_review_json',''))
         def metadata():
             bp=BranchProgress(shared,'seo')
             if all(isinstance(fields.get(key),str) and fields[key].strip() for key in ('new_title','new_description','seo_tags','metadata')):
@@ -123,7 +125,7 @@ def run_text_job(kind,snapshot,progress):
     finally:
         with shared.lock:
             partial=progress.partial_result()
-            for key in ('optimization_work_json','optimization_review_json','seo_work_json','translated','translation_complete','new_title','new_description','seo_tags','metadata'):
+            for key in ('tts_text','optimization_work_json','optimization_review_json','seo_work_json','translated','translation_complete','new_title','new_description','seo_tags','metadata'):
                 if key in partial:fields[key]=partial[key]
             shared.metrics();fields['processing_metrics']=progress.partial_result().get('processing_metrics',{})
     error='; '.join(errors)
@@ -131,3 +133,4 @@ def run_text_job(kind,snapshot,progress):
         if key:error=error.replace(key,'[KEY ĐÃ ẨN]')
     progress.update(100,'Hoàn thành bản dịch và SEO' if not errors else 'Có phần chưa hoàn thành; đã giữ kết quả xong và checkpoint')
     return dict(ok=not errors,fields=fields,error=error[:700])
+

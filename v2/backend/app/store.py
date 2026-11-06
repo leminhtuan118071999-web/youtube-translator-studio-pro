@@ -96,6 +96,8 @@ def save_session(owner, sid, body):
         old = row['data']
         changed_source = any(values.get(k, '') != old.get(k, '') for k in ('source', 'url')) or values['language'] != old.get('language', 'Tiếng Việt')
         changed_translation = changed_source or values['translated'] != old.get('translated', '')
+        if changed_translation:
+            values['tts_text'] = ''
         changed_style = values['style'] != old.get('style', '')
         if changed_source:
             values['translation_stale'] = True
@@ -205,3 +207,4 @@ def retry_job(owner, jid):
         return conn.execute(f'''update public.lmt_v2_jobs set status='queued',attempts=0,encrypted_keys=%s,
             retry_after=now(),finished_at=null,error='',stage='Tiếp tục từ checkpoint',updated_at=now()
             where id=%s and user_id=%s returning {JOB_PUBLIC}''', (seal(keys), jid, owner)).fetchone()
+

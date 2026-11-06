@@ -15,3 +15,9 @@ def test_openapi_exposes_only_text_job_kinds():
     schema=TestClient(app).get('/openapi.json').json()
     assert set(schema['components']['schemas']['JobInput']['properties']['kind']['enum'])=={'full','translation','seo'}
     assert set(schema['components']['schemas']['ArtifactEdit']['properties']['field']['enum'])=={'new_title','new_description','seo_tags'}
+
+
+def test_spoken_translation_round_trips_in_studio_view():
+    from app.routes import _studio_session
+    row={'data':{'tts_text':'twenty-three','translated':'23'}}
+    assert _studio_session(row)['data']==row['data']

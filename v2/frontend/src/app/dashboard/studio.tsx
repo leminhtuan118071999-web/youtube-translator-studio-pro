@@ -10,7 +10,7 @@ type Summary = Omit<Session, "data">;
 type Job = { id: string; session_id: string | null; job_type: string; status: string; progress: number; stage: string; error: string; attempts: number };
 type Metrics = { calls: number; failures: number; retries: number; wait_seconds: number; total_seconds: number;
   current?: { phase: string; started_at: number } | null; phases: Record<string, { calls: number; seconds: number }> };
-type Checkpoint = { job_id: string; session_id: string; input_revision: number; translated: string | null; new_title?: string | null; new_description?: string | null; seo_tags?: string | null; metrics: Metrics | null };
+type Checkpoint = { job_id: string; session_id: string; input_revision: number; translated: string | null; tts_text?: string | null; new_title?: string | null; new_description?: string | null; seo_tags?: string | null; metrics: Metrics | null };
 type Provider = { base_url: string; model: string; kind: string; auth?: string };
 type Config = { values: Record<string, string>; configured_keys: string[]; version: number };
 const tabs = ["Nội dung", "Tiêu đề · Mô tả · Tag", "Cấu hình API", "AI33"];
@@ -159,8 +159,8 @@ export function Studio({ email }: { email: string }) {
   }
   function change(key: string, value: unknown) {
     setDraft(old => key === "url" && old.url !== value
-      ? { ...old, url: value, source: "", title: "", description: "" }
-      : { ...old, [key]: value }); dirtyRef.current = true; setDirty(true);
+      ? { ...old, url: value, source: "", title: "", description: "", tts_text: "" }
+      : { ...old, [key]: value, ...(["source", "language", "translated"].includes(key) ? { tts_text: "" } : {}) }); dirtyRef.current = true; setDirty(true);
   }
   async function open(sid: string) {
     if (dirtyRef.current) { setError("Hãy lưu thay đổi trước khi chuyển phiên."); return; }
@@ -215,6 +215,7 @@ export function Studio({ email }: { email: string }) {
       || (selectedJob?.status === "completed" && checkpoint.input_revision + 1 === selected?.revision)) ? checkpoint : null;
   const earlyNarration = selectedJob?.status !== "completed" && currentCheckpoint?.translated ? currentCheckpoint.translated : null;
   const narrationText = earlyNarration ?? str(draft.translated);
+  const spokenText = currentCheckpoint?.tts_text ?? str(draft.tts_text);
   const seoValue = (field: "new_title" | "new_description" | "seo_tags") => currentCheckpoint?.[field] ?? str(draft[field]);
   const running = selectedJob ? active(selectedJob) : false;
   const stale = (key: string) => draft[key] === true ? <p className="status-warning">Nội dung này được tạo từ đầu vào cũ. Hãy tạo lại để khớp với phiên hiện tại.</p> : null;
@@ -271,6 +272,7 @@ export function Studio({ email }: { email: string }) {
           }} />
           <label>Link YouTube<input disabled={busy} value={str(draft.url)} onChange={e => change("url", e.target.value)} placeholder="https://www.youtube.com/watch?v=…" /></label>
           <YouTubeThumbnail url={str(draft.url)} />
+
           <details key={`${selected.id}:source-inputs`} style={{ gridColumn: "1 / -1" }}>
             <summary>Kịch bản gốc · Tiêu đề gốc · Mô tả gốc</summary>
             <div className="form-grid" style={{ marginTop: 16 }}>
@@ -286,9 +288,11 @@ export function Studio({ email }: { email: string }) {
         <div className="toolbar">{generate("Bắt đầu dịch + tiêu đề, mô tả, tag", "full")}<button className="ghost-button" disabled={busy} onClick={() => void action(() => download("json"))}>Xuất phiên JSON</button>
           <button className="ghost-button danger" disabled={busy} onClick={() => void action(async () => { if (!window.confirm("Xóa phiên này và hủy mọi tác vụ đang chạy?")) return; await api(`/sessions/${selected.id}`, "DELETE"); selectedRef.current = null; setSelected(null); dirtyRef.current = false; setDirty(false); await refresh(); })}>Xóa phiên</button></div>
       </section>}
-      {selected && tab === "Nội dung" && <section className="editor-panel">{!earlyNarration && stale("translation_stale")}<div className="toolbar"><h2>Bản dịch sát văn bản gốc</h2><span className="status-pill" aria-label="Số ký tự bản dịch">{Array.from(narrationText).length.toLocaleString("vi-VN")} ký tự</span><CopyButton key={`${selected.id}:narration`} text={narrationText} label="văn bản" /></div><p className="muted">Giữ nội dung, lời thoại, tên riêng và số liệu của bản gốc; không viết lại thành lời kể. Số ký tự tính cả khoảng trắng và xuống dòng.</p>
+      {selected && tab === "Nội dung" && <section className="editor-panel">{!earlyNarration && stale("translation_stale")}<div className="toolbar"><h2>Bản dịch dùng cho giọng đọc AI</h2><span className="status-pill" aria-label="Số ký tự bản dịch">{Array.from(spokenText || narrationText).length.toLocaleString("vi-VN")} ký tự</span><CopyButton key={`${selected.id}:tts`} text={spokenText || narrationText} label="bản đọc AI" /></div><p className="muted">Tự chuẩn hóa dấu câu và chuyển số rõ nghĩa thành chữ theo ngôn ngữ đích trong lượt dịch. Giữ đầy đủ nội dung và lời thoại; số mơ hồ và mã định danh được giữ nguyên.</p>
         {earlyNarration && <p className="status-good">Bản dịch đã lưu. Bạn có thể copy ngay; tiêu đề, mô tả và tag được xử lý song song.</p>}
-        <textarea disabled={busy} readOnly={!!earlyNarration} rows={22} value={narrationText} onChange={e => change("translated", e.target.value)} />
+        {!spokenText && narrationText && <p className="status-warning">Đang hiển thị bản giữ chữ số. Bấm dịch lại để tạo bản đọc AI theo cách xử lý mới.</p>}
+        <textarea readOnly rows={22} value={spokenText || narrationText} />
+        <details><summary>Bản dịch giữ chữ số · đối chiếu và chỉnh sửa</summary><div className="toolbar"><CopyButton key={`${selected.id}:canonical`} text={narrationText} label="bản giữ chữ số" /></div><textarea disabled={busy} readOnly={!!earlyNarration} rows={16} value={narrationText} onChange={e => change("translated", e.target.value)} /></details>
         <div className="toolbar">{generate("Dịch lại và cập nhật SEO", "translation")}</div></section>}
       {selected && tab === "Tiêu đề · Mô tả · Tag" && <section className="editor-panel">{stale("seo_stale")}<p className="muted">Tiêu đề và mô tả được dịch sát nghĩa khi có bản gốc. Nếu không có mô tả gốc, mô tả sẽ được viết theo bản dịch văn bản. Có thể thêm emoji phù hợp để dễ đọc và hấp dẫn hơn; thẻ tag được tối ưu riêng.</p>{!str(draft.title).trim() && <p className="muted">Chưa có tiêu đề gốc: tiêu đề sẽ được tạo theo nội dung câu chuyện.</p>}{!str(draft.description).trim() && <p className="muted">Không có mô tả gốc: tự tạo mô tả theo bản dịch văn bản, kèm emoji phù hợp.</p>}<div className="toolbar"><h2>Tiêu đề video</h2><CopyButton key={`${selected.id}:title`} text={seoValue("new_title")} label="tiêu đề" /></div><pre>{seoValue("new_title") || "Tiêu đề chưa được tạo"}</pre><p className="muted">{seoValue("new_title").length}/100 ký tự</p><div className="toolbar"><h2>Mô tả video</h2><CopyButton key={`${selected.id}:description`} text={seoValue("new_description")} label="mô tả" /></div><pre>{seoValue("new_description") || "Mô tả chưa được tạo"}</pre><div className="toolbar"><h2>Thẻ tag</h2><CopyButton key={`${selected.id}:tags`} text={seoValue("seo_tags")} label="thẻ tag" /></div><pre>{seoValue("seo_tags")}</pre><div className="toolbar">{(["new_title", "new_description", "seo_tags"] as const).map(field => <button disabled={busy} key={field} className="ghost-button" onClick={() => { const value = window.prompt(field === "new_title" ? "Tiêu đề mới (tối đa 100 ký tự)" : field === "new_description" ? "Mô tả mới" : "Thẻ tag", str(draft[field])); if (value !== null) void action(() => editArtifact(field, value)); }}>Sửa {field === "new_title" ? "tiêu đề" : field === "new_description" ? "mô tả" : "tag"}</button>)}</div>{generate("Dịch lại tiêu đề, mô tả và tạo tag", "seo")}</section>}
       {tab === "Cấu hình API" && <section className="editor-panel"><h2>Nhà cung cấp AI</h2><p className="muted">API key đã lưu được giữ trên máy chủ. Để trống ô key sẽ giữ key hiện tại; dùng “Xóa key” khi cần.</p>
@@ -373,3 +377,4 @@ function YouTubeThumbnail({ url }: { url: string }) {
     <div className="toolbar"><a className="secondary-button" href={`/api/youtube-thumbnail?id=${id}`}>Tải thumbnail gốc</a></div>
   </div>;
 }
+

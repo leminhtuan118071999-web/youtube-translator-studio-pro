@@ -144,7 +144,7 @@ def worker_status(user: AuthenticatedUser = Depends(require_user)):
 def _studio_session(row):
     # Visual planning/checkpoints remain saved server-side and in exports.
     keys = {'url', 'source', 'title', 'description', 'language', 'style', 'duration_seconds',
-            'translated', 'new_title', 'new_description', 'seo_tags', 'translation_stale', 'seo_stale'}
+            'tts_text', 'translated', 'new_title', 'new_description', 'seo_tags', 'translation_stale', 'seo_stale'}
     return {**row, 'data': {k: v for k, v in row['data'].items() if k in keys}}
 
 
@@ -155,6 +155,7 @@ def _selected_checkpoint(conn, owner, sid, revision):
         case when j.job_type in ('full','translation')
             and j.result->>'translation_complete'='true'
             then j.result->>'translated' else null end as translated,
+        case when j.result->>'translation_complete'='true' then j.result->>'tts_text' else null end as tts_text,
         j.result->>'new_title' as new_title, j.result->>'new_description' as new_description,
         j.result->>'seo_tags' as seo_tags, j.result->'processing_metrics' as metrics
         from public.lmt_v2_jobs j
@@ -211,3 +212,4 @@ def edit_artifact(sid: UUID, body: ArtifactEdit, user: AuthenticatedUser = Depen
         store.cancel_active(conn,user.id,sid)
         return conn.execute('''update public.lmt_v2_sessions set data=data || %s,revision=revision+1,status='draft',updated_at=now()
             where id=%s and user_id=%s returning *''',(Jsonb(fields),sid,user.id)).fetchone()
+

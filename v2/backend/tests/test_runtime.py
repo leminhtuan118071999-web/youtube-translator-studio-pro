@@ -223,7 +223,7 @@ def test_worker_runs_direct_translation_and_parallel_metadata_into_durable_sessi
     submit(owner,s)
     job=worker.claim('test-worker')
     def provider(p,b,m,k,prompt,**kwargs):
-        if prompt.startswith('DIRECT_TRANSLATION'): return '{"text":"Nora saved Maisie.","seo_context":"Nora saved Maisie.","complete":true}'
+        if prompt.startswith('DIRECT_TRANSLATION'): return '{"text":"Nora saved Maisie.","seo_context":"Nora saved Maisie.","complete":true,"number_readings":[]}'
         if prompt.startswith('FAITHFULNESS_REVIEW'): return '{"ok":true,"issues":[],"source_conflicts":[]}'
         if prompt.startswith(('Summarize','Condense')): return 'Nora saved Maisie.'
         if prompt.startswith('TARGET_METADATA_REVIEW'): return '{"ok":true,"issues":[]}'
@@ -352,3 +352,4 @@ def test_selected_checkpoint_is_reviewed_owner_scoped_and_revision_fenced(db):
     store.save_session(owner,s['id'],SessionEdit(name='Manual',revision=1,source='New input',translated='Manual narration'))
     with connect() as c:
         assert _selected_checkpoint(c,owner,s['id'],2) is None
+

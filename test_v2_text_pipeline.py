@@ -15,7 +15,7 @@ class TextPipelineTests(unittest.TestCase):
         def call(*args,**kwargs):
             if args[4].startswith('DIRECT_TRANSLATION'):
                 translation_started.set();self.assertTrue(seo_started.wait(2),'SEO waited for translation')
-                return json.dumps(dict(text='Anna nói xin chào.',seo_context='Anna chào.',complete=True))
+                return json.dumps(dict(text='Anna nói xin chào.',seo_context='Anna chào.',complete=True,number_readings=[]))
             seo_started.set();self.assertTrue(translation_started.wait(2),'translation did not start')
             return '{"title":"Xin chào","description":"Lời chào.","tags":["xin chào"]}'
         progress=JobProgress()
@@ -34,7 +34,7 @@ class TextPipelineTests(unittest.TestCase):
         config=dict(self.config(),resume_fields=r['fields']);calls=[]
         def recover(*args,**kwargs):
             calls.append(args[4]);self.assertTrue(args[4].startswith('DIRECT_TRANSLATION'))
-            return '{"text":"Anna nói xin chào.","seo_context":"Anna chào.","complete":true}'
+            return '{"text":"Anna nói xin chào.","seo_context":"Anna chào.","complete":true,"number_readings":[]}'
         with patch('app.text_pipeline.generate_text',side_effect=recover):result=run_text_job('full',config,JobProgress())
         self.assertTrue(result['ok'],result['error']);self.assertEqual(len(calls),1)
     def test_removed_jobs_never_call_provider(self):
@@ -67,4 +67,22 @@ class TextPipelineTests(unittest.TestCase):
         self.assertEqual(source_hash(''.join(chunks)), source_hash(source))
         self.assertLess(len(chunks), 5)
 
+    def test_number_readings_are_saved_with_translation_in_same_provider_call(self):
+        p=JobProgress();config=self.config()
+        def respond(*args,**kwargs):
+            if args[4].startswith('DIRECT_TRANSLATION'):
+                return json.dumps(dict(text='Anna đợi 23 phút.',complete=True,number_readings=[dict(number='23',occurrence=1,words='hai mươi ba')]))
+            return '{"title":"Xin chào","description":"Lời chào.","tags":["xin chào"]}'
+        with patch('app.text_pipeline.generate_text',side_effect=respond) as provider:
+            result=run_text_job('full',config,p)
+        self.assertTrue(result['ok'],result['error']);self.assertEqual(provider.call_count,2)
+        self.assertEqual(result['fields']['translated'],'Anna đợi 23 phút.')
+        self.assertEqual(result['fields']['tts_text'],'Anna đợi hai mươi ba phút.')
+        config['resume_fields']=result['fields']
+        with patch('app.text_pipeline.generate_text',side_effect=AssertionError('Do not repeat completed work')):
+            resumed=run_text_job('full',config,JobProgress())
+        self.assertTrue(resumed['ok'],resumed['error'])
+        self.assertEqual(resumed['fields']['tts_text'],'Anna đợi hai mươi ba phút.')
+
 if __name__=='__main__':unittest.main()
+

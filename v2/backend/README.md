@@ -39,3 +39,9 @@ Use `/docs` for the complete API contract. Routes include:
 PostgreSQL database to also run transaction, RLS, ownership, fencing and recovery
 integration tests. Tests refuse remote database hosts. CI provisions PostgreSQL
 17 and runs these tests; it never connects to production.
+
+## Bản đọc AI tự động
+
+Sau khi bấm Bắt đầu, V2 tự chuẩn hóa dấu câu và đề xuất cách đọc số trong cùng lượt dịch, không có tùy chọn bật/tắt. Bản chính trên giao diện là bản dùng cho AI33; bản dịch giữ chữ số nằm trong mục thu gọn để đối chiếu. Worker tạo bản đọc bằng cách thay đúng token số, giữ nguyên các phần chữ còn lại. Số mơ hồ, mã định danh và chuỗi từ 7 chữ số liền nhau được giữ nguyên; cách đọc đúng giá trị/ngữ cảnh phụ thuộc model, cần đối chiếu số liệu quan trọng.
+
+Thay nguồn, ngôn ngữ hoặc bản dịch sẽ xóa bản đọc cũ. Cần cập nhật API, frontend và Mac worker; không thay schema database. Phiên hoàn thành cũ không tự chạy lại, chỉ áp dụng khi bấm dịch lại. Các kiểm thử test_direct_numbers/test_direct_punctuation và test_v2_text_pipeline kiểm tra giữ bản gốc, số lượt gọi AI và tiếp tục từ kết quả đã lưu.
