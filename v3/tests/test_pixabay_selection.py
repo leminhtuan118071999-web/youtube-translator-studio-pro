@@ -43,10 +43,51 @@ class SelectionTests(unittest.TestCase):
         with tempfile.TemporaryDirectory() as tmp, patch.dict(os.environ,LMT_V3_HOME=tmp):
             folder=projects.project_dir(projects.create('New')['id'])
             projects.atomic(projects.home()/'pixabay-history.json',{str(i):'old' for i in range(50)})
-            with patch.object(pixabay,'search',side_effect=[[{'id':i} for i in range(50)],[{'id':i} for i in range(50,100)]]) as search:
+            with patch.object(pixabay,'search',side_effect=lambda query,page=1: [{'id':i} for i in range(50)] if page==1 else [{'id':i} for i in range(50,100)]) as search:
                 result=pixabay.select_for_project(folder,'forest')
-                self.assertEqual(search.call_count,2)
+                self.assertLessEqual(search.call_count,10)
                 self.assertTrue(all(h['id']>=50 for h in result))
+
+    def test_plentiful_results_are_mixed_from_three_queries_then_stop(self):
+        with tempfile.TemporaryDirectory() as tmp, patch.dict(os.environ,LMT_V3_HOME=tmp):
+            folder=projects.project_dir(projects.create('Mixed')['id'])
+            queries=pixabay.related_queries('forest sunlight')[:3]
+            def search(term,page=1):
+                start=queries.index(term)*100
+                return [dict(id=start+i,origin=term) for i in range(50)]
+            updates=[]
+            with patch.object(pixabay,'search',side_effect=search) as api:
+                result=pixabay.select_for_project(folder,'forest sunlight',update=updates.append)
+            self.assertEqual(api.call_count,3)
+            self.assertEqual(len({h['id'] for h in result}),15)
+            self.assertEqual({term:sum(h['origin']==term for h in result) for term in queries},dict.fromkeys(queries,5))
+            self.assertEqual(projects.read(folder/'pixabay-selection.json')['searched_queries'],queries)
+            self.assertIn('15 video',updates[-1])
+
+    def test_duplicate_results_and_exhaustion_keep_ten_request_cap(self):
+        with tempfile.TemporaryDirectory() as tmp, patch.dict(os.environ,LMT_V3_HOME=tmp):
+            folder=projects.project_dir(projects.create('Duplicates')['id'])
+            with patch.object(pixabay,'search',return_value=[{'id':1}]*50) as api:
+                with self.assertRaises(ValueError):pixabay.select_for_project(folder,'forest sunlight')
+            self.assertEqual(api.call_count,10)
+            self.assertFalse((folder/'pixabay-selection.json').exists())
+
+    def test_cancelled_search_does_not_reserve_ids(self):
+        from pathlib import Path
+        with tempfile.TemporaryDirectory() as tmp, patch.dict(os.environ,LMT_V3_HOME=tmp):
+            folder=projects.project_dir(projects.create('Cancel')['id'])
+            cancel=Path(tmp)/'cancel';cancel.touch()
+            with patch.object(pixabay,'search') as api:
+                with self.assertRaises(pixabay.Cancelled):pixabay.select_for_project(folder,'forest',cancel=cancel)
+            api.assert_not_called()
+            self.assertFalse((folder/'pixabay-selection.json').exists())
+
+    def test_theme_variants_keep_explicit_qualifiers(self):
+        for query,qualifier in [('city night','night'),('snow winter','winter'),('luxury mansion','luxury'),('office interior','interior')]:
+            variants=pixabay.related_queries(query)
+            self.assertGreater(len(variants),1)
+            self.assertTrue(all(qualifier in term for term in variants))
 
 
 if __name__=='__main__':unittest.main()
+

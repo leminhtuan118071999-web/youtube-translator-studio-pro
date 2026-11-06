@@ -71,6 +71,23 @@ def related_queries(query):
         (('rain','rainfall','mưa'), ('rain','rainfall','rain drops')),
         (('flower','flowers','hoa'), ('flowers','flower garden','blooming flowers')),
         (('cloud','clouds','mây'), ('clouds','cloudy sky','moving clouds')),
+        (('snow','snowy','tuyết'), ('snow','snowy landscape','snowfall')),
+        (('winter','mùa đông'), ('winter','winter scenery','winter landscape')),
+        (('lake','hồ nước'), ('lake','lakeside','lake scenery')),
+        (('garden','vườn'), ('garden','garden scenery','garden plants')),
+        (('countryside','đồng quê'), ('countryside','rural landscape','farmland')),
+        (('desert','sa mạc'), ('desert','sand dunes','desert landscape')),
+        (('sunset','hoàng hôn'), ('sunset','evening sky','sunset scenery')),
+        (('mansion','villa','biệt thự'), ('mansion','villa','luxury house')),
+        (('living room','phòng khách'), ('living room','home interior','lounge interior')),
+        (('office','văn phòng'), ('office','workplace','office workspace')),
+        (('kitchen','nhà bếp'), ('kitchen','home kitchen','kitchen room')),
+        (('restaurant','nhà hàng'), ('restaurant','dining room','restaurant dining')),
+        (('hospital','bệnh viện'), ('hospital','hospital corridor','hospital room')),
+        (('school','trường học'), ('school','school building','school campus')),
+        (('castle','lâu đài'), ('castle','stone castle','historic castle')),
+        (('church','nhà thờ'), ('church','church building','church architecture')),
+        (('celebration','bữa tiệc'), ('celebration','festivity','party decorations')),
     ]
     results = [query]
     for words, synonyms in groups:
@@ -82,48 +99,77 @@ def related_queries(query):
     return list(dict.fromkeys(q for q in results if 1 <= len(q) <= 100))[:5]
 
 
-def select_for_project(folder, query, preferred=None, cancel=None):
-    """Reserve 15 distinct IDs atomically across projects; retain on retries."""
+def select_for_project(folder, query, preferred=None, cancel=None, update=lambda _:None):
+    """Mix related queries within ten requests; reserve fresh IDs atomically."""
     folder = Path(folder)
     reservation = folder/'pixabay-selection.json'
     with (home()/'pixabay-history.lock').open('a') as lock:
         fcntl.flock(lock, fcntl.LOCK_EX)
         if reservation.exists():
+            update('Dùng lại 15 video Pixabay đã chọn cho dự án này')
             return read(reservation)['hits']
         history_file = home()/'pixabay-history.json'
         history = read(history_file) if history_file.exists() else {}
-        # Include downloads from projects created before the shared history.
         for manifest in home().glob('*/pixabay-downloads.json'):
             for key in read(manifest):
                 history.setdefault(key, manifest.parent.name)
         used = set(history)
-        candidates = {}
-        def add(hits):
-            for hit in hits:
-                key = str(int(hit['id']))
-                if key not in used:
-                    candidates.setdefault(key, hit)
-        add(preferred or [])
+        chosen = []
+        chosen_ids = set()
+        def take(hit):
+            key = str(int(hit['id']))
+            if key in used or key in chosen_ids: return False
+            chosen.append(hit); chosen_ids.add(key)
+            return True
+        for hit in preferred or []:
+            if len(chosen) >= LIMIT: break
+            take(hit)
         queries = related_queries(query)
+        pools = [[] for _ in queries]
+        pages = [1 for _ in queries]
+        exhausted = set()
+        searched = []
         requests = 0
-        for term in queries:
-            if len(candidates) >= LIMIT or requests >= 10: break
-            for page in range(1, (10 if len(queries) == 1 else 2) + 1):
-                if len(candidates) >= LIMIT or requests >= 10: break
-                if cancel is not None and cancel.exists(): raise Cancelled()
-                hits = search(term, page=page)
-                requests += 1
-                add(hits)
-                if not hits: break
-        if len(candidates) < LIMIT:
-            raise ValueError(f'Chỉ còn {len(candidates)} video Pixabay mới theo từ khóa này; cần 15 video không trùng phiên trước. Đã thử các từ khóa gần nghĩa phù hợp; hãy nhập chủ đề rộng hơn rồi dựng lại.')
-        hits = list(candidates.values())
-        random.SystemRandom().shuffle(hits)
-        chosen = hits[:LIMIT]
+        rng = random.SystemRandom()
+        def fill():
+            # Round-robin selection avoids letting the first query take all slots.
+            while len(chosen) < LIMIT:
+                added = False
+                for pool in pools:
+                    while pool:
+                        if take(pool.pop()):
+                            added = True
+                            break
+                    if len(chosen) >= LIMIT: break
+                if not added: break
+        # Initially sample up to three closely related queries even if one is plentiful.
+        # Extra pages/terms are fetched only when those cannot supply fifteen fresh IDs.
+        initial = min(3, len(queries))
+        pending = list(range(initial))
+        while len(chosen) < LIMIT and requests < 10:
+            if cancel is not None and Path(cancel).exists(): raise Cancelled()
+            if not pending:
+                pending = [i for i in range(len(queries)) if i not in exhausted]
+                if not pending: break
+            i = pending.pop(0)
+            term = queries[i]
+            update(f'Tìm Pixabay {requests+1}/10 · {term} · đã chọn {len(chosen)}/15 video mới')
+            hits = search(term, page=pages[i])
+            pages[i] += 1; requests += 1
+            if term not in searched: searched.append(term)
+            if not hits: exhausted.add(i)
+            fresh = [h for h in hits if str(int(h['id'])) not in used]
+            rng.shuffle(fresh); pools[i].extend(fresh)
+            if requests >= initial: fill()
+        if len(chosen) < LIMIT:
+            raise ValueError(f'Chỉ còn {len(chosen)} video Pixabay mới theo từ khóa này; cần 15 video không trùng phiên trước. Đã thử các từ khóa gần nghĩa phù hợp; hãy nhập chủ đề rộng hơn rồi dựng lại.')
+        if cancel is not None and Path(cancel).exists(): raise Cancelled()
+        rng.shuffle(chosen)
         for hit in chosen: history[str(hit['id'])] = folder.name
         # History first: a crash can reserve unused IDs but never duplicate them.
         atomic(history_file, history)
-        atomic(reservation, dict(query=query, searched_queries=queries, hits=chosen))
+        atomic(reservation, dict(query=query, searched_queries=searched, search_requests=requests, hits=chosen))
+        update(f'Đã chọn 15 video Pixabay mới từ {len(searched)} từ khóa liên quan')
         return chosen
 
 
@@ -176,3 +222,4 @@ def download(folder, selected, cancel, update):
         finally:
             if partial.exists():partial.unlink()
     return list(dict.fromkeys(result))
+

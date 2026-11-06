@@ -88,8 +88,10 @@ class StoryTests(unittest.TestCase):
         opener=MagicMock();opener.open.return_value=response
         hits=[dict(id=i,url=response.geturl.return_value,pageURL=f'https://pixabay.com/videos/id-{i}/') for i in range(15)]
         with patch('v3.pixabay.search',return_value=hits) as search,patch('urllib.request.build_opener',return_value=opener):
-            prepare(run);prepare(run)
-            search.assert_called_once_with('forest',page=1);self.assertEqual(opener.open.call_count,15)
+            prepare(run)
+            self.assertEqual(search.call_count,3)
+            prepare(run)
+            self.assertEqual(search.call_count,3);self.assertEqual(opener.open.call_count,15)
         result=projects.read(run/'render-project.json');self.assertEqual(len(result['scenes']),15)
 
     def test_keep_box_restores_requested_detail(self):
@@ -122,3 +124,4 @@ class PixabayTests(unittest.TestCase):
                 self.assertEqual(network.call_count,1)
             self.assertEqual((projects.home()/'pixabay-key.json').stat().st_mode & 0o777,0o600)
             p=projects.create('No secrets');self.assertNotIn('test-key',json.dumps(p))
+

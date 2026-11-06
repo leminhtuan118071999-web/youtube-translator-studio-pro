@@ -189,7 +189,7 @@ def prepare(run):
                 from .thumbnail_theme import resolve_query
                 query=resolve_query(folder,cfg,cancel,lambda stage:update(10,stage))
             effective['story']['resolved_query']=query
-            selected=select_for_project(folder,query,selected,cancel)
+            selected=select_for_project(folder,query,selected,cancel,update=lambda stage:update(10,stage))
     downloaded=download(folder,selected,cancel,lambda p,s:update(10+round(10*p),s))
     effective['story']['downloaded']=read(folder/'pixabay-downloads.json') if (folder/'pixabay-downloads.json').exists() else {}
     current=read(folder/'project.json');current['story']['downloaded']=effective['story']['downloaded'];save(current)
@@ -279,3 +279,4 @@ if __name__=='__main__':
         else:prepare(sys.argv[1])
     except Exception as exc:
         atomic(Path(sys.argv[1])/'prepare-error.json',{'error':str(exc)[-2000:]});raise
+

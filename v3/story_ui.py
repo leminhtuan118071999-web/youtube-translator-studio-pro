@@ -86,7 +86,7 @@ def panel(project,folder,locked,output_panel=None):
             y=e.slider('Vị trí dọc · trên → dưới',0,100,int(prefs['y']),disabled=locked)
             subtitles=st.checkbox('Tự tạo phụ đề cho cả mở đầu và giọng chính',value=prefs['auto_subtitles'],disabled=locked)
             model=st.selectbox('Model nhận diện cho video kể chuyện',['small','base','tiny'],index=['small','base','tiny'].index(prefs['asr_model']),disabled=locked)
-            auto_pixabay=st.checkbox('Tự tải 15 video Pixabay mới cho mỗi dự án (tránh trùng dự án trước)',value=prefs['auto_pixabay'],disabled=locked)
+            auto_pixabay=st.checkbox('Tự tải 15 video Pixabay mới · nhiều từ khóa liên quan · tránh trùng dự án trước',value=prefs['auto_pixabay'],disabled=locked)
             preferences=dict(prefs,auto_theme=auto_theme,enabled=enabled,no_intro=no_intro,remove_background=remove,restore_missing=restore_missing,keep_attached_objects=keep_attached_objects,
                              width=width,x=x,y=y,auto_subtitles=subtitles,asr_model=model,auto_pixabay=auto_pixabay)
             if not locked and preferences != store.story_defaults():
@@ -159,3 +159,4 @@ def panel(project,folder,locked,output_panel=None):
                 st.image(layout_preview(project,folder),caption='Xem trước bố cục')
             except (ValueError,OSError,RuntimeError) as exc:st.error(str(exc))
     return save_inputs
+
