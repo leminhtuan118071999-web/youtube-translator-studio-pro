@@ -21,3 +21,14 @@ def test_spoken_translation_round_trips_in_studio_view():
     from app.routes import _studio_session
     row={'data':{'tts_text':'twenty-three','translated':'23'}}
     assert _studio_session(row)['data']==row['data']
+
+def test_txt_export_prefers_spoken_text_and_preserves_old_session_fallback():
+    from app.routes import export
+    from unittest.mock import patch
+    from types import SimpleNamespace
+    from uuid import uuid4
+    sid=uuid4();user=SimpleNamespace(id=uuid4())
+    with patch('app.routes.connect'), patch('app.routes.store.owned_session',return_value={'data':{'translated':'23 minutes','tts_text':'twenty-three minutes'}}):
+        assert export(sid,'txt',user).body.decode()=='twenty-three minutes'
+    with patch('app.routes.connect'), patch('app.routes.store.owned_session',return_value={'data':{'translated':'23 minutes'}}):
+        assert export(sid,'txt',user).body.decode()=='23 minutes'

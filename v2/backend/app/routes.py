@@ -190,7 +190,7 @@ def export(sid: UUID, format: str = 'json', user: AuthenticatedUser = Depends(re
     with connect() as conn:
         session = store.owned_session(conn, user.id, sid)
     if format == 'txt':
-        content=str(session['data'].get('translated') or '')
+        content=str(session['data'].get('tts_text') or session['data'].get('translated') or '')
         if not content.strip():raise HTTPException(422,'Phiên chưa có bản dịch.')
         media, ext='text/plain; charset=utf-8','txt'
     elif format=='json':
