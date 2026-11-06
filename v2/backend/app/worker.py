@@ -17,7 +17,7 @@ from .store import unseal, seal
 
 STOP = threading.Event()
 PUBLIC_FIELDS = {
-    'source','title','caption_language','optimized_script','optimization_review_json',
+    'seo_originals_sha256','source','title','description','source_tags','source_metadata','caption_language','optimized_script','optimization_review_json',
     'tts_text','optimization_work_json','translation_parts','translation_complete','translated',
     'character_bible','character_profile','character_profile_json','character_images_manifest',
     'character_images_error','new_title','new_description','seo_tags','metadata','language','seo_work_json',

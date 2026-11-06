@@ -84,5 +84,32 @@ class TextPipelineTests(unittest.TestCase):
         self.assertTrue(resumed['ok'],resumed['error'])
         self.assertEqual(resumed['fields']['tts_text'],'Anna đợi hai mươi ba phút.')
 
+    def test_youtube_metadata_and_subtitles_overlap_and_feed_originals_to_seo(self):
+        caption_started=threading.Event();metadata_started=threading.Event()
+        def captions(*args):
+            caption_started.set();self.assertTrue(metadata_started.wait(2))
+            return ('The original script.','English')
+        def originals(vid):
+            metadata_started.set();self.assertTrue(caption_started.wait(2))
+            return dict(video_id=vid,title='Original title',description='Original description',tags=['original tag'],status=dict.fromkeys(['title','description','tags'],'fetched'))
+        prompts=[]
+        def call(*args,**kwargs):
+            prompt=args[4];prompts.append(prompt)
+            if prompt.startswith('DIRECT_TRANSLATION'):return '{"text":"Bản dịch.","complete":true,"number_readings":[]}'
+            data=json.loads(prompt.split('SOURCE DATA:\n',1)[1])
+            self.assertEqual(data['original_description'],'Original description')
+            self.assertEqual(data['original_tags'],['original tag'])
+            return '{"title":"Tiêu đề","description":"Mô tả","tags":["tag dịch"]}'
+        config=dict(self.config(),source='',uploaded_source='',title='',description='',url='https://www.youtube.com/watch?v=S491shgHrLo')
+        with patch('app.text_pipeline.fetch_subtitles',side_effect=captions),patch('app.text_pipeline.fetch_source_metadata',side_effect=originals),patch('app.text_pipeline.generate_text',side_effect=call):
+            result=run_text_job('full',config,JobProgress())
+        self.assertTrue(result['ok'],result['error']);self.assertEqual(len(prompts),2)
+        self.assertEqual(result['fields']['description'],'Original description')
+        self.assertEqual(result['fields']['source_tags'],['original tag'])
+        config['resume_fields']=result['fields']
+        with patch('app.text_pipeline.fetch_source_metadata',side_effect=AssertionError('must use checkpoint')),patch('app.text_pipeline.generate_text',side_effect=AssertionError('must keep completed branches')):
+            resumed=run_text_job('full',config,JobProgress())
+        self.assertTrue(resumed['ok'],resumed['error'])
+
 if __name__=='__main__':unittest.main()
 

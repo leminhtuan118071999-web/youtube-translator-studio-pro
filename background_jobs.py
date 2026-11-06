@@ -151,8 +151,8 @@ def overview(text, call, progress, *, context_limit=7000):
 
 
 
-def metadata_for_job(text, title, description, language, call, progress, *, fast=False, context_limit=7000):
-    identity = source_hash(json.dumps([text, title, description, language, "faithful-title-hook-v1", fast, context_limit], ensure_ascii=False))
+def metadata_for_job(text, title, description, language, call, progress, *, fast=False, context_limit=7000, original_tags=None):
+    identity = source_hash(json.dumps([text, title, description, language, "faithful-title-hook-v1", fast, context_limit, original_tags], ensure_ascii=False))
     try:
         work = json.loads(progress.partial_result().get('seo_work_json') or '{}')
     except (ValueError, TypeError):
@@ -175,8 +175,9 @@ def metadata_for_job(text, title, description, language, call, progress, *, fast
     def checkpoint(candidate):
         progress.publish('seo_work_json', json.dumps(dict(identity=identity, context=brief, candidate=candidate), ensure_ascii=False))
     progress.update(97, 'Đang tạo và đối chiếu SEO; tự khôi phục kết quả đã lưu khi cần')
+    tag_options = {'original_tags': original_tags} if original_tags else {}
     result = generate_youtube_metadata(brief, title, description, language, call,
-                                      resume_candidate=work.get('candidate'), checkpoint=checkpoint, self_check_only=fast)
+                                      resume_candidate=work.get('candidate'), checkpoint=checkpoint, self_check_only=fast, **tag_options)
     progress.publish('seo_work_json', '')
     return result
 
@@ -409,3 +410,4 @@ def run_full_job(snapshot, progress):
         metrics.publish()
         result["fields"]["processing_metrics"] = progress.partial_result().get("processing_metrics", {})
     return result
+

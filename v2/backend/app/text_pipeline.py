@@ -8,6 +8,7 @@ from background_jobs import fetch_subtitles, youtube_id, metadata_for_job
 from direct_translation import translate_direct, METHOD
 from faithful_summary import source_hash
 from processing_metrics import phase_for
+from youtube_source_metadata import fetch_source_metadata
 
 SUPPORTED = ('full','translation','seo')
 
@@ -72,23 +73,37 @@ def run_text_job(kind,snapshot,progress):
     try:
         # Restore only this immutable job's outputs; no old narration checkpoints.
         for key,value in (snapshot.get('resume_fields') or {}).items():
-            if key in ('tts_text','source','caption_language','title','translated','translation_complete','optimization_work_json','optimization_review_json','seo_work_json','new_title','new_description','seo_tags','metadata'):
+            if key in ('seo_originals_sha256','description','source_tags','source_metadata','tts_text','source','caption_language','title','translated','translation_complete','optimization_work_json','optimization_review_json','seo_work_json','new_title','new_description','seo_tags','metadata'):
                 fields[key]=value;progress.publish(key,value)
         source=(snapshot.get('uploaded_source') or snapshot.get('source') or fields.get('source') or '').strip()
         vid=youtube_id(snapshot.get('url',''))
-        if not source and vid:
-            source,caption=fetch_subtitles(vid,snapshot.get('supadata_key',''),progress)
-            fields['caption_language']=caption;progress.publish('caption_language',caption)
+        metadata_source=fields.get('source_metadata')
+        cached_metadata=isinstance(metadata_source,dict) and metadata_source.get('video_id')==vid
+        if vid:
+            progress.update(4,'Đang lấy phụ đề, tiêu đề, mô tả và tag gốc từ YouTube')
+            with ThreadPoolExecutor(max_workers=2) as pool:
+                metadata_future=None if cached_metadata else pool.submit(fetch_source_metadata,vid)
+                subtitle_future=pool.submit(fetch_subtitles,vid,snapshot.get('supadata_key',''),progress) if not source else None
+                if subtitle_future:
+                    source,caption=subtitle_future.result()
+                    fields['caption_language']=caption;progress.publish('caption_language',caption)
+                if metadata_future:metadata_source=metadata_future.result()
+            progress.check_cancelled()
         if not source or len(source)>350000:raise ValueError('Cần phụ đề hoặc văn bản gốc, tối đa 350.000 ký tự; không tự cắt nội dung.')
         fields['source']=source;progress.publish('source',source)
-        title=snapshot.get('title') or fields.get('title') or ''
-        if not title and vid:
-            import requests
-            try:
-                r=requests.get('https://www.youtube.com/oembed',params={'url':'https://www.youtube.com/watch?v='+vid,'format':'json'},timeout=8)
-                if r.ok:title=str(r.json().get('title','')).strip()
-            except (requests.RequestException,ValueError):pass
-        if title:fields['title']=title;progress.publish('title',title)
+        metadata_source=metadata_source if isinstance(metadata_source,dict) else {}
+        title=snapshot.get('title') or fields.get('title') or metadata_source.get('title') or ''
+        description=snapshot.get('description') or fields.get('description') or metadata_source.get('description') or ''
+        tags=fields.get('source_tags') if cached_metadata else metadata_source.get('tags',[])
+        if not isinstance(tags,list):tags=[]
+        for key,value in [('title',title),('description',description),('source_tags',tags)]:
+            fields[key]=value;progress.publish(key,value)
+        if vid:
+            statuses=dict(metadata_source.get('status',{}))
+            if snapshot.get('title'):statuses['title']='provided'
+            if snapshot.get('description'):statuses['description']='provided'
+            metadata_source=dict(metadata_source,video_id=vid,status=statuses)
+            fields['source_metadata']=metadata_source;progress.publish('source_metadata',metadata_source)
         language=snapshot['language'];fields['language']=language
         def translate():
             bp=BranchProgress(shared,'translation');old=fields.get('translated');report={}
@@ -104,13 +119,14 @@ def run_text_job(kind,snapshot,progress):
             return dict(tts_text=bp.partial_result().get('tts_text',''),translated=old,translation_complete=True,optimization_work_json='',optimization_review_json=bp.partial_result().get('optimization_review_json',''))
         def metadata():
             bp=BranchProgress(shared,'seo')
-            if all(isinstance(fields.get(key),str) and fields[key].strip() for key in ('new_title','new_description','seo_tags','metadata')):
+            originals_sha=source_hash(json.dumps([title,description,tags],ensure_ascii=False))
+            if (not vid or fields.get('seo_originals_sha256')==originals_sha) and all(isinstance(fields.get(key),str) and fields[key].strip() for key in ('new_title','new_description','seo_tags','metadata')):
                 bp.update(100,'Đã khôi phục SEO xong từ checkpoint')
-                return {key:fields[key] for key in ('new_title','new_description','seo_tags','metadata')}
+                return {key:fields[key] for key in ('new_title','new_description','seo_tags','metadata','seo_originals_sha256') if key in fields}
             # Uses ORIGINAL source independently; never waits for the translation.
-            values=metadata_for_job(source,title,snapshot.get('description',''),language,lambda p:shared.call(snapshot,p),bp,fast=True,
-                context_limit=24000 if snapshot.get('provider') == 'OpenAI' else 7000)
-            result=dict(zip(('new_title','new_description','seo_tags'),values));result['metadata']='\n\n'.join(values)
+            values=metadata_for_job(source,title,description,language,lambda p:shared.call(snapshot,p),bp,fast=True,
+                context_limit=24000 if snapshot.get('provider') == 'OpenAI' else 7000,original_tags=tags)
+            result=dict(zip(('new_title','new_description','seo_tags'),values));result['metadata']='\n\n'.join(values);result['seo_originals_sha256']=originals_sha
             for key,value in result.items():bp.publish(key,value)
             bp.update(100,'Tiêu đề, mô tả và tag đã lưu');return result
         tasks={'seo':metadata}
@@ -125,7 +141,7 @@ def run_text_job(kind,snapshot,progress):
     finally:
         with shared.lock:
             partial=progress.partial_result()
-            for key in ('tts_text','optimization_work_json','optimization_review_json','seo_work_json','translated','translation_complete','new_title','new_description','seo_tags','metadata'):
+            for key in ('seo_originals_sha256','tts_text','optimization_work_json','optimization_review_json','seo_work_json','translated','translation_complete','new_title','new_description','seo_tags','metadata'):
                 if key in partial:fields[key]=partial[key]
             shared.metrics();fields['processing_metrics']=progress.partial_result().get('processing_metrics',{})
     error='; '.join(errors)

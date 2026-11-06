@@ -10,7 +10,7 @@ type Summary = Omit<Session, "data">;
 type Job = { id: string; session_id: string | null; job_type: string; status: string; progress: number; stage: string; error: string; attempts: number };
 type Metrics = { calls: number; failures: number; retries: number; wait_seconds: number; total_seconds: number;
   current?: { phase: string; started_at: number } | null; phases: Record<string, { calls: number; seconds: number }> };
-type Checkpoint = { job_id: string; session_id: string; input_revision: number; translated: string | null; tts_text?: string | null; new_title?: string | null; new_description?: string | null; seo_tags?: string | null; metrics: Metrics | null };
+type Checkpoint = { job_id: string; session_id: string; input_revision: number; translated: string | null; tts_text?: string | null; source_metadata?: { status?: Record<string, string> } | null; new_title?: string | null; new_description?: string | null; seo_tags?: string | null; metrics: Metrics | null };
 type Provider = { base_url: string; model: string; kind: string; auth?: string };
 type Config = { values: Record<string, string>; configured_keys: string[]; version: number };
 const tabs = ["Nội dung", "Tiêu đề · Mô tả · Tag", "Cấu hình API", "AI33"];
@@ -159,7 +159,7 @@ export function Studio({ email }: { email: string }) {
   }
   function change(key: string, value: unknown) {
     setDraft(old => key === "url" && old.url !== value
-      ? { ...old, url: value, source: "", title: "", description: "", tts_text: "" }
+      ? { ...old, url: value, source: "", title: "", description: "", source_tags: [], source_metadata: {}, tts_text: "" }
       : { ...old, [key]: value, ...(["source", "language", "translated"].includes(key) ? { tts_text: "" } : {}) }); dirtyRef.current = true; setDirty(true);
   }
   async function open(sid: string) {
@@ -215,6 +215,8 @@ export function Studio({ email }: { email: string }) {
       || (selectedJob?.status === "completed" && checkpoint.input_revision + 1 === selected?.revision)) ? checkpoint : null;
   const earlyNarration = selectedJob?.status !== "completed" && currentCheckpoint?.translated ? currentCheckpoint.translated : null;
   const narrationText = earlyNarration ?? str(draft.translated);
+  const sourceMetadata = currentCheckpoint?.source_metadata ?? draft.source_metadata as { status?: Record<string, string> } | undefined;
+  const sourceStatus = (field: string) => sourceMetadata?.status?.[field];
   const spokenText = currentCheckpoint?.tts_text ?? str(draft.tts_text);
   const seoValue = (field: "new_title" | "new_description" | "seo_tags") => currentCheckpoint?.[field] ?? str(draft[field]);
   const running = selectedJob ? active(selectedJob) : false;
@@ -274,17 +276,18 @@ export function Studio({ email }: { email: string }) {
           <YouTubeThumbnail url={str(draft.url)} />
 
           <details key={`${selected.id}:source-inputs`} style={{ gridColumn: "1 / -1" }}>
-            <summary>Kịch bản gốc · Tiêu đề gốc · Mô tả gốc</summary>
+            <summary>Kịch bản gốc · Tiêu đề gốc · Mô tả gốc · Tag gốc</summary>
             <div className="form-grid" style={{ marginTop: 16 }}>
           <label style={{ gridColumn: "1 / -1" }}>Kịch bản gốc<textarea disabled={busy || running} rows={12} maxLength={350000}
             value={str(draft.source)} onChange={e => change("source", e.target.value)}
             placeholder="Dán kịch bản gốc có sẵn để dịch sang ngôn ngữ đích. Không bắt buộc nhập link YouTube." /></label>
           <label>Tiêu đề gốc (nếu có)<input disabled={busy || running} value={str(draft.title)} onChange={e => change("title", e.target.value)} /></label><label>Mô tả gốc (nếu có)<textarea disabled={busy || running} value={str(draft.description)} onChange={e => change("description", e.target.value)} /></label>
             </div>
+            <label style={{ gridColumn: "1 / -1" }}>Tag gốc lấy từ YouTube<textarea readOnly rows={3} value={Array.isArray(draft.source_tags) ? draft.source_tags.join(", ") : ""} /></label>
           </details>
         </div>
 
-        <p className="muted">Dán kịch bản gốc hoặc nhập link YouTube để dịch văn bản và tạo YouTube SEO. Kịch bản bạn nhập được ưu tiên sử dụng.</p>
+        <p className="muted">Dán kịch bản gốc hoặc nhập link YouTube. Khi bấm bắt đầu, app lấy phụ đề cùng tiêu đề, mô tả và tag gốc nếu truy cập được. Kịch bản bạn nhập được ưu tiên sử dụng.</p>
         <div className="toolbar">{generate("Bắt đầu dịch + tiêu đề, mô tả, tag", "full")}<button className="ghost-button" disabled={busy} onClick={() => void action(() => download("json"))}>Xuất phiên JSON</button>
           <button className="ghost-button danger" disabled={busy} onClick={() => void action(async () => { if (!window.confirm("Xóa phiên này và hủy mọi tác vụ đang chạy?")) return; await api(`/sessions/${selected.id}`, "DELETE"); selectedRef.current = null; setSelected(null); dirtyRef.current = false; setDirty(false); await refresh(); })}>Xóa phiên</button></div>
       </section>}
@@ -294,7 +297,7 @@ export function Studio({ email }: { email: string }) {
         <textarea readOnly rows={22} value={spokenText || narrationText} />
         <details><summary>Bản dịch giữ chữ số · đối chiếu và chỉnh sửa</summary><div className="toolbar"><CopyButton key={`${selected.id}:canonical`} text={narrationText} label="bản giữ chữ số" /></div><textarea disabled={busy} readOnly={!!earlyNarration} rows={16} value={narrationText} onChange={e => change("translated", e.target.value)} /></details>
         <div className="toolbar">{generate("Dịch lại và cập nhật SEO", "translation")}</div></section>}
-      {selected && tab === "Tiêu đề · Mô tả · Tag" && <section className="editor-panel">{stale("seo_stale")}<p className="muted">Tiêu đề và mô tả được dịch sát nghĩa khi có bản gốc. Nếu không có mô tả gốc, mô tả sẽ được viết theo bản dịch văn bản. Có thể thêm emoji phù hợp để dễ đọc và hấp dẫn hơn; thẻ tag được tối ưu riêng.</p>{!str(draft.title).trim() && <p className="muted">Chưa có tiêu đề gốc: tiêu đề sẽ được tạo theo nội dung câu chuyện.</p>}{!str(draft.description).trim() && <p className="muted">Không có mô tả gốc: tự tạo mô tả theo bản dịch văn bản, kèm emoji phù hợp.</p>}<div className="toolbar"><h2>Tiêu đề video</h2><CopyButton key={`${selected.id}:title`} text={seoValue("new_title")} label="tiêu đề" /></div><pre>{seoValue("new_title") || "Tiêu đề chưa được tạo"}</pre><p className="muted">{seoValue("new_title").length}/100 ký tự</p><div className="toolbar"><h2>Mô tả video</h2><CopyButton key={`${selected.id}:description`} text={seoValue("new_description")} label="mô tả" /></div><pre>{seoValue("new_description") || "Mô tả chưa được tạo"}</pre><div className="toolbar"><h2>Thẻ tag</h2><CopyButton key={`${selected.id}:tags`} text={seoValue("seo_tags")} label="thẻ tag" /></div><pre>{seoValue("seo_tags")}</pre><div className="toolbar">{(["new_title", "new_description", "seo_tags"] as const).map(field => <button disabled={busy} key={field} className="ghost-button" onClick={() => { const value = window.prompt(field === "new_title" ? "Tiêu đề mới (tối đa 100 ký tự)" : field === "new_description" ? "Mô tả mới" : "Thẻ tag", str(draft[field])); if (value !== null) void action(() => editArtifact(field, value)); }}>Sửa {field === "new_title" ? "tiêu đề" : field === "new_description" ? "mô tả" : "tag"}</button>)}</div>{generate("Dịch lại tiêu đề, mô tả và tạo tag", "seo")}</section>}
+      {selected && tab === "Tiêu đề · Mô tả · Tag" && <section className="editor-panel">{stale("seo_stale")}<p className="muted">Tiêu đề và mô tả được dịch sát nghĩa khi có bản gốc. Nếu không có mô tả gốc, mô tả sẽ được viết theo bản dịch văn bản. Có thể thêm emoji phù hợp để dễ đọc và hấp dẫn hơn; tag gốc được dịch sát nghĩa khi lấy được; nếu thiếu, AI tạo tag theo nội dung.</p>{!str(draft.title).trim() && <p className="muted">Chưa có tiêu đề gốc: tiêu đề sẽ được tạo theo nội dung câu chuyện.</p>}{!str(draft.description).trim() && <p className="muted">Không có mô tả gốc: tự tạo mô tả theo bản dịch văn bản, kèm emoji phù hợp.</p>}{[['title','tiêu đề'],['description','mô tả'],['tags','tag']].map(([field,label]) => sourceStatus(field) === 'unavailable' ? <p key={field} className="status-warning">Không lấy được {label} gốc từ YouTube. Kết quả mục này do AI tạo theo nội dung nguồn.</p> : sourceStatus(field) === 'empty' ? <p key={field} className="muted">Dữ liệu YouTube trả về không có {label} gốc; AI tạo mục này theo nội dung.</p> : ['fetched','provided'].includes(sourceStatus(field) || '') ? <p key={field} className="status-good">Đã có {label} gốc · dịch sang ngôn ngữ đích.</p> : null)}<div className="toolbar"><h2>Tiêu đề video</h2><CopyButton key={`${selected.id}:title`} text={seoValue("new_title")} label="tiêu đề" /></div><pre>{seoValue("new_title") || "Tiêu đề chưa được tạo"}</pre><p className="muted">{seoValue("new_title").length}/100 ký tự</p><div className="toolbar"><h2>Mô tả video</h2><CopyButton key={`${selected.id}:description`} text={seoValue("new_description")} label="mô tả" /></div><pre>{seoValue("new_description") || "Mô tả chưa được tạo"}</pre><div className="toolbar"><h2>Thẻ tag</h2><CopyButton key={`${selected.id}:tags`} text={seoValue("seo_tags")} label="thẻ tag" /></div><pre>{seoValue("seo_tags")}</pre><div className="toolbar">{(["new_title", "new_description", "seo_tags"] as const).map(field => <button disabled={busy} key={field} className="ghost-button" onClick={() => { const value = window.prompt(field === "new_title" ? "Tiêu đề mới (tối đa 100 ký tự)" : field === "new_description" ? "Mô tả mới" : "Thẻ tag", str(draft[field])); if (value !== null) void action(() => editArtifact(field, value)); }}>Sửa {field === "new_title" ? "tiêu đề" : field === "new_description" ? "mô tả" : "tag"}</button>)}</div>{generate("Dịch lại tiêu đề, mô tả và tạo tag", "seo")}</section>}
       {tab === "Cấu hình API" && <section className="editor-panel"><h2>Nhà cung cấp AI</h2><p className="muted">API key đã lưu được giữ trên máy chủ. Để trống ô key sẽ giữ key hiện tại; dùng “Xóa key” khi cần.</p>
         <label>Nền tảng<select disabled={busy} value={provider} onChange={e => { setPref("api_provider", e.target.value); setModels([]); }}>{Object.keys(providers).map(p => <option key={p}>{p}</option>)}</select></label>
         <label>API key {config.configured_keys.includes(`api_key_${provider}`) && <small className="status-good">Đã lưu</small>}<input disabled={busy} type="password" autoComplete="new-password" value={changes[`api_key_${provider}`] ?? ""} onChange={e => { const value = e.target.value; setChanges(old => { const next = { ...old }; if (value) next[`api_key_${provider}`] = value; else delete next[`api_key_${provider}`]; return next; }); }} placeholder="Nhập key mới nếu muốn thay đổi" /></label>

@@ -95,6 +95,8 @@ def save_session(owner, sid, body):
             raise HTTPException(409, 'Phiên đã có kết quả mới. Hãy tải lại trước khi lưu.')
         old = row['data']
         changed_source = any(values.get(k, '') != old.get(k, '') for k in ('source', 'url')) or values['language'] != old.get('language', 'Tiếng Việt')
+        if values.get('url','') != old.get('url',''):
+            values.update(source_tags=[],source_metadata={})
         changed_translation = changed_source or values['translated'] != old.get('translated', '')
         if changed_translation:
             values['tts_text'] = ''
