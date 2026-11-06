@@ -31,19 +31,28 @@ class NumberReadingTests(unittest.TestCase):
                      [dict(number='99',occurrence=1,words='ninety-nine')],
                      [dict(number='23',occurrence=1,words='twenty-three')]*2]:
             with self.assertRaises(ValueError):spoken_translation(self.response(text,rows),text)
+    def test_tolerant_mode_keeps_valid_numbers_and_ignores_invalid_spans(self):
+        text='23 minutes, code AX-200; 15%.'
+        rows=[dict(number='23',occurrence=1,words='twenty-three'),
+              dict(number='200',occurrence=1,words='two hundred'),
+              dict(number='15%',occurrence=1,words='15 percent'),None]
+        self.assertEqual(spoken_translation(self.response(text,rows),text,strict=False),
+                         'twenty-three minutes, code AX-200; 15%.')
+        duplicate=[dict(number='23',occurrence=1,words='twenty-three')]*2
+        self.assertEqual(spoken_translation(self.response(text,duplicate),text,strict=False),text)
+
     def test_turning_option_on_invalidates_old_parts_without_speech(self):
         p=Progress()
         translate_direct('Source','English',lambda _:'23 minutes\n'+END_MARKER,p)
         calls=[]
         translate_direct('Source','English',lambda prompt:(calls.append(prompt) or self.response('23 minutes',[dict(number='23',occurrence=1,words='twenty-three')])),p,numbers_as_words=True)
         self.assertEqual(len(calls),1);self.assertEqual(p.fields['tts_text'],'twenty-three minutes')
-    def test_bad_mapping_uses_only_existing_single_format_repair(self):
+    def test_bad_mapping_keeps_complete_translation_without_another_ai_call(self):
         p=Progress();calls=[]
         def call(prompt):
             calls.append(prompt)
             return self.response('23 minutes',None if len(calls)==1 else [])
         self.assertEqual(translate_direct('Source','English',call,p,numbers_as_words=True),'23 minutes')
-        self.assertEqual(p.fields['tts_text'],'23 minutes');self.assertEqual(len(calls),2)
-        self.assertTrue(calls[1].startswith('DIRECT_TRANSLATION_FORMAT.'))
+        self.assertEqual(p.fields['tts_text'],'23 minutes');self.assertEqual(len(calls),1)
 
 if __name__=='__main__':unittest.main()

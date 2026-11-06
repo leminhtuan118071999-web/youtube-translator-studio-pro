@@ -42,7 +42,7 @@ NUMBER_RULES = (
 )
 NUMBER_TOKEN = re.compile(r'(?<![\w./:+-])[+-]?\d+(?:[.,:/-]\d+)*(?:[%‰])?(?![\w/:+-]|[.,]\d)')
 
-def spoken_translation(raw, text):
+def spoken_translation(raw, text, *, strict=True):
     """Build TTS locally: only validated numeric spans can change, never surrounding prose."""
     try:
         value=raw.strip()
@@ -52,6 +52,21 @@ def spoken_translation(raw, text):
     except (ValueError,TypeError,AttributeError) as exc:
         raise ValueError('Thiếu dữ liệu chuyển số thành chữ trong phản hồi dịch.') from exc
     readings=data.get('number_readings') if isinstance(data,dict) else None
+    if not strict:
+        # Numeric pronunciation is optional enrichment, never a reason to discard
+        # an already complete translation. Validate each span independently.
+        if not isinstance(readings,list) or len(readings)>5000:return text
+        valid={};blocked=set()
+        for item in readings:
+            try:
+                candidate=spoken_translation(json.dumps({'number_readings':[item]},ensure_ascii=False),text)
+            except (ValueError,TypeError):continue
+            key=(item['number'],item['occurrence'])
+            if key in valid:
+                blocked.add(key)
+            else:valid[key]=item
+        accepted=[item for key,item in valid.items() if key not in blocked]
+        return spoken_translation(json.dumps({'number_readings':accepted},ensure_ascii=False),text)
     if not isinstance(readings,list) or len(readings)>5000:
         raise ValueError('Danh sách cách đọc số không hợp lệ.')
     spans={};counts={}
@@ -140,7 +155,7 @@ def translate_direct(source, language, call, progress, *, numbers_as_words=False
         progress.publish('optimization_work_json',json.dumps(dict(identity,parts=outputs,seo_contexts=briefs,spoken_parts=spoken,pending_index=index,pending_raw=raw),ensure_ascii=False))
         try:
             text=parse_translation(raw)
-            speech=spoken_translation(raw,text) if numbers_as_words else text
+            speech=spoken_translation(raw,text,strict=False) if numbers_as_words else text
         except ValueError:
             progress.check_cancelled()
             progress.update(10+int(83*index/len(windows)),f'Chuẩn hóa phản hồi bản dịch phần {index+1}/{len(windows)} (tối đa 1 lần)')
@@ -153,7 +168,7 @@ def translate_direct(source, language, call, progress, *, numbers_as_words=False
                 json.dumps(dict(core=part['core'],before=part['before'],after=part['after'],candidate=raw),ensure_ascii=False))
             try:
                 text=parse_translation(fixed)
-                speech=spoken_translation(fixed,text) if numbers_as_words else text
+                speech=spoken_translation(fixed,text,strict=False) if numbers_as_words else text
             except ValueError as exc:raise ValueError(f'Phần dịch {index+1}/{len(windows)} chưa đúng định dạng sau 1 lần sửa: '+str(exc)+'. Các phần đã xong được giữ; kiểm tra model/API hoặc tiếp tục.') from exc
         outputs.append(text);briefs.append('');spoken.append(speech)
         progress.publish('optimization_work_json',json.dumps(dict(identity,parts=outputs,seo_contexts=briefs,spoken_parts=spoken),ensure_ascii=False))
