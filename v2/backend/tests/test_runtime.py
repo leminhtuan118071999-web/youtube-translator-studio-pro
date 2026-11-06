@@ -334,16 +334,19 @@ def test_selected_checkpoint_is_reviewed_owner_scoped_and_revision_fenced(db):
     configured(owner);s=session(owner);submit(owner,s)
     job=worker.claim('test-worker');p=worker.Progress(job,{})
     p.publish('translated','Reviewed narration')
+    p.publish('tts_text','Reviewed AI reading')
     p.publish('processing_metrics',dict(calls=2,phases={}))
     with connect() as c:
         preview=_selected_checkpoint(c,owner,s['id'],s['revision'])
         assert preview['translated'] is None
+        assert preview['tts_text'] is None
         assert preview['metrics']['calls']==2
     p.publish('translation_complete',True)
     with connect() as c:
         preview=_selected_checkpoint(c,owner,s['id'],s['revision'])
         assert preview['translated']=='Reviewed narration'
-        assert set(preview)=={'job_id','session_id','input_revision','translated','metrics'}
+        assert preview['tts_text']=='Reviewed AI reading'
+        assert set(preview)=={'job_id','session_id','input_revision','translated','tts_text','new_title','new_description','seo_tags','metrics'}
         assert _selected_checkpoint(c,other,s['id'],s['revision']) is None
         assert _selected_checkpoint(c,owner,s['id'],s['revision']+1) is None
     assert worker.finish(job,p,dict(ok=True,fields={'translated':'Reviewed narration'}))
