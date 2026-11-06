@@ -127,3 +127,5 @@ Khi bật tự tải Pixabay, V3 mở rộng từ khóa đã nhập hoặc chủ
 Lịch sử ID dùng chung loại video đã dùng giữa các dự án; danh sách đã chọn và các tệp tải xong được tái sử dụng khi chạy tiếp dự án. Kết quả tìm kiếm được giữ trong cache 24 giờ. Tiến trình hiển thị từ khóa đang tìm và số video đã chọn. Dự án đã có bộ video được giữ nguyên; cơ chế đa từ khóa áp dụng khi chọn bộ mới.
 
 Video Pixabay mới chỉ được tải khi tỷ lệ là 16:9 (chấp nhận sai số làm tròn 1 pixel). Lọc theo kích thước từng bản video, làm mới cache tìm kiếm cũ và kiểm tra lại kích thước tệp tải về trước khi lưu. Không cắt video dọc/vuông thành 16:9 để thay thế. Tệp cũ không bị xóa; bộ đã chọn cũ sai tỷ lệ cần tạo dự án mới.
+
+Tự phối chủ đề liên quan: các bối cảnh quen thuộc như rừng được mở rộng thành sông và núi, thành phố thành đường phố/công viên/đường chân trời; giữ điều kiện ngày đêm, mùa và ánh sáng. Không cần gọi AI thêm. Chủ đề hoặc điều kiện không nhận diện rõ chỉ dùng từ gần nghĩa. Tỷ lệ 16:9, giới hạn 15 video, tối đa 10 lượt tìm và lịch sử chống trùng vẫn giữ nguyên.

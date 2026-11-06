@@ -51,7 +51,7 @@ class SelectionTests(unittest.TestCase):
     def test_plentiful_results_are_mixed_from_three_queries_then_stop(self):
         with tempfile.TemporaryDirectory() as tmp, patch.dict(os.environ,LMT_V3_HOME=tmp):
             folder=projects.project_dir(projects.create('Mixed')['id'])
-            queries=pixabay.related_queries('forest sunlight')[:3]
+            queries=pixabay.diversity_queries('forest sunlight')[:3]
             def search(term,page=1):
                 start=queries.index(term)*100
                 return [dict(id=start+i,width=1920,height=1080,origin=term) for i in range(50)]
@@ -128,6 +128,15 @@ class SelectionTests(unittest.TestCase):
                 with self.assertRaisesRegex(ValueError,'16:9'):
                     pixabay.download(folder,[dict(id=1,width=1080,height=1920)],Path(tmp)/'cancel',lambda *a:None)
                 opener.return_value.open.assert_not_called()
+
+    def test_diversity_expands_related_scenery_without_losing_modifiers(self):
+        self.assertEqual(pixabay.diversity_queries('forest sunlight')[:3],
+                         ['forest sunlight','river sunlight','mountain landscape sunlight'])
+        for query in ['city night','forest winter','mountain landscape sunset']:
+            modifier=query.split()[-1]
+            self.assertTrue(all(modifier in q for q in pixabay.diversity_queries(query)))
+        self.assertEqual(pixabay.diversity_queries('special unknown subject'),['special unknown subject'])
+        self.assertNotIn('river fire',pixabay.diversity_queries('forest fire'))
 
 
 if __name__=='__main__':unittest.main()

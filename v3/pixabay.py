@@ -106,6 +106,53 @@ def related_queries(query):
     return list(dict.fromkeys(q for q in results if 1 <= len(q) <= 100))[:5]
 
 
+def diversity_queries(query):
+    """Broaden familiar settings into related scenery, preserving explicit modifiers."""
+    query=query.strip()
+    groups=[
+        (('forest','woodland','woods','rừng'), ('river','mountain landscape')),
+        (('river nature','river','stream','sông','suối'), ('lake landscape','forest')),
+        (('mountain landscape','mountains','mountain','núi'), ('lake landscape','forest')),
+        (('lake landscape','lake','hồ nước'), ('river','mountain landscape')),
+        (('waterfall nature','waterfall','thác'), ('river','forest')),
+        (('ocean beach','ocean','beach','sea','biển'), ('rocky coast','seaside cliffs')),
+        (('countryside','đồng quê'), ('farm fields','rural village')),
+        (('flower garden','garden','vườn hoa'), ('blooming flowers','garden pathway')),
+        (('desert landscape','desert','sa mạc'), ('sand dunes','desert rocks')),
+        (('snow winter','snow','winter','tuyết'), ('snowy forest winter','snowy mountain winter')),
+        (('city street','city','urban','thành phố'), ('city skyline','city park')),
+        (('luxury interior','living room','phòng khách'), ('elegant home interior','home decor')),
+        (('luxury mansion','mansion','villa','biệt thự'), ('villa garden','luxury house exterior')),
+        (('office interior','office','văn phòng'), ('meeting room','office workspace')),
+        (('restaurant interior','restaurant','nhà hàng'), ('dining table','restaurant kitchen')),
+        (('school classroom','school','trường học'), ('school corridor','school campus')),
+        (('hospital','bệnh viện'), ('hospital corridor','hospital exterior')),
+        (('castle','lâu đài'), ('castle courtyard','castle exterior')),
+        (('church','nhà thờ'), ('church exterior','church interior')),
+    ]
+    modifiers={'sunlight','sunrise','sunset','night','day','daytime','evening','morning',
+               'winter','summer','autumn','spring','snow','snowy','rain','rainy',
+               'fog','foggy','mist','misty','nature','landscape','scenery','peaceful',
+               'quiet','green','golden','aerial','drone','4k','hd','luxury'}
+    result=[query]; protected=set()
+    for anchors,companions in groups:
+        matched=False
+        for anchor in anchors:
+            pattern=r'(?<!\w)'+re.escape(anchor)+r'(?!\w)'
+            match=re.search(pattern,query,re.IGNORECASE)
+            if not match:continue
+            # Unknown qualifiers (e.g. forest fire) must not create unrelated scenery.
+            remaining=(query[:match.start()]+' '+query[match.end():]).casefold().split()
+            if not set(remaining)<=modifiers:continue
+            protected=set(remaining)
+            result.extend(re.sub(pattern,term,query,flags=re.IGNORECASE) for term in companions)
+            matched=True;break
+        if matched:break
+    result.extend(related_queries(query))
+    return list(dict.fromkeys(q for q in result if 1<=len(q)<=100
+                              and protected<=set(q.casefold().split())))[:7]
+
+
 def select_for_project(folder, query, preferred=None, cancel=None, update=lambda _:None):
     """Mix related queries within ten requests; reserve fresh IDs atomically."""
     folder = Path(folder)
@@ -135,7 +182,7 @@ def select_for_project(folder, query, preferred=None, cancel=None, update=lambda
         for hit in preferred or []:
             if len(chosen) >= LIMIT: break
             take(hit)
-        queries = related_queries(query)
+        queries = diversity_queries(query)
         pools = [[] for _ in queries]
         pages = [1 for _ in queries]
         exhausted = set()
@@ -173,7 +220,7 @@ def select_for_project(folder, query, preferred=None, cancel=None, update=lambda
             rng.shuffle(fresh); pools[i].extend(fresh)
             if requests >= initial: fill()
         if len(chosen) < LIMIT:
-            raise ValueError(f'Chỉ còn {len(chosen)} video Pixabay mới theo từ khóa này; cần 15 video 16:9 không trùng phiên trước. Đã thử các từ khóa gần nghĩa phù hợp; hãy nhập chủ đề rộng hơn rồi dựng lại.')
+            raise ValueError(f'Chỉ còn {len(chosen)} video Pixabay mới theo từ khóa này; cần 15 video 16:9 không trùng phiên trước. Đã thử các chủ đề liên quan phù hợp; hãy nhập chủ đề rộng hơn rồi dựng lại.')
         if cancel is not None and Path(cancel).exists(): raise Cancelled()
         rng.shuffle(chosen)
         for hit in chosen: history[str(hit['id'])] = folder.name
