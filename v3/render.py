@@ -182,7 +182,7 @@ def run_ffmpeg(args, folder, cancel, progress=None, duration=1, *, watch_output=
                         last_write = write
                         last_activity = now
                     if now - last_activity >= EXPORT_STALL_SECONDS and process.poll() is None:
-                        raise RuntimeError('FFmpeg đã dừng tiến độ và không ghi thêm dữ liệu trong 3 phút. '
+                        raise RuntimeError(f'FFmpeg đã dừng tiến độ và không ghi thêm dữ liệu vào {watch_output.name} trong 3 phút. '
                                            'Dự án đã lưu. Bạn có thể dựng lại.')
             if process.returncode:
                 tail=(folder/'ffmpeg.log').read_text(errors='replace')[-2500:]
@@ -257,14 +257,21 @@ def render(project, assets_folder, output_folder, update):
     video_encode=['-c:v','libx264','-preset','veryfast','-crf','20','-threads','2','-pix_fmt','yuv420p']
     audio_encode=['-c:a','aac','-ar','48000','-ac','2']
     encode=video_encode+audio_encode
+    separate_audio = story and voice_name and cfg['original_volume'] == 0
     for i,(scene,seconds) in enumerate(zip(project['scenes'],durations)):
         update(5+65*i/len(durations),f'Đang dựng cảnh {i+1}/{len(durations)}')
         path=asset(assets_folder,scene['file']); media=probe(path)
         image=path.suffix.lower() in IMAGES
         args=(['-loop','1','-framerate',str(FPS)] if image else ['-stream_loop','-1'])+['-i',str(path)]
-        if image or not media['audio']:
-            args+=['-f','lavfi','-i','anullsrc=r=48000:cl=stereo'];audio='1:a:0'
-        else: audio='0:a:0'
+        if separate_audio:
+            scene_audio = ['-an']
+        else:
+            audio = '0:a:0'
+            if image or not media['audio']:
+                args += ['-f','lavfi','-i','anullsrc=r=48000:cl=stereo']
+                audio = '1:a:0'
+            scene_audio = ['-map',audio,'-af',
+                           f'aresample=48000,apad,atrim=duration={seconds},asetpts=PTS-STARTPTS',*audio_encode]
         vf=f'fps={FPS},scale={width}:{height}:force_original_aspect_ratio='+('increase' if cfg['fit']=='cover' else 'decrease')
         vf+=f',crop={width}:{height}' if cfg['fit']=='cover' else f',pad={width}:{height}:(ow-iw)/2:(oh-ih)/2:color=black'
         tail=',setsar=1,setpts=PTS-STARTPTS'
@@ -275,7 +282,8 @@ def render(project, assets_folder, output_folder, update):
                              '-map', '[framed]']
         else:
             video_filters = ['-map','0:v:0','-vf',vf+tail]
-        run_ffmpeg(args+video_filters+['-map',audio,'-af',f'aresample=48000,apad,atrim=duration={seconds},asetpts=PTS-STARTPTS','-t',str(seconds),*encode,f'scene-{i:04}.mp4'],output_folder,cancel)
+        run_ffmpeg(args+video_filters+scene_audio+['-t',str(seconds),*video_encode,f'scene-{i:04}.mp4'],
+                   output_folder,cancel)
     concat=''.join(f"file 'scene-{i:04}.mp4'\nduration {d:.9f}\n" for i,d in enumerate(durations))
     if story:
         # Repeat the normalized scene sequence without seeking an infinite concat input.
@@ -283,8 +291,13 @@ def render(project, assets_folder, output_folder, update):
         concat *= (math.ceil(total * FPS) + cycle_frames - 1) // cycle_frames
     (output_folder/'scenes.txt').write_text(concat)
     args = ['-f','concat','-safe','1','-i','scenes.txt']
-    # Keep the narration and the concat demuxer out of the same FFmpeg scheduler.
-    separate_audio = story and voice_name and cfg['original_volume'] == 0
+    if separate_audio:
+        # Final filters read one regular video stream, without concat demuxing or unused scene audio.
+        update(70, 'Đang nối các cảnh đã dựng')
+        background = output_folder/'background.mp4'
+        run_ffmpeg(args+['-map','0:v:0','-c:v','copy',background.name],
+                   output_folder,cancel,watch_output=background)
+        args = ['-i',background.name]
     audio_args = [] if separate_audio else args
     filters = []
     mix = []
@@ -318,9 +331,9 @@ def render(project, assets_folder, output_folder, update):
         overlay=project.get('story',{})
         size=float(overlay.get('width',75));x=float(overlay.get('x',50));y=float(overlay.get('y',100))
         if not 10<=size<=100 or not 0<=x<=100 or not 0<=y<=100:raise ValueError('Vị trí hoặc kích thước nhân vật không hợp lệ.')
-        args+=['-loop','1','-framerate',str(FPS),'-i',str(asset(assets_folder,project['overlay_image']))]
+        args+=['-i',str(asset(assets_folder,project['overlay_image']))]
         filters.append(f'[{index}:v]scale={round(width*size/100)}:{round(height*.95)}:force_original_aspect_ratio=decrease,format=rgba[character]')
-        filters.append(f'[0:v][character]overlay=x=(W-w)*{x/100}:y=(H-h)*{y/100}:shortest=1[composite]')
+        filters.append(f'[0:v][character]overlay=x=(W-w)*{x/100}:y=(H-h)*{y/100}:eof_action=repeat[composite]')
         source_video='composite'
         index += 1
     subtitles=''
@@ -383,6 +396,7 @@ def render(project, assets_folder, output_folder, update):
         run_ffmpeg(['-i',picture.name,'-i',soundtrack.name,'-map','0:v:0','-map','1:a:0',
                     '-c','copy','-movflags','+faststart',pending.name],
                    output_folder,cancel,watch_output=pending)
+        background.unlink()
         picture.unlink()
         soundtrack.unlink()
     else:
