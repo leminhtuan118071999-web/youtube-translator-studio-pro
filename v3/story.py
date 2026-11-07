@@ -186,45 +186,72 @@ def prepare(run):
     ratio = cfg.get('pixabay_aspect', '16:9')
     reservation = selection_path(folder, ratio)
     selected = [hit for hit in cfg.get('pixabay_selected', []) if matches_ratio(hit, ratio)]
+    manifest = folder/'pixabay-downloads.json'
+    records = read(manifest) if manifest.exists() else cfg.get('downloaded', {})
+    pixabay_files = {item['file'] for source in (records, cfg.get('downloaded', {}))
+                     for item in source.values()}
+    valid_records = ratio_records(records, ratio)
+    excluded = set()
+    for key, item in list(valid_records.items()):
+        if cancel.exists():
+            raise Cancelled()
+        try:
+            media = probe(asset(folder, item['file']))
+        except ValueError:
+            media = {}
+        if not matches_ratio(media, ratio):
+            excluded.add(key)
+            del valid_records[key]
+    if excluded:
+        records = {key: item for key, item in records.items() if key not in excluded}
+        atomic(manifest, records)
+    valid_files = {item['file'] for item in valid_records.values()}
+    cfg['backgrounds'] = [name for name in cfg.get('backgrounds', [])
+                          if name not in pixabay_files or name in valid_files]
+    selected = [hit for hit in selected if str(hit['id']) not in excluded]
     auto_batch = False
-    if not cfg.get('backgrounds') and cfg.get('auto_pixabay',True):
-        update(10,f'Bước 2/6 · Đang chọn {LIMIT} video Pixabay mới, tránh trùng phiên trước')
-        records=read(folder/'pixabay-downloads.json') if (folder/'pixabay-downloads.json').exists() else {}
-        records = ratio_records(records, ratio)
-        if records and not reservation.exists() and not selected:
+    if not cfg['backgrounds'] and cfg.get('auto_pixabay', True):
+        update(10, f'Bước 2/6 · Đang chọn {LIMIT} video Pixabay mới, tránh trùng phiên trước')
+        if valid_records and not reservation.exists() and not selected:
             # Preserve older projects that already downloaded their backgrounds.
-            cfg['backgrounds']=[r['file'] for r in records.values()]
-            selected=[]
+            cfg['backgrounds'] = [item['file'] for item in valid_records.values()]
         else:
-            query=cfg.get('query','forest sunlight')
+            query = cfg.get('query', 'forest sunlight')
             if not selected and not reservation.exists():
                 from .thumbnail_theme import resolve_query
-                query=resolve_query(folder,cfg,cancel,lambda stage:update(10,stage))
-            effective['story']['resolved_query']=query
-            selected=select_for_project(folder,query,selected,cancel,update=lambda stage:update(10,stage),ratio=ratio,allow_partial=True)
+                query = resolve_query(folder, cfg, cancel, lambda stage: update(10, stage))
+            effective['story']['resolved_query'] = query
+            selected = select_for_project(folder, query, selected, cancel, update=lambda stage: update(10, stage),
+                                          ratio=ratio, allow_partial=True, excluded=excluded)
             auto_batch = True
-    skipped = 0
+    downloaded = []
     for attempt in range(4):
         rejected = []
-        downloaded = download(folder, selected, cancel, lambda p,s:update(10+round(10*p),s),
-                              ratio=ratio, on_wrong_ratio=rejected.append)
+        downloaded.extend(download(folder, selected, cancel, lambda p,s:update(10+round(10*p),s),
+                                   ratio=ratio, on_wrong_ratio=rejected.append))
         if not rejected:
             break
-        skipped += len(rejected)
+        excluded.update(str(error.video_id) for error in rejected)
         if not auto_batch:
             break
         for error in rejected:
             drop_reserved_video(folder, ratio, error.video_id)
         if attempt == 3:
             break
-        update(10, f'Đã bỏ {skipped} clip sai tỷ lệ {ratio} · đang tìm clip thay thế')
-        selected = select_for_project(folder, query, cancel=cancel, update=lambda stage:update(10,stage),
-                                      ratio=ratio, allow_partial=True)
-    if skipped and not downloaded and not cfg.get('backgrounds'):
-        raise ValueError(f'Không có clip Pixabay tải được đúng tỷ lệ {ratio}. Hãy đổi từ khóa hoặc chọn clip khác.')
-    effective['story']['downloaded']=read(folder/'pixabay-downloads.json') if (folder/'pixabay-downloads.json').exists() else {}
-    current=read(folder/'project.json');current['story']['downloaded']=effective['story']['downloaded'];save(current)
-    backgrounds=list(dict.fromkeys(cfg.get('backgrounds',[])+downloaded))
+        update(10, f'Đã bỏ {len(excluded)} clip sai tỷ lệ {ratio} · đang tìm clip thay thế')
+        selected = select_for_project(folder, query, cancel=cancel, update=lambda stage: update(10, stage),
+                                      ratio=ratio, allow_partial=True, excluded=excluded)
+    effective['story']['downloaded'] = read(manifest) if manifest.exists() else records
+    current = read(folder/'project.json')
+    current['story']['downloaded'] = effective['story']['downloaded']
+    current['story']['backgrounds'] = [name for name in current['story'].get('backgrounds', [])
+                                        if name not in pixabay_files or name in valid_files]
+    current['story']['pixabay_selected'] = [hit for hit in current['story'].get('pixabay_selected', [])
+                                            if str(hit['id']) not in excluded]
+    save(current)
+    backgrounds = list(dict.fromkeys(cfg['backgrounds'] + downloaded))
+    if not backgrounds and (excluded or auto_batch):
+        raise ValueError(f'Không có clip Pixabay dùng được đúng tỷ lệ {ratio}. Hãy đổi từ khóa hoặc thêm video nền.')
     if not backgrounds:raise ValueError('Hãy tải video nền lên hoặc chọn video Pixabay.')
     if len(backgrounds)>300:raise ValueError('Tối đa 300 video nền.')
     scenes=[]

@@ -182,6 +182,30 @@ class StoryTests(unittest.TestCase):
         self.assertEqual(records['201']['aspect'],'9:16')
         self.assertNotIn('202',records)
 
+    def test_preparation_skips_wrong_ratio_saved_pixabay_background(self):
+        wrong = 'wrong-portrait.mp4'
+        valid = 'valid-portrait.mp4'
+        for name, height in ((wrong, 958), (valid, 960)):
+            command('-f', 'lavfi', '-i', f'color=blue:s=540x{height}:r=30', '-t', '0.2',
+                    '-c:v', 'libx264', '-threads', '1', str(self.assets/name))
+        records = {'297111': dict(file=wrong, aspect='9:16'), '201': dict(file=valid, aspect='9:16')}
+        projects.atomic(self.folder/'pixabay-downloads.json', records)
+        self.p['story'].update(backgrounds=[wrong, valid], downloaded=records, pixabay_aspect='9:16')
+        projects.save(self.p)
+        run = self.folder/'runs'/'saved-backgrounds'
+        run.mkdir(parents=True)
+        projects.atomic(run/'snapshot.json', self.p)
+
+        with patch('v3.pixabay.search') as search:
+            prepare(run)
+            prepare(run)  # A retried snapshot still contains the rejected file.
+        search.assert_not_called()
+        result = projects.read(run/'render-project.json')
+        self.assertEqual([scene['file'] for scene in result['scenes']], [valid])
+        self.assertEqual(result['settings']['aspect'], '16:9')
+        self.assertEqual(projects.read(self.folder/'project.json')['story']['backgrounds'], [valid])
+        self.assertEqual(projects.read(self.folder/'pixabay-downloads.json'), {'201': records['201']})
+
     def test_automatic_pixabay_search_on_start_then_reuses_downloads(self):
         self.p['story'].update(backgrounds=[],auto_pixabay=True,query='forest')
         run=self.folder/'runs'/'automatic';run.mkdir(parents=True);projects.atomic(run/'snapshot.json',self.p)

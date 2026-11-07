@@ -193,15 +193,14 @@ def diversity_queries(query):
                               and protected<=set(q.casefold().split())))[:7]
 
 
-def select_for_project(folder, query, preferred=None, cancel=None, update=lambda _:None, *, ratio='16:9', allow_partial=False):
+def select_for_project(folder, query, preferred=None, cancel=None, update=lambda _:None, *, ratio='16:9', allow_partial=False, excluded=()):
     """Mix related queries within ten requests; reserve fresh IDs atomically."""
     folder = Path(folder)
     reservation = selection_path(folder, ratio)
     with (home()/'pixabay-history.lock').open('a') as lock:
         fcntl.flock(lock, fcntl.LOCK_EX)
         previous = read(reservation)['hits'] if reservation.exists() else []
-        if not all(matches_ratio(h, ratio) for h in previous):
-            raise ValueError(f'Bộ video đã chọn không đúng tỷ lệ {ratio}. Hãy tìm lại trong dự án mới.')
+        previous = [h for h in previous if matches_ratio(h, ratio) and str(h['id']) not in excluded]
         if len(previous) == LIMIT:
             update(f'Dùng lại {LIMIT} video Pixabay đã chọn cho dự án này')
             return previous
@@ -210,7 +209,7 @@ def select_for_project(folder, query, preferred=None, cancel=None, update=lambda
         for manifest in home().glob('*/pixabay-downloads.json'):
             for key in read(manifest):
                 history.setdefault(key, manifest.parent.name)
-        used = set(history)
+        used = set(history).union(excluded)
         chosen = list(previous)
         chosen_ids = {str(int(hit['id'])) for hit in previous}
         def take(hit):
@@ -259,7 +258,7 @@ def select_for_project(folder, query, preferred=None, cancel=None, update=lambda
             fresh = [h for h in hits if str(int(h['id'])) not in used]
             rng.shuffle(fresh); pools[i].extend(fresh)
             if requests >= initial: fill()
-        if len(chosen) < LIMIT and not (allow_partial and chosen):
+        if len(chosen) < LIMIT and not allow_partial:
             raise ValueError(f'Chỉ còn {len(chosen)} video Pixabay mới theo từ khóa này; cần {LIMIT} video {ratio} không trùng phiên trước. Đã thử các chủ đề liên quan phù hợp; hãy nhập chủ đề rộng hơn rồi dựng lại.')
         if cancel is not None and Path(cancel).exists(): raise Cancelled()
         rng.shuffle(chosen)
@@ -297,9 +296,8 @@ def download(folder, selected, cancel, update, *, ratio='16:9', on_wrong_ratio=N
     result=[]
     def reject(key, media):
         error = WrongRatio(key, ratio, media)
-        if on_wrong_ratio is None:
-            raise error
-        on_wrong_ratio(error)
+        if on_wrong_ratio is not None:
+            on_wrong_ratio(error)
 
     for i,hit in enumerate(selected):
         if cancel.exists():raise Cancelled()

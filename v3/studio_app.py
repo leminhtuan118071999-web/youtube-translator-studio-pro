@@ -109,19 +109,18 @@ def save_completed(folder):
             else:subprocess.run(['open',location],check=True)
 
 @st.fragment(run_every=2)
-def progress_panel(folder):
+def progress_panel(folder, controls_locked):
     status=current(folder)
     if not status:return
+    if (controls_locked and status['state'] not in ('queued','running')
+            and not st.session_state.get('delete_all_pending', False) and not busy(folder)):
+        st.rerun()
     st.progress(status['progress']/100,text=status['stage'])
     if status.get('error'):st.error(status['error'])
     if status['state'] in ('queued','running'):
         if st.button('Hủy dựng video',key='cancel_'+status['run_id']):
             (status['folder']/'cancel').touch();st.info('Đã gửi yêu cầu hủy.')
     elif status['state']=='completed':
-        completion_key='completed_seen_'+status['run_id']
-        if not st.session_state.get(completion_key):
-            st.session_state[completion_key]=True
-            st.rerun()
         st.success('Video đã dựng xong. Dự án và file xuất được giữ trên máy.')
         output=status['folder']/'output.mp4'
         if output.exists():
@@ -150,7 +149,7 @@ def speech_progress(folder):
         st.success('Đã lưu phụ đề cùng ngôn ngữ với giọng đọc. Kiểm tra tên riêng và những đoạn đọc không rõ trước khi xuất.')
     elif st.button('Làm mới sau khi nhận diện',key='refresh_asr_'+status['run_id']):st.rerun()
 
-progress_panel(folder)
+progress_panel(folder, locked)
 speech_progress(folder)
 if locked:st.info('Dự án đang xử lý · cấu hình đã khóa.')
 story_tab,=st.tabs(['05 · Dựng kiểu video mẫu'])
