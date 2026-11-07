@@ -37,6 +37,23 @@ class SelectionTests(unittest.TestCase):
                 selected=pixabay.select_for_project(folder,'forest',ratio='9:16',allow_partial=True)
             self.assertEqual({h['id'] for h in selected},{0,1,2})
 
+    def test_empty_automatic_batch_tries_other_keywords_and_keeps_ratio(self):
+        with tempfile.TemporaryDirectory() as tmp, patch.dict(os.environ, LMT_V3_HOME=tmp):
+            folder = projects.project_dir(projects.create('Fallback')['id'])
+            projects.atomic(projects.home()/'pixabay-history.json', {'1': 'other-project'})
+            def search(term, page=1, *, ratio='16:9'):
+                self.assertEqual(ratio, '9:16')
+                if term != 'cloudy sky':
+                    return []
+                return [dict(id=1, width=1080, height=1920),
+                        dict(id=2, width=1920, height=1080),
+                        dict(id=3, width=1080, height=1920),
+                        dict(id=4, width=1080, height=1920)]
+            with patch.object(pixabay, 'search', side_effect=search):
+                selected = pixabay.select_for_project(
+                    folder, 'forest sunlight', ratio='9:16', allow_partial=True, excluded={'4'})
+            self.assertEqual([hit['id'] for hit in selected], [3])
+
     def test_related_query_finds_new_videos_without_unrelated_fallback(self):
         with tempfile.TemporaryDirectory() as tmp, patch.dict(os.environ,LMT_V3_HOME=tmp):
             folder=projects.project_dir(projects.create('New')['id'])

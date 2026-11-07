@@ -194,7 +194,7 @@ def diversity_queries(query):
 
 
 def select_for_project(folder, query, preferred=None, cancel=None, update=lambda _:None, *, ratio='16:9', allow_partial=False, excluded=()):
-    """Mix related queries within ten requests; reserve fresh IDs atomically."""
+    """Mix related queries and try neutral backgrounds if an automatic batch is empty."""
     folder = Path(folder)
     reservation = selection_path(folder, ratio)
     with (home()/'pixabay-history.lock').open('a') as lock:
@@ -258,6 +258,24 @@ def select_for_project(folder, query, preferred=None, cancel=None, update=lambda
             fresh = [h for h in hits if str(int(h['id'])) not in used]
             rng.shuffle(fresh); pools[i].extend(fresh)
             if requests >= initial: fill()
+        if allow_partial and not chosen:
+            # Only broaden beyond the theme when no related clip can be used.
+            for term in ('nature landscape', 'cloudy sky', 'flowing water', 'leaves in wind'):
+                if cancel is not None and Path(cancel).exists():
+                    raise Cancelled()
+                if term in searched:
+                    continue
+                update(f'Chưa có video đúng tỷ lệ {ratio} · thử nền dự phòng: {term}')
+                hits = list(search(term, ratio=ratio))
+                searched.append(term)
+                requests += 1
+                rng.shuffle(hits)
+                for hit in hits:
+                    take(hit)
+                    if len(chosen) >= LIMIT:
+                        break
+                if len(chosen) >= LIMIT:
+                    break
         if len(chosen) < LIMIT and not allow_partial:
             raise ValueError(f'Chỉ còn {len(chosen)} video Pixabay mới theo từ khóa này; cần {LIMIT} video {ratio} không trùng phiên trước. Đã thử các chủ đề liên quan phù hợp; hãy nhập chủ đề rộng hơn rồi dựng lại.')
         if cancel is not None and Path(cancel).exists(): raise Cancelled()
