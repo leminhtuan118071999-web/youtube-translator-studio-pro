@@ -106,6 +106,33 @@ class SelectionTests(unittest.TestCase):
                 result = pixabay.select_for_project(folder, 'forest sunlight', allow_partial=True)
             self.assertEqual([hit['id'] for hit in result], [1])
 
+    def test_manual_search_splits_phrases_and_interleaves_unique_clips(self):
+        clips = {key: dict(id=key, width=1080, height=1920) for key in range(4)}
+        with patch.object(pixabay, 'search', side_effect=[[clips[0], clips[1], clips[2]],
+                                                         [clips[3], clips[0]]]) as search:
+            result = pixabay.search_keywords('forest sunlight, cloudy sky\nForest Sunlight', ratio='9:16')
+        self.assertEqual([hit['id'] for hit in result], [0, 3, 1, 2])
+        self.assertEqual([call.args[0] for call in search.call_args_list], ['forest sunlight', 'cloudy sky'])
+        self.assertTrue(all(call.kwargs['ratio'] == '9:16' for call in search.call_args_list))
+
+    def test_automatic_landscape_tries_all_explicit_keywords_before_expanding(self):
+        from v3.thumbnail_theme import resolve_query
+
+        with tempfile.TemporaryDirectory() as tmp, patch.dict(os.environ, LMT_V3_HOME=tmp):
+            folder = projects.project_dir(projects.create('Multiple keywords')['id'])
+            query = 'first, second, third, fourth, fifth'
+            terms = query.split(', ')
+            def search(term, page=1, *, ratio='16:9'):
+                start = terms.index(term) * 100
+                return [dict(id=i, width=1920, height=1080, term=term) for i in range(start, start + 20)]
+            with patch('v3.thumbnail_theme.suggest') as suggest:
+                self.assertEqual(resolve_query(folder, dict(query=query, auto_theme=True, image='thumb.png')), query)
+            suggest.assert_not_called()
+            with patch.object(pixabay, 'search', side_effect=search):
+                result = pixabay.select_for_project(folder, query, allow_partial=True)
+            self.assertEqual({hit['term'] for hit in result}, set(terms))
+            self.assertEqual(len(result), pixabay.LIMIT)
+
     def test_related_query_finds_new_videos_without_unrelated_fallback(self):
         with tempfile.TemporaryDirectory() as tmp, patch.dict(os.environ,LMT_V3_HOME=tmp):
             folder=projects.project_dir(projects.create('New')['id'])

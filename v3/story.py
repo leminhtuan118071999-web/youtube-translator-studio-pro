@@ -32,9 +32,9 @@ def validate_start(project,destination):
     if cfg.get('enabled'):
         if not project.get('voice'):missing.append('file giọng đọc chính')
         if not cfg.get('backgrounds') and not cfg.get('pixabay_selected'):
-            from .pixabay import api_key
+            from .pixabay import api_key, parse_keywords
             can_choose_theme = cfg.get('auto_theme', False) and cfg.get('image')
-            if not cfg.get('auto_pixabay', True) or not (cfg.get('query', 'forest sunlight').strip() or can_choose_theme) or not api_key():
+            if not cfg.get('auto_pixabay', True) or not (parse_keywords(cfg.get('query', 'forest sunlight')) or can_choose_theme) or not api_key():
                 missing.append('video nền hoặc từ khóa và khóa Pixabay để tự tìm nền')
     elif not project.get('scenes'):missing.append('bật chế độ dựng video nền + giọng đọc và thêm nguyên liệu')
     if not destination.strip():missing.append('nơi lưu kết quả')

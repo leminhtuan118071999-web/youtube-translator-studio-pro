@@ -3,6 +3,7 @@ from . import locking as fcntl
 import random
 import re
 import hashlib
+from itertools import zip_longest
 import json
 from pathlib import Path
 import time
@@ -14,6 +15,7 @@ from .projects import home, read, atomic, asset
 from .render import probe, Cancelled
 
 LIMIT=20
+KEYWORD_LIMIT=5
 MAX_BYTES=500*1024*1024
 
 
@@ -106,6 +108,33 @@ def search(query, page=1, *, ratio='16:9'):
                          duration=item.get('duration',0),pageURL=item['pageURL'],user=item.get('user',''),tags=item.get('tags','')))
     atomic(filename,{'hits':hits})
     return hits
+
+
+def parse_keywords(query):
+    """Keep multiword phrases intact and deduplicate case-insensitively."""
+    terms = {}
+    for value in re.split(r'[,;\n]+', query):
+        term = ' '.join(value.split())
+        if term:
+            if len(term) > 100:
+                raise ValueError('Mỗi cụm từ khóa Pixabay tối đa 100 ký tự.')
+            terms.setdefault(term.casefold(), term)
+    if len(terms) > KEYWORD_LIMIT:
+        raise ValueError(f'Nhập tối đa {KEYWORD_LIMIT} cụm từ khóa Pixabay.')
+    return list(terms.values())
+
+
+def search_keywords(query, *, ratio='16:9'):
+    terms = parse_keywords(query)
+    if not terms:
+        raise ValueError('Hãy nhập ít nhất một từ khóa Pixabay.')
+    pools = [search(term, ratio=ratio) for term in terms]
+    hits = {}
+    for row in zip_longest(*pools):
+        for hit in row:
+            if hit is not None:
+                hits.setdefault(hit['id'], hit)
+    return list(hits.values())
 
 
 def related_queries(query):
@@ -225,9 +254,10 @@ def select_for_project(folder, query, preferred=None, cancel=None, update=lambda
             if len(chosen) >= LIMIT: break
             take(hit)
         mix_themes = allow_partial and ratio == '9:16'
-        related = diversity_queries(query)
-        queries = (list(dict.fromkeys(related[:1] + list(BACKGROUND_THEMES) + related[1:]))
-                   if mix_themes else related)
+        terms = parse_keywords(query)
+        related = [variant for term in terms for variant in diversity_queries(term)[1:]]
+        broad = list(BACKGROUND_THEMES) if mix_themes else []
+        queries = list(dict.fromkeys(terms + broad + related))
         pools = [[] for _ in queries]
         pages = [1 for _ in queries]
         exhausted = set()
@@ -246,7 +276,7 @@ def select_for_project(folder, query, preferred=None, cancel=None, update=lambda
                     if len(chosen) >= LIMIT: break
                 if not added: break
         # Search several themes before taking any clips, even if one term has enough.
-        initial = min(5 if mix_themes else 3, len(queries))
+        initial = min(max(len(terms), 5 if mix_themes else 3), len(queries))
         pending = list(range(initial))
         while len(chosen) < LIMIT and requests < 10:
             if cancel is not None and Path(cancel).exists(): raise Cancelled()

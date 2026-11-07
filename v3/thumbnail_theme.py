@@ -149,9 +149,10 @@ def suggest(image_path,folder,cancel=None,progress=lambda _:None):
 
 def resolve_query(folder,config,cancel=None,progress=lambda _:None):
     """Use a confident suggestion; manual query is the explicit fallback."""
+    from .pixabay import parse_keywords
     from .projects import asset
     fallback=config.get('query','forest sunlight').strip()
-    if not config.get('auto_theme', False) or not config.get('image'):
+    if len(parse_keywords(fallback)) > 1 or not config.get('auto_theme', False) or not config.get('image'):
         return fallback
     choice=Path(folder)/'thumbnail-theme-choice.json'
     try:

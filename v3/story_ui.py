@@ -24,7 +24,9 @@ def panel(project,folder,locked,output_panel=None):
     pending='theme_query_pending_'+pid
     if pending in st.session_state:st.session_state['pixabay_query_'+pid]=st.session_state.pop(pending)
     auto_theme=st.checkbox('Tự chọn chủ đề video nền theo ảnh thumbnail',value=prefs['auto_theme'],disabled=locked)
-    query=st.text_input('Từ khóa tìm video nền Pixabay',value=cfg.get('query','forest sunlight'),max_chars=100,key='pixabay_query_'+pid,disabled=locked)
+    query = st.text_area('Từ khóa tìm video nền Pixabay', value=cfg.get('query', 'forest sunlight'),
+                         max_chars=600, height=100, key='pixabay_query_'+pid, disabled=locked,
+                         help=f'Nhập tối đa {pixabay.KEYWORD_LIMIT} cụm, cách nhau bằng dấu phẩy hoặc xuống dòng.')
     theme_cache=folder/'thumbnail-theme.json'
     if theme_cache.exists():
         detected=store.read(theme_cache)
@@ -43,7 +45,7 @@ def panel(project,folder,locked,output_panel=None):
     hits_key = f'pixabay_hits_{pid}_{ratio}'
     if st.button('Tìm video trên Pixabay',disabled=locked,key='pixabay_search_'+pid):
         try:
-            with st.spinner('Đang tìm video trên Pixabay…'):st.session_state[hits_key]=pixabay.search(query, ratio=ratio)
+            with st.spinner('Đang tìm video trên Pixabay…'):st.session_state[hits_key]=pixabay.search_keywords(query, ratio=ratio)
         except (ValueError,OSError,json.JSONDecodeError) as exc:st.error(str(exc))
     hits={str(h['id']):h for h in cfg.get('pixabay_selected',[]) if pixabay.matches_ratio(h, ratio)}
     hits.update({str(h['id']):h for h in st.session_state.get(hits_key,[])})
