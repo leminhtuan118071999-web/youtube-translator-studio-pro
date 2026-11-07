@@ -25,3 +25,6 @@ out/
 
 # Local worker dependencies (credentials are stored outside the repository)
 .venv-worker/
+
+# V3 local editor runtime (projects live outside the repository)
+.venv-editor/
