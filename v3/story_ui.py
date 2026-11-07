@@ -74,6 +74,10 @@ def panel(project,folder,locked,output_panel=None):
             selected=st.multiselect('Chọn video Pixabay để tải khi dựng (tối đa 15)',list(hits),key=selection_key,format_func=lambda i:f"Pixabay {i} · {hits[i]['tags']} · {hits[i]['duration']} giây",max_selections=15,disabled=locked)
         if output_panel is not None:output_panel()
         with st.expander('Cài đặt tùy chỉnh',expanded=False):
+            subscribe_corner = st.checkbox(
+                'Hiện nhãn Subscribe ở góc trên bên trái',
+                value=prefs['subscribe_corner'], disabled=locked,
+            )
             remove=st.checkbox('Tự động xóa nền ảnh',value=prefs['remove_background'],disabled=locked)
             restore_missing=st.checkbox('Tự khôi phục phần nhân vật bị xóa nhầm',value=prefs['restore_missing'],disabled=locked or not remove)
             keep_attached_objects=st.checkbox('Giữ đồ vật nhân vật đang cầm, đeo hoặc ôm',value=prefs['keep_attached_objects'],disabled=locked or not remove)
@@ -88,13 +92,13 @@ def panel(project,folder,locked,output_panel=None):
             model=st.selectbox('Model nhận diện cho video kể chuyện',['small','base','tiny'],index=['small','base','tiny'].index(prefs['asr_model']),disabled=locked)
             auto_pixabay=st.checkbox('Tự tải 15 video Pixabay 16:9 mới · phối nhiều chủ đề liên quan · tránh trùng dự án trước',value=prefs['auto_pixabay'],disabled=locked)
             preferences=dict(prefs,auto_theme=auto_theme,enabled=enabled,no_intro=no_intro,remove_background=remove,restore_missing=restore_missing,keep_attached_objects=keep_attached_objects,
-                             width=width,x=x,y=y,auto_subtitles=subtitles,asr_model=model,auto_pixabay=auto_pixabay)
+                             width=width,x=x,y=y,auto_subtitles=subtitles,asr_model=model,auto_pixabay=auto_pixabay,subscribe_corner=subscribe_corner)
             if not locked and preferences != store.story_defaults():
                 store.save_story_defaults(preferences)
             def save_inputs():
                 try:
                     new=dict(cfg,auto_theme=auto_theme,no_intro=no_intro,enabled=enabled,auto_pixabay=auto_pixabay,query=query,backgrounds=kept,pixabay_selected=[hits[i] for i in selected],remove_background=remove,restore_missing=restore_missing,keep_attached_objects=keep_attached_objects,
-                             width=width,x=x,y=y,auto_subtitles=subtitles,asr_model=model,
+                             width=width,x=x,y=y,auto_subtitles=subtitles,asr_model=model,subscribe_corner=subscribe_corner,
                              keep_boxes=[[float(row[k]) for k in ('Trái','Trên','Phải','Dưới')] for row in boxes])
                     if len(set(records)|set(selected))>15:raise ValueError('Tổng số video Pixabay khác nhau của dự án vượt 15. Chọn lại video đã tải.')
                     if photo:

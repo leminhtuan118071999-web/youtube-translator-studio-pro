@@ -69,7 +69,7 @@ def available_name(name, exclude=None, unique_copy=False):
 
 OUTPUT_DEFAULTS = dict(aspect='16:9', resolution=720, fit='cover', transition='cut',
                        sync_voice=True, original_volume=0, music_volume=0.15,
-                       voice_volume=1.0, duck=True, font_size=48, subtitle_mode='words', subscribe_sticker=False)
+                       voice_volume=1.0, duck=True, font_size=48, subtitle_mode='words')
 
 
 def validate_output_defaults(settings):
@@ -80,7 +80,7 @@ def validate_output_defaults(settings):
         value = settings.get(key, result[key])
         if value not in options: raise ValueError('Cấu hình xuất không hợp lệ: '+key)
         result[key] = value
-    for key in ('sync_voice','duck','subscribe_sticker'):
+    for key in ('sync_voice','duck'):
         value = settings.get(key, result[key])
         if type(value) is not bool: raise ValueError('Cấu hình xuất không hợp lệ: '+key)
         result[key] = value
@@ -105,7 +105,7 @@ def save_output_defaults(settings):
 
 STORY_DEFAULTS = dict(enabled=True, no_intro=False, remove_background=True, restore_missing=True, keep_attached_objects=True, auto_theme=True,
                       width=75, x=50, y=100, auto_subtitles=True,
-                      asr_model='small', auto_pixabay=True, export_include_assets=True)
+                      asr_model='small', auto_pixabay=True, export_include_assets=True, subscribe_corner=True)
 
 
 def validate_story_defaults(settings):

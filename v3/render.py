@@ -11,7 +11,7 @@ import threading
 import shutil
 import subprocess
 import time
-from .projects import asset, IMAGES
+from .projects import asset, IMAGES, STORY_DEFAULTS
 
 FPS = 30
 NO_WINDOW = 0x08000000 if os.name == "nt" else 0
@@ -169,7 +169,7 @@ def run_ffmpeg(args, folder, cancel, progress=None, duration=1):
 def draw_subscribe_sticker(path, width, height):
     from PIL import Image, ImageDraw, ImageFont
 
-    unit = min(width, height) / 720
+    unit = min(width, height) / 720 * .68
     badge = Image.new('RGBA', (round(220 * unit), round(56 * unit)))
     draw = ImageDraw.Draw(badge)
     draw.rounded_rectangle((0, 0, badge.width - 1, badge.height - 1),
@@ -263,18 +263,14 @@ def render(project, assets_folder, output_folder, update):
             filters.append(f"[{source_video}]subtitles=captions.srt:force_style='PlayResX={width},PlayResY={height},FontName=Arial,FontSize={cfg['font_size']},Outline=2,Shadow=0,MarginV=40,MarginL=32,MarginR=32'[video]")
         video='[video]'
     else: video='[composite]' if source_video=='composite' else '0:v:0'
-    if cfg.get('subscribe_sticker', False):
+    if project.get('story', {}).get('subscribe_corner', STORY_DEFAULTS['subscribe_corner']):
         sticker = output_folder/'subscribe.png'
         draw_subscribe_sticker(sticker, width, height)
         args += ['-i', sticker.name]
         sticker_input = f'[{index}:v]'
         base_video = video if video.startswith('[') else f'[{video}]'
-        start = max(0, total - 3)
-        margin = round(min(width, height) * .045)
-        filters.append(
-            f"{base_video}{sticker_input}overlay=x=W-w-{margin}:y={margin}:"
-            f"enable='gte(t,{start:.6f})'[with_subscribe]"
-        )
+        margin = round(min(width, height) * .025)
+        filters.append(f'{base_video}{sticker_input}overlay=x={margin}:y={margin}[with_subscribe]')
         video = '[with_subscribe]'
     update(72,'Đang ghép âm thanh, phụ đề và xuất MP4')
     run_ffmpeg(args+['-filter_complex',';'.join(filters),'-map',video,'-map','[audio]','-t',str(total),'-r',str(FPS),*encode,'-movflags','+faststart','output.pending.mp4'],output_folder,cancel,
