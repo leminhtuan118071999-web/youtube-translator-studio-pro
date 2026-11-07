@@ -65,6 +65,11 @@ def panel(project,folder,locked,output_panel=None):
             voice=st.file_uploader('02 · File giọng đọc chính',type=sorted(x[1:] for x in store.AUDIO),disabled=locked,key='story_voice_'+pid)
             intro=st.file_uploader('03 · File giọng đọc mở đầu (tùy chọn)',type=sorted(x[1:] for x in store.AUDIO),disabled=locked,key='story_intro_'+pid)
             no_intro=st.checkbox('Không dùng giọng mở đầu',value=prefs['no_intro'],disabled=locked)
+            subscribe_corner = st.checkbox(
+                'Hiện hiệu ứng Subscribe rồi thu về góc trên bên trái',
+                value=prefs['subscribe_corner'], disabled=locked,
+            )
+            subtitles=st.checkbox('Tự tạo phụ đề cho cả mở đầu và giọng chính',value=prefs['auto_subtitles'],disabled=locked)
             st.caption('Đã có giọng chính.' if project.get('voice') else 'Chưa có giọng chính.')
             if cfg.get('intro'):st.caption('Đã có giọng mở đầu.')
         with b:
@@ -74,10 +79,6 @@ def panel(project,folder,locked,output_panel=None):
             selected=st.multiselect('Chọn video Pixabay để tải khi dựng (tối đa 15)',list(hits),key=selection_key,format_func=lambda i:f"Pixabay {i} · {hits[i]['tags']} · {hits[i]['duration']} giây",max_selections=15,disabled=locked)
         if output_panel is not None:output_panel()
         with st.expander('Cài đặt tùy chỉnh',expanded=False):
-            subscribe_corner = st.checkbox(
-                'Hiện hiệu ứng Subscribe rồi thu về góc trên bên trái',
-                value=prefs['subscribe_corner'], disabled=locked,
-            )
             remove=st.checkbox('Tự động xóa nền ảnh',value=prefs['remove_background'],disabled=locked)
             restore_missing=st.checkbox('Tự khôi phục phần nhân vật bị xóa nhầm',value=prefs['restore_missing'],disabled=locked or not remove)
             keep_attached_objects=st.checkbox('Giữ đồ vật nhân vật đang cầm, đeo hoặc ôm',value=prefs['keep_attached_objects'],disabled=locked or not remove)
@@ -88,7 +89,6 @@ def panel(project,folder,locked,output_panel=None):
             width=c.slider('Chiều rộng nhân vật (% khung)',10,100,int(prefs['width']),disabled=locked)
             x=d.slider('Vị trí ngang · trái → phải',0,100,int(prefs['x']),disabled=locked)
             y=e.slider('Vị trí dọc · trên → dưới',0,100,int(prefs['y']),disabled=locked)
-            subtitles=st.checkbox('Tự tạo phụ đề cho cả mở đầu và giọng chính',value=prefs['auto_subtitles'],disabled=locked)
             model=st.selectbox('Model nhận diện cho video kể chuyện',['small','base','tiny'],index=['small','base','tiny'].index(prefs['asr_model']),disabled=locked)
             auto_pixabay=st.checkbox('Tự tải 15 video Pixabay 16:9 mới · phối nhiều chủ đề liên quan · tránh trùng dự án trước',value=prefs['auto_pixabay'],disabled=locked)
             preferences=dict(prefs,auto_theme=auto_theme,enabled=enabled,no_intro=no_intro,remove_background=remove,restore_missing=restore_missing,keep_attached_objects=keep_attached_objects,
