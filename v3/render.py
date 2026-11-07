@@ -37,7 +37,15 @@ def _probe(path, modified, size):
     if not math.isfinite(duration) or duration > 14400:
         raise ValueError('Thời lượng media không hợp lệ hoặc vượt 4 giờ.')
     visual=next((s for s in streams if s.get('codec_type')=='video'),{})
-    return dict(width=int(visual.get('width',0)),height=int(visual.get('height',0)),
+    width, height = int(visual.get('width', 0)), int(visual.get('height', 0))
+    rotation = next((item['rotation'] for item in visual.get('side_data_list', []) if 'rotation' in item),
+                    visual.get('tags', {}).get('rotate', 0))
+    try:
+        if float(rotation) % 180 == 90:
+            width, height = height, width
+    except (TypeError, ValueError):
+        pass
+    return dict(width=width,height=height,
                 duration=duration, video=any(s.get('codec_type')=='video' for s in streams),
                 audio=any(s.get('codec_type')=='audio' for s in streams))
 

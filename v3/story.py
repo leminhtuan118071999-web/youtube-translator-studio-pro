@@ -181,10 +181,12 @@ def prepare(run):
     else:
         update(2, 'Bước 1/6 · Dựng video nền và giọng đọc')
     update(10,'Bước 2/6 · Chuẩn bị video nền')
-    from .pixabay import download, select_for_project, selection_path, matches_ratio, ratio_records
+    from .pixabay import (download, select_for_project, selection_path, matches_ratio,
+                          ratio_records, drop_reserved_video, WrongRatio)
     ratio = cfg.get('pixabay_aspect', '16:9')
     reservation = selection_path(folder, ratio)
     selected = [hit for hit in cfg.get('pixabay_selected', []) if matches_ratio(hit, ratio)]
+    auto_batch = False
     if not cfg.get('backgrounds') and cfg.get('auto_pixabay',True):
         update(10,'Bước 2/6 · Đang chọn 15 video Pixabay mới, tránh trùng phiên trước')
         records=read(folder/'pixabay-downloads.json') if (folder/'pixabay-downloads.json').exists() else {}
@@ -200,7 +202,19 @@ def prepare(run):
                 query=resolve_query(folder,cfg,cancel,lambda stage:update(10,stage))
             effective['story']['resolved_query']=query
             selected=select_for_project(folder,query,selected,cancel,update=lambda stage:update(10,stage),ratio=ratio)
-    downloaded=download(folder,selected,cancel,lambda p,s:update(10+round(10*p),s),ratio=ratio)
+            auto_batch = True
+    for attempt in range(4):
+        try:
+            downloaded = download(folder, selected, cancel, lambda p,s:update(10+round(10*p),s), ratio=ratio)
+            break
+        except WrongRatio as exc:
+            if not auto_batch:
+                raise
+            drop_reserved_video(folder, ratio, exc.video_id)
+            if attempt == 3:
+                raise
+            update(10, f'Pixabay trả clip sai tỷ lệ {ratio} · đang tìm clip thay thế')
+            selected = select_for_project(folder, query, cancel=cancel, update=lambda stage:update(10,stage), ratio=ratio)
     effective['story']['downloaded']=read(folder/'pixabay-downloads.json') if (folder/'pixabay-downloads.json').exists() else {}
     current=read(folder/'project.json');current['story']['downloaded']=effective['story']['downloaded'];save(current)
     backgrounds=list(dict.fromkeys(cfg.get('backgrounds',[])+downloaded))

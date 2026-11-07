@@ -39,6 +39,25 @@ def selection_path(folder, ratio):
     return Path(folder)/filename
 
 
+class WrongRatio(ValueError):
+    def __init__(self, video_id, ratio, media):
+        self.video_id = int(video_id)
+        super().__init__(f'Video Pixabay {video_id} có kích thước {media["width"]}×{media["height"]}, '
+                         f'không đúng tỷ lệ {ratio}. Hãy chọn video khác.')
+
+
+def drop_reserved_video(folder, ratio, video_id):
+    reservation = selection_path(folder, ratio)
+    saved = read(reservation)
+    saved['hits'] = [hit for hit in saved['hits'] if int(hit['id']) != video_id]
+    atomic(reservation, saved)
+    manifest = Path(folder)/'pixabay-downloads.json'
+    if manifest.exists():
+        records = read(manifest)
+        if records.pop(str(video_id), None) is not None:
+            atomic(manifest, records)
+
+
 def ratio_records(records, ratio):
     # Downloads from older V3 versions used landscape exclusively.
     return {key: item for key, item in records.items() if item.get('aspect', '16:9') == ratio}
@@ -180,20 +199,20 @@ def select_for_project(folder, query, preferred=None, cancel=None, update=lambda
     reservation = selection_path(folder, ratio)
     with (home()/'pixabay-history.lock').open('a') as lock:
         fcntl.flock(lock, fcntl.LOCK_EX)
-        if reservation.exists():
+        previous = read(reservation)['hits'] if reservation.exists() else []
+        if not all(matches_ratio(h, ratio) for h in previous):
+            raise ValueError(f'Bộ video đã chọn không đúng tỷ lệ {ratio}. Hãy tìm lại trong dự án mới.')
+        if len(previous) == LIMIT:
             update('Dùng lại 15 video Pixabay đã chọn cho dự án này')
-            hits = read(reservation)['hits']
-            if not all(matches_ratio(h, ratio) for h in hits):
-                raise ValueError(f'Bộ video đã chọn không đúng tỷ lệ {ratio}. Hãy tìm lại trong dự án mới.')
-            return hits
+            return previous
         history_file = home()/'pixabay-history.json'
         history = read(history_file) if history_file.exists() else {}
         for manifest in home().glob('*/pixabay-downloads.json'):
             for key in read(manifest):
                 history.setdefault(key, manifest.parent.name)
         used = set(history)
-        chosen = []
-        chosen_ids = set()
+        chosen = list(previous)
+        chosen_ids = {str(int(hit['id'])) for hit in previous}
         def take(hit):
             if not matches_ratio(hit, ratio): return False
             key = str(int(hit['id']))
@@ -287,8 +306,9 @@ def download(folder, selected, cancel, update, *, ratio='16:9'):
             except ValueError:
                 pass
             else:
-                if not matches_ratio(probe(path), ratio):
-                    raise ValueError(f'Video Pixabay đã lưu không đúng tỷ lệ {ratio}.')
+                media = probe(path)
+                if not matches_ratio(media, ratio):
+                    raise WrongRatio(key, ratio, media)
                 result.append(existing['file'])
                 continue
         if not matches_ratio(hit, ratio):
@@ -307,7 +327,7 @@ def download(folder, selected, cancel, update, *, ratio='16:9'):
                     dest.write(chunk)
             media=probe(partial)
             if not media['video']:raise ValueError('Tệp Pixabay không phải video hợp lệ.')
-            if not matches_ratio(media, ratio):raise ValueError(f'Video tải về không đúng tỷ lệ {ratio}; không lưu vào dự án.')
+            if not matches_ratio(media, ratio):raise WrongRatio(key, ratio, media)
             partial.replace(target)
             records[key]=dict(file=name,pageURL=hit.get('pageURL',''),user=hit.get('user',''),aspect=ratio)
             atomic(manifest,records);result.append(name)

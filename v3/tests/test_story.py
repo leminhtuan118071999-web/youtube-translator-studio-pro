@@ -156,8 +156,11 @@ class StoryTests(unittest.TestCase):
 
     def test_portrait_download_checks_actual_media(self):
         portrait = self.assets/'portrait-source.mp4'
-        command('-f','lavfi','-i','color=blue:s=180x320:r=30','-t','0.4',
-                '-c:v','libx264','-threads','1',str(portrait))
+        import subprocess
+        try:
+            command('-display_rotation:v:0','90','-i',str(self.assets/'bg.mp4'),'-c','copy',str(portrait))
+        except subprocess.CalledProcessError:
+            command('-i',str(self.assets/'bg.mp4'),'-c','copy','-metadata:s:v:0','rotate=90',str(portrait))
         response=MagicMock()
         response.__enter__.return_value=response
         response.geturl.return_value='https://cdn.pixabay.com/video/portrait.mp4'

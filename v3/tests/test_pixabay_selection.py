@@ -129,6 +129,20 @@ class SelectionTests(unittest.TestCase):
             self.assertTrue(all(pixabay.matches_ratio(h,'9:16') for h in portrait))
             self.assertFalse({h['id'] for h in landscape} & {h['id'] for h in portrait})
 
+    def test_wrong_ratio_replacement_keeps_the_other_reserved_clips(self):
+        with tempfile.TemporaryDirectory() as tmp, patch.dict(os.environ,LMT_V3_HOME=tmp):
+            folder=projects.project_dir(projects.create('Replacement')['id'])
+            hits=[dict(id=i,width=1080,height=1920) for i in range(50)]
+            with patch.object(pixabay,'search',return_value=hits):
+                first=pixabay.select_for_project(folder,'forest',ratio='9:16')
+                rejected=first[0]['id']
+                pixabay.drop_reserved_video(folder,'9:16',rejected)
+                second=pixabay.select_for_project(folder,'forest',ratio='9:16')
+            ids={h['id'] for h in second}
+            self.assertEqual(len(ids),15)
+            self.assertNotIn(rejected,ids)
+            self.assertTrue({h['id'] for h in first[1:]} <= ids)
+
     def test_invalid_preferred_videos_cannot_be_reserved(self):
         with tempfile.TemporaryDirectory() as tmp, patch.dict(os.environ,LMT_V3_HOME=tmp):
             folder=projects.project_dir(projects.create('Portrait')['id'])
