@@ -186,10 +186,8 @@ try:
         save_inputs=panel(project,folder,locked,output_panel=output_panel)
         st.divider()
         story_mode=project.get('story',{}).get('enabled',False)
-        ready=bool(project['scenes'])
         if story_mode:
             from v3.story import voice_duration
-            ready=bool(project.get('voice') and project['story'].get('image') and (project['story'].get('backgrounds') or project['story'].get('pixabay_selected')))
             if project.get('voice'):st.metric('Thời lượng mở đầu + giọng chính',f'{voice_duration(project,folder):.1f} giây')
 
         elif project['scenes']:
@@ -207,3 +205,4 @@ try:
             launch(project);st.rerun()
 except (ValueError,OSError,RuntimeError,json.JSONDecodeError) as exc:
     st.error(str(exc))
+

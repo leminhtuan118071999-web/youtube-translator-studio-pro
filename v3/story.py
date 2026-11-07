@@ -30,13 +30,13 @@ def validate_start(project,destination):
     cfg=project.get('story',{})
     missing=[]
     if cfg.get('enabled'):
-        if not cfg.get('image'):missing.append('ảnh nhân vật')
         if not project.get('voice'):missing.append('file giọng đọc chính')
         if not cfg.get('backgrounds') and not cfg.get('pixabay_selected'):
             from .pixabay import api_key
-            if not cfg.get('auto_pixabay',True) or (not cfg.get('query','').strip() and not cfg.get('auto_theme',False)) or not api_key():
+            can_choose_theme = cfg.get('auto_theme', False) and cfg.get('image')
+            if not cfg.get('auto_pixabay', True) or not (cfg.get('query', 'forest sunlight').strip() or can_choose_theme) or not api_key():
                 missing.append('video nền hoặc từ khóa và khóa Pixabay để tự tìm nền')
-    elif not project.get('scenes'):missing.append('bật chế độ ảnh nhân vật + video nền và thêm nguyên liệu')
+    elif not project.get('scenes'):missing.append('bật chế độ dựng video nền + giọng đọc và thêm nguyên liệu')
     if not destination.strip():missing.append('nơi lưu kết quả')
     elif not Path(destination.strip()).expanduser().is_absolute():missing.append('đường dẫn nơi lưu đầy đủ')
     if missing:raise ValueError('Chưa thể bắt đầu. Cần bổ sung: '+ '; '.join(missing)+'.')
@@ -167,12 +167,19 @@ def prepare(run):
         except (ValueError,KeyError):return None
     def remember(key,sig,name):
         cache[key]=dict(signature=sig,file=name);atomic(cache_path,cache)
-    update(2,'Bước 1/6 · Tách nền, giữ đồ vật gắn với nhân vật và khôi phục chi tiết từ ảnh gốc; lần đầu tải model')
-    sig=cutout_signature(cfg)
-    png=cached('cutout',sig)
-    if not png:png=cutout(folder,cfg);remember('cutout',sig,png)
-    # Make the resulting cutout visible in the project even if a later stage fails.
-    current=read(folder/'project.json');current.setdefault('story',{})['cutout']=png;save(current)
+    png = None
+    if cfg.get('image'):
+        update(2, 'Bước 1/6 · Chuẩn bị ảnh nhân vật')
+        sig = cutout_signature(cfg)
+        png = cached('cutout', sig)
+        if not png:
+            png = cutout(folder, cfg)
+            remember('cutout', sig, png)
+        current = read(folder/'project.json')
+        current.setdefault('story', {})['cutout'] = png
+        save(current)
+    else:
+        update(2, 'Bước 1/6 · Dựng video nền và giọng đọc')
     update(10,'Bước 2/6 · Chuẩn bị video nền')
     from .pixabay import download,select_for_project
     selected=cfg.get('pixabay_selected',[])
@@ -237,9 +244,12 @@ def prepare(run):
         # Manual captions in this mode must cover the entire intro+main timeline.
         if project.get('captions_origin')=='asr':
             effective.update(captions=None,caption_words=None,subtitle_text='')
-    effective['story']['cutout']=png
+    if png:
+        effective['story']['cutout'] = png
+    else:
+        effective['story'].pop('cutout', None)
     atomic(run/'render-project.json',effective)
-    update(50,'Đã chuẩn bị xong ảnh, giọng đọc và video nền')
+    update(50, 'Đã chuẩn bị xong nguyên liệu dựng video')
 
 
 def layout_preview(project,folder):

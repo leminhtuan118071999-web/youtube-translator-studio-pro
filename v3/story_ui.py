@@ -58,10 +58,10 @@ def panel(project,folder,locked,output_panel=None):
         # Explicit source attribution, no autoplay/hotlink downloads.
         st.markdown(f"[Pixabay · video {hit['id']}]({hit['pageURL']}) · {hit['width']}×{hit['height']} · {hit['duration']} giây")
     with st.container():
-        enabled=st.checkbox('Dựng theo kiểu ảnh nhân vật + video nền',value=prefs['enabled'],disabled=locked)
+        enabled=st.checkbox('Dựng video nền + giọng đọc',value=prefs['enabled'],disabled=locked)
         a,b=st.columns(2)
         with a:
-            photo=st.file_uploader('01 · Ảnh nhân vật',type=['png','jpg','jpeg','webp'],disabled=locked,key='story_photo_'+pid)
+            photo=st.file_uploader('01 · Ảnh nhân vật (tùy chọn)',type=['png','jpg','jpeg','webp'],disabled=locked,key='story_photo_'+pid)
             voice=st.file_uploader('02 · File giọng đọc chính',type=sorted(x[1:] for x in store.AUDIO),disabled=locked,key='story_voice_'+pid)
             intro=st.file_uploader('03 · File giọng đọc mở đầu (tùy chọn)',type=sorted(x[1:] for x in store.AUDIO),disabled=locked,key='story_intro_'+pid)
             no_intro=st.checkbox('Không dùng giọng mở đầu',value=prefs['no_intro'],disabled=locked)

@@ -151,7 +151,8 @@ def resolve_query(folder,config,cancel=None,progress=lambda _:None):
     """Use a confident suggestion; manual query is the explicit fallback."""
     from .projects import asset
     fallback=config.get('query','forest sunlight').strip()
-    if not config.get('auto_theme',False):return fallback
+    if not config.get('auto_theme', False) or not config.get('image'):
+        return fallback
     choice=Path(folder)/'thumbnail-theme-choice.json'
     try:
         result=suggest(asset(folder,config['image']),folder,cancel,progress)
@@ -165,3 +166,4 @@ def resolve_query(folder,config,cancel=None,progress=lambda _:None):
     atomic(choice,dict(source_image=config.get('image'),query=fallback,automatic=False))
     if not fallback:raise ValueError('Chưa nhận diện rõ chủ đề. Hãy nhập từ khóa video nền hoặc thử ảnh thumbnail khác.')
     return fallback
+

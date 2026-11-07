@@ -42,7 +42,7 @@ class EditorUITests(unittest.TestCase):
             self.assertTrue(any(t.label=='Nơi lưu' for t in app.tabs[0].text_input))
             self.assertTrue(any(b.label=='🎬 Bắt đầu dựng MP4' for b in app.tabs[0].button))
             self.assertTrue(any(t.label=='05 · Dựng kiểu video mẫu' for t in app.tabs))
-            next(c for c in app.checkbox if c.label=='Dựng theo kiểu ảnh nhân vật + video nền').uncheck()
+            next(c for c in app.checkbox if c.label=='Dựng video nền + giọng đọc').uncheck()
             next(b for b in app.button if b.label=='Lưu nguyên liệu và bố cục kể chuyện').click().run()
             self.assertFalse(app.exception)
             self.assertFalse(projects.listing()[0]['story']['enabled'])
@@ -127,3 +127,4 @@ class OneClickTests(unittest.TestCase):
                 self.assertEqual(snapshot['export_destination'],str(Path(tmp)/'result'))
                 self.assertTrue(snapshot['voice']);self.assertTrue(snapshot['story']['image'])
                 self.assertEqual(len(snapshot['story']['backgrounds']),1)
+

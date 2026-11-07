@@ -9,7 +9,7 @@ import unittest
 from unittest.mock import patch,MagicMock
 from PIL import Image
 from v3 import projects,pixabay
-from v3.story import prepare,cutout,layout_preview
+from v3.story import prepare,cutout,layout_preview,validate_start
 from v3.render import probe
 from v3.render_worker import launch,current
 from v3.tests.test_render import command
@@ -52,6 +52,27 @@ class StoryTests(unittest.TestCase):
         self.assertTrue((exported/'assets'/'intro.wav').exists())
         imported=projects.import_bundle(str(exported));self.assertEqual(imported['voice'],'main.wav')
         self.assertTrue((projects.project_dir(imported['id'])/'assets'/'person.png').exists())
+
+    def test_background_and_voice_render_without_character_image(self):
+        from v3.render import render
+        self.p['story'].pop('image')
+        self.p['story'].pop('intro')
+        # A snapshot restored from an earlier render can contain an old overlay.
+        self.p['overlay_image'] = 'person.png'
+        validate_start(self.p, self.tmp.name)
+        run = self.folder/'runs'/'no-photo'
+        run.mkdir(parents=True)
+        projects.atomic(run/'snapshot.json', self.p)
+        with patch('v3.story.cutout', side_effect=AssertionError('Image processing must be skipped')):
+            prepare(run)
+        prepared = projects.read(run/'render-project.json')
+        self.assertFalse(prepared['overlay_image'])
+        self.assertEqual(prepared['scenes'][0]['file'], 'bg.mp4')
+        self.assertTrue(prepared['settings']['sync_voice'])
+        render(prepared, self.folder, run, lambda *_: None)
+        media = probe(run/'output.mp4')
+        self.assertTrue(media['audio'] and media['video'])
+        self.assertAlmostEqual(media['duration'], .8, delta=.1)
 
     def test_subtitles_offset_and_cached_preparation(self):
         self.p['story']['auto_subtitles']=True
