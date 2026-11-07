@@ -50,8 +50,8 @@ class RealRenderTests(unittest.TestCase):
         audio=subprocess.run(['ffmpeg','-v','error','-i',str(out/'output.mp4'),'-t','1','-f','s16le','-ac','1','pipe:1'],capture_output=True,check=True).stdout
         self.assertTrue(any(audio))
 
-    def test_subscribe_grows_in_center_then_moves_to_corner_and_can_be_disabled(self):
-        self.p['scenes'] = [dict(id='b', name='Blue', file='blue.mp4', duration=6)]
+    def test_subscribe_starts_full_size_blinks_then_moves_to_corner_and_can_be_disabled(self):
+        self.p['scenes'] = [dict(id='b', name='Blue', file='blue.mp4', duration=8)]
         self.p['subtitle_text'] = 'Phụ đề cùng video.'
         out = self.folder/'subscribe-render'
         render(self.p, self.folder, out, lambda *_: None)
@@ -64,17 +64,18 @@ class RealRenderTests(unittest.TestCase):
                 capture_output=True, check=True,
             ).stdout
 
-        # The growing sticker covers this pixel near the center only later.
-        self.assertGreater(sample(.1, 255, 625)[2], 180)
-        self.assertGreater(sample(4.8, 255, 625)[0], 150)
-        self.assertGreater(sample(4.8, 70, 29)[2], 180)
-        self.assertGreater(sample(5.7, 255, 625)[2], 180)
-        self.assertGreater(sample(5.7, 70, 29)[0], 150)
+        self.assertGreater(sample(.1, 485, 625)[0], 150)
+        self.assertGreater(sample(1.5, 485, 625)[2], 180)
+        self.assertGreater(sample(2.0, 485, 625)[0], 150)
+        self.assertGreater(sample(6.1, 485, 625)[0], 150)
+        self.assertGreater(sample(6.1, 120, 35)[2], 180)
+        self.assertGreater(sample(7.7, 485, 625)[2], 180)
+        self.assertGreater(sample(7.7, 120, 35)[0], 150)
 
         self.p['story'] = dict(subscribe_corner=False)
         out = self.folder/'subscribe-disabled'
         render(self.p, self.folder, out, lambda *_: None)
-        self.assertGreater(sample(5.7, 70, 29)[2], 180)
+        self.assertGreater(sample(7.7, 120, 35)[2], 180)
 
     def test_real_word_highlight_render(self):
         from v3.speech import to_srt

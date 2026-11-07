@@ -189,20 +189,27 @@ def portrait_blur_filter(width, height, tail=''):
 def draw_subscribe_sticker(path, width, height):
     from PIL import Image, ImageDraw, ImageFont
 
-    unit = min(width, height) / 720 * 1.12
-    badge = Image.new('RGBA', (round(220 * unit), round(56 * unit)))
+    unit = min(width * .46, height * .55) / 320
+
+    def scaled(*coords):
+        return tuple(round(value * unit) for value in coords)
+
+    badge = Image.new('RGBA', scaled(320, 84))
     draw = ImageDraw.Draw(badge)
-    draw.rounded_rectangle((0, 0, badge.width - 1, badge.height - 1),
-                           radius=round(12 * unit), fill='#cc1528')
-    draw.polygon([(round(x * unit), round(y * unit)) for x, y in
-                  ((20, 16), (20, 40), (41, 28))], fill='white')
+    radius = round(38 * unit)
+    draw.rounded_rectangle(scaled(2, 5, 317, 82), radius=radius, fill='#571021')
+    draw.rounded_rectangle(scaled(2, 1, 317, 76), radius=radius,
+                           fill='#dd1735', outline='#ff8193', width=max(1, round(2 * unit)))
+    draw.rounded_rectangle(scaled(18, 15, 68, 62), radius=round(16 * unit), fill='#fff6f7')
+    draw.polygon([scaled(37, 26), scaled(37, 51), scaled(55, 38)], fill='#dd1735')
     try:
-        font = ImageFont.load_default(size=round(28 * unit))
+        font = ImageFont.load_default(size=round(33 * unit))
     except TypeError:  # Pillow versions before scalable default fonts.
         font = ImageFont.load_default()
-    draw.text((round(130 * unit), badge.height // 2), 'Subscribe',
-              fill='white', font=font, anchor='mm')
+    draw.text(scaled(190, 38), 'SUBSCRIBE', fill='white', font=font,
+              stroke_width=max(1, round(unit)), anchor='mm')
     badge.save(path)
+    return badge.width
 
 
 def render(project, assets_folder, output_folder, update):
@@ -296,26 +303,27 @@ def render(project, assets_folder, output_folder, update):
     else: video='[composite]' if source_video=='composite' else '0:v:0'
     if project.get('story', {}).get('subscribe_corner', STORY_DEFAULTS['subscribe_corner']):
         sticker = output_folder/'subscribe.png'
-        draw_subscribe_sticker(sticker, width, height)
+        sticker_width = draw_subscribe_sticker(sticker, width, height)
         base_video = video if video.startswith('[') else f'[{video}]'
         margin = round(min(width, height) * .025)
         # Leave room for the move and the corner badge even on short videos.
         move_duration = min(.4, total / 4)
-        intro_duration = min(5, total - 2 * move_duration)
+        intro_duration = min(7, total - 2 * move_duration)
         # After the move, overlay repeats the last frame of the small badge.
         sticker_duration = intro_duration + move_duration + 2 / FPS
         args += ['-loop', '1', '-framerate', str(FPS), '-t', f'{sticker_duration:.6f}', '-i', sticker.name]
-        growth = f'min(1,max(0,t/{intro_duration:.6f}))'
         move = f'min(1,max(0,(t-{intro_duration:.6f})/{move_duration:.6f}))'
-        corner_scale = .68 / 1.12
-        scale = f'(.55+.45*{growth})*(1-{move})+{corner_scale:.6f}*{move}'
+        corner_scale = min(width, height) * .21 / sticker_width
+        scale = f'1-{1-corner_scale:.6f}*{move}'
+        # Four slow pulses over seven seconds, followed by a steady corner badge.
+        visible = f'gte(t,{intro_duration:.6f})+lt(mod(t,1.75),1.25)'
         filters.append(
             f"[{index}:v]scale=w='2*round(iw*({scale})/2)':h=-2:eval=frame[subscribe]"
         )
         filters.append(
             f"{base_video}[subscribe]overlay="
             f"x='(W-w)/2*(1-{move})+{margin}*{move}':"
-            f"y='(H-h)/2*(1-{move})+{margin}*{move}'[with_subscribe]"
+            f"y='(H-h)/2*(1-{move})+{margin}*{move}':enable='{visible}'[with_subscribe]"
         )
         video = '[with_subscribe]'
     update(72,'Đang ghép âm thanh, phụ đề và xuất MP4')
