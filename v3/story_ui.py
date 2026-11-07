@@ -62,7 +62,18 @@ def panel(project,folder,locked,output_panel=None):
         a,b=st.columns(2)
         with a:
             photo=st.file_uploader('01 · Ảnh nhân vật (tùy chọn)',type=['png','jpg','jpeg','webp'],disabled=locked,key='story_photo_'+pid)
-            voice=st.file_uploader('02 · File giọng đọc chính',type=sorted(x[1:] for x in store.AUDIO),disabled=locked,key='story_voice_'+pid)
+            voice_files = st.file_uploader(
+                '02 · Giọng đọc chính và phụ đề SRT',
+                type=sorted({ext[1:] for ext in store.AUDIO} | {'srt'}),
+                accept_multiple_files=True, disabled=locked,
+                key=f"story_voice_{pid}_{cfg.get('main_srt', '')}",
+                help='Chọn một file giọng đọc. Nếu có SRT đi kèm, chọn cả hai file cùng lúc.',
+            )
+            if cfg.get('main_srt'):
+                st.caption('Đã lưu phụ đề SRT đi kèm giọng chính.')
+                remove_srt = st.checkbox('Bỏ phụ đề SRT đã lưu', disabled=locked, key='remove_story_srt_'+pid)
+            else:
+                remove_srt = False
             intro=st.file_uploader('03 · File giọng đọc mở đầu (tùy chọn)',type=sorted(x[1:] for x in store.AUDIO),disabled=locked,key='story_intro_'+pid)
             no_intro=st.checkbox('Không dùng giọng mở đầu',value=prefs['no_intro'],disabled=locked)
             subscribe_corner = st.checkbox(
@@ -70,13 +81,6 @@ def panel(project,folder,locked,output_panel=None):
                 value=prefs['subscribe_corner'], disabled=locked,
             )
             subtitles=st.checkbox('Tạo phụ đề',value=prefs['auto_subtitles'],disabled=locked)
-            main_srt = st.file_uploader('Phụ đề SRT đi kèm giọng chính (tùy chọn)',
-                                        type=['srt'], disabled=locked, key=f"story_srt_{pid}_{cfg.get('main_srt', '')}")
-            if cfg.get('main_srt'):
-                st.caption('Đã lưu phụ đề SRT đi kèm giọng chính.')
-                remove_srt = st.checkbox('Bỏ phụ đề SRT đã lưu', disabled=locked, key='remove_story_srt_'+pid)
-            else:
-                remove_srt = False
             st.caption('Đã có giọng chính.' if project.get('voice') else 'Chưa có giọng chính.')
             if cfg.get('intro'):st.caption('Đã có giọng mở đầu.')
         with b:
@@ -104,6 +108,17 @@ def panel(project,folder,locked,output_panel=None):
                 store.save_story_defaults(preferences)
             def save_inputs():
                 try:
+                    audio_files = []
+                    srt_files = []
+                    for uploaded in voice_files:
+                        if Path(uploaded.name).suffix.lower() == '.srt':
+                            srt_files.append(uploaded)
+                        else:
+                            audio_files.append(uploaded)
+                    if len(audio_files) > 1 or len(srt_files) > 1:
+                        raise ValueError('Ô giọng đọc chính chỉ nhận một file âm thanh và một file SRT.')
+                    voice = next(iter(audio_files), None)
+                    main_srt = next(iter(srt_files), None)
                     new=dict(cfg,auto_theme=auto_theme,no_intro=no_intro,enabled=enabled,auto_pixabay=auto_pixabay,query=query,backgrounds=kept,pixabay_selected=[hits[i] for i in selected],remove_background=remove,restore_missing=restore_missing,keep_attached_objects=keep_attached_objects,
                              width=width,x=x,y=y,auto_subtitles=subtitles,asr_model=model,subscribe_corner=subscribe_corner,
                              keep_boxes=[[float(row[k]) for k in ('Trái','Trên','Phải','Dưới')] for row in boxes])
@@ -121,10 +136,10 @@ def panel(project,folder,locked,output_panel=None):
                                 if field=='voice':project['voice']=name
                                 else:new['intro']=name
                                 new[field+'_upload']=stamp
-                    if remove_srt or new.get('main_srt_voice') != project.get('voice'):
+                    if (remove_srt and not main_srt) or new.get('main_srt_voice') != project.get('voice'):
                         for key in ('main_srt', 'main_srt_voice', 'main_srt_upload'):
                             new.pop(key, None)
-                    if main_srt and not remove_srt:
+                    if main_srt:
                         if not project.get('voice'):
                             raise ValueError('Hãy tải giọng chính đi kèm file SRT.')
                         stamp = store.signature_upload(main_srt)

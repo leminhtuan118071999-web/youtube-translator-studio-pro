@@ -109,9 +109,10 @@ class OneClickTests(unittest.TestCase):
             command('-f','lavfi','-i','color=blue:s=160x120:r=30','-t','0.3','-c:v','libx264','-threads','1',str(background_path))
             voice=Upload(voice_path.read_bytes());voice.name='voice.wav'
             background=Upload(background_path.read_bytes());background.name='bg.mp4'
+            captions=Upload(b'1\n00:00:00,050 --> 00:00:00,400\nCiao!\n');captions.name='voice.srt'
             def upload(label,**kwargs):
                 if label.startswith('01 ·'):return picture
-                if label.startswith('02 ·'):return voice
+                if label.startswith('02 ·'):return [captions,voice]
                 if label.startswith('04 ·'):return [background]
                 return None
             with patch('streamlit.file_uploader',side_effect=upload),patch('v3.render_worker.launch',return_value='mock-run') as start:
@@ -127,4 +128,6 @@ class OneClickTests(unittest.TestCase):
                 self.assertEqual(snapshot['export_destination'],str(Path(tmp)/'result'))
                 self.assertTrue(snapshot['voice']);self.assertTrue(snapshot['story']['image'])
                 self.assertEqual(len(snapshot['story']['backgrounds']),1)
+                self.assertEqual(snapshot['story']['main_srt_voice'],snapshot['voice'])
+                self.assertTrue(snapshot['story']['main_srt'].endswith('.srt'))
 
