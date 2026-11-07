@@ -182,15 +182,15 @@ class StoryTests(unittest.TestCase):
         run=self.folder/'runs'/'automatic';run.mkdir(parents=True);projects.atomic(run/'snapshot.json',self.p)
         payload=(self.assets/'bg.mp4').read_bytes()
         response=MagicMock();response.__enter__.return_value=response
-        response.geturl.return_value='https://cdn.pixabay.com/video/test.mp4';response.read.side_effect=[payload,b'']*15
+        response.geturl.return_value='https://cdn.pixabay.com/video/test.mp4';response.read.side_effect=[payload,b'']*20
         opener=MagicMock();opener.open.return_value=response
-        hits=[dict(id=i,width=1920,height=1080,url=response.geturl.return_value,pageURL=f'https://pixabay.com/videos/id-{i}/') for i in range(15)]
+        hits=[dict(id=i,width=1920,height=1080,url=response.geturl.return_value,pageURL=f'https://pixabay.com/videos/id-{i}/') for i in range(20)]
         with patch('v3.pixabay.search',return_value=hits) as search,patch('urllib.request.build_opener',return_value=opener):
             prepare(run)
             self.assertEqual(search.call_count,3)
             prepare(run)
-            self.assertEqual(search.call_count,3);self.assertEqual(opener.open.call_count,15)
-        result=projects.read(run/'render-project.json');self.assertEqual(len(result['scenes']),15)
+            self.assertEqual(search.call_count,3);self.assertEqual(opener.open.call_count,20)
+        result=projects.read(run/'render-project.json');self.assertEqual(len(result['scenes']),20)
 
     def test_keep_box_restores_requested_detail(self):
         api=SimpleNamespace(new_session=MagicMock(),remove=MagicMock(return_value=Image.new('L',(100,100))))
@@ -207,11 +207,11 @@ class PixabayTests(unittest.TestCase):
             folder=Path(tmp);(folder/'assets').mkdir()
             command('-f','lavfi','-i','color=blue:s=320x180:r=30','-t','0.2',
                     '-c:v','libx264','-threads','1',str(folder/'assets'/'existing.mp4'))
-            records={str(i):dict(file='existing.mp4') for i in range(15)};projects.atomic(folder/'pixabay-downloads.json',records)
+            records={str(i):dict(file='existing.mp4') for i in range(20)};projects.atomic(folder/'pixabay-downloads.json',records)
             with patch('urllib.request.build_opener') as network:
                 self.assertEqual(pixabay.download(folder,[dict(id=1)],folder/'cancel',lambda *a:None),['existing.mp4'])
                 network.return_value.open.assert_not_called()
-                with self.assertRaises(ValueError):pixabay.download(folder,[dict(id=20)],folder/'cancel',lambda *a:None)
+                with self.assertRaises(ValueError):pixabay.download(folder,[dict(id=21)],folder/'cancel',lambda *a:None)
             for url in ('http://cdn.pixabay.com/a','https://evil.example/a','https://cdn.pixabay.com.evil.example/a'):
                 with self.assertRaises(ValueError):pixabay.safe_url(url)
 

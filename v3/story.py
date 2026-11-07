@@ -182,13 +182,13 @@ def prepare(run):
         update(2, 'Bước 1/6 · Dựng video nền và giọng đọc')
     update(10,'Bước 2/6 · Chuẩn bị video nền')
     from .pixabay import (download, select_for_project, selection_path, matches_ratio,
-                          ratio_records, drop_reserved_video, WrongRatio)
+                          ratio_records, drop_reserved_video, WrongRatio, LIMIT)
     ratio = cfg.get('pixabay_aspect', '16:9')
     reservation = selection_path(folder, ratio)
     selected = [hit for hit in cfg.get('pixabay_selected', []) if matches_ratio(hit, ratio)]
     auto_batch = False
     if not cfg.get('backgrounds') and cfg.get('auto_pixabay',True):
-        update(10,'Bước 2/6 · Đang chọn 15 video Pixabay mới, tránh trùng phiên trước')
+        update(10,f'Bước 2/6 · Đang chọn {LIMIT} video Pixabay mới, tránh trùng phiên trước')
         records=read(folder/'pixabay-downloads.json') if (folder/'pixabay-downloads.json').exists() else {}
         records = ratio_records(records, ratio)
         if records and not reservation.exists() and not selected:

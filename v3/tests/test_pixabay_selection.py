@@ -14,7 +14,7 @@ class SelectionTests(unittest.TestCase):
             with patch.object(pixabay,'search',return_value=hits):
                 a=pixabay.select_for_project(first,'forest')
                 b=pixabay.select_for_project(second,'forest',preferred=a)
-            self.assertEqual(len(a),15);self.assertEqual(len(b),15)
+            self.assertEqual(len(a),20);self.assertEqual(len(b),20)
             self.assertFalse({h['id'] for h in a}&{h['id'] for h in b})
             with patch.object(pixabay,'search',side_effect=AssertionError('must reuse reservation')):
                 self.assertEqual(pixabay.select_for_project(first,'other query'),a)
@@ -24,8 +24,8 @@ class SelectionTests(unittest.TestCase):
             first=projects.project_dir(projects.create('Old')['id'])
             projects.atomic(first/'pixabay-downloads.json',{'1':{'file':'old.mp4'}})
             folder=projects.project_dir(projects.create('New')['id'])
-            with patch.object(pixabay,'search',side_effect=lambda *args,**kwargs: [{'id':i,'width':1920,'height':1080} for i in range(1,15)] if kwargs.get('page')==1 else []):
-                with self.assertRaisesRegex(ValueError,'cần 15'):
+            with patch.object(pixabay,'search',side_effect=lambda *args,**kwargs: [{'id':i,'width':1920,'height':1080} for i in range(1,20)] if kwargs.get('page')==1 else []):
+                with self.assertRaisesRegex(ValueError,'cần 20'):
                     pixabay.select_for_project(folder,'forest')
             self.assertFalse((folder/'pixabay-selection.json').exists())
 
@@ -33,9 +33,9 @@ class SelectionTests(unittest.TestCase):
         with tempfile.TemporaryDirectory() as tmp, patch.dict(os.environ,LMT_V3_HOME=tmp):
             folder=projects.project_dir(projects.create('New')['id'])
             def search(query, page=1, *, ratio='16:9'):
-                return [{'id':i,'width':1920,'height':1080} for i in range(15)] if query=='woodland sunlight' else []
+                return [{'id':i,'width':1920,'height':1080} for i in range(20)] if query=='woodland sunlight' else []
             with patch.object(pixabay,'search',side_effect=search):
-                self.assertEqual(len(pixabay.select_for_project(folder,'forest sunlight')),15)
+                self.assertEqual(len(pixabay.select_for_project(folder,'forest sunlight')),20)
             self.assertEqual(pixabay.related_queries('special unknown subject'),['special unknown subject'])
             self.assertTrue(all('sunlight' in q for q in pixabay.related_queries('forest sunlight')))
 
@@ -59,10 +59,10 @@ class SelectionTests(unittest.TestCase):
             with patch.object(pixabay,'search',side_effect=search) as api:
                 result=pixabay.select_for_project(folder,'forest sunlight',update=updates.append)
             self.assertEqual(api.call_count,3)
-            self.assertEqual(len({h['id'] for h in result}),15)
-            self.assertEqual({term:sum(h['origin']==term for h in result) for term in queries},dict.fromkeys(queries,5))
+            self.assertEqual(len({h['id'] for h in result}),20)
+            self.assertEqual({term:sum(h['origin']==term for h in result) for term in queries},dict(zip(queries,[7,7,6])))
             self.assertEqual(projects.read(folder/'pixabay-selection.json')['searched_queries'],queries)
-            self.assertIn('15 video',updates[-1])
+            self.assertIn('20 video',updates[-1])
 
     def test_duplicate_results_and_exhaustion_keep_ten_request_cap(self):
         with tempfile.TemporaryDirectory() as tmp, patch.dict(os.environ,LMT_V3_HOME=tmp):
@@ -120,12 +120,12 @@ class SelectionTests(unittest.TestCase):
             folder=projects.project_dir(projects.create('Both ratios')['id'])
             def search(query, page=1, *, ratio='16:9'):
                 width,height=(1920,1080) if ratio=='16:9' else (1080,1920)
-                return [dict(id=i,width=width,height=height) for i in range(40)]
+                return [dict(id=i,width=width,height=height) for i in range(50)]
             with patch.object(pixabay,'search',side_effect=search):
                 landscape=pixabay.select_for_project(folder,'forest')
                 portrait=pixabay.select_for_project(folder,'forest',ratio='9:16')
                 self.assertEqual(pixabay.select_for_project(folder,'forest'),landscape)
-            self.assertEqual(len(portrait),15)
+            self.assertEqual(len(portrait),20)
             self.assertTrue(all(pixabay.matches_ratio(h,'9:16') for h in portrait))
             self.assertFalse({h['id'] for h in landscape} & {h['id'] for h in portrait})
 
@@ -134,19 +134,20 @@ class SelectionTests(unittest.TestCase):
             folder=projects.project_dir(projects.create('Replacement')['id'])
             hits=[dict(id=i,width=1080,height=1920) for i in range(50)]
             with patch.object(pixabay,'search',return_value=hits):
-                first=pixabay.select_for_project(folder,'forest',ratio='9:16')
+                with patch.object(pixabay, 'LIMIT', 15):
+                    first=pixabay.select_for_project(folder,'forest',ratio='9:16')
                 rejected=first[0]['id']
                 pixabay.drop_reserved_video(folder,'9:16',rejected)
                 second=pixabay.select_for_project(folder,'forest',ratio='9:16')
             ids={h['id'] for h in second}
-            self.assertEqual(len(ids),15)
+            self.assertEqual(len(ids),20)
             self.assertNotIn(rejected,ids)
             self.assertTrue({h['id'] for h in first[1:]} <= ids)
 
     def test_invalid_preferred_videos_cannot_be_reserved(self):
         with tempfile.TemporaryDirectory() as tmp, patch.dict(os.environ,LMT_V3_HOME=tmp):
             folder=projects.project_dir(projects.create('Portrait')['id'])
-            wrong=[dict(id=i,width=1080,height=1920) for i in range(15)]
+            wrong=[dict(id=i,width=1080,height=1920) for i in range(20)]
             with patch.object(pixabay,'search',return_value=[]):
                 with self.assertRaises(ValueError):pixabay.select_for_project(folder,'forest',preferred=wrong)
             self.assertFalse((folder/'pixabay-selection.json').exists())

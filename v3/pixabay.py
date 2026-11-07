@@ -13,7 +13,7 @@ from uuid import uuid4
 from .projects import home, read, atomic, asset
 from .render import probe, Cancelled
 
-LIMIT=15
+LIMIT=20
 MAX_BYTES=500*1024*1024
 
 
@@ -203,7 +203,7 @@ def select_for_project(folder, query, preferred=None, cancel=None, update=lambda
         if not all(matches_ratio(h, ratio) for h in previous):
             raise ValueError(f'Bộ video đã chọn không đúng tỷ lệ {ratio}. Hãy tìm lại trong dự án mới.')
         if len(previous) == LIMIT:
-            update('Dùng lại 15 video Pixabay đã chọn cho dự án này')
+            update(f'Dùng lại {LIMIT} video Pixabay đã chọn cho dự án này')
             return previous
         history_file = home()/'pixabay-history.json'
         history = read(history_file) if history_file.exists() else {}
@@ -241,7 +241,7 @@ def select_for_project(folder, query, preferred=None, cancel=None, update=lambda
                     if len(chosen) >= LIMIT: break
                 if not added: break
         # Initially sample up to three closely related queries even if one is plentiful.
-        # Extra pages/terms are fetched only when those cannot supply fifteen fresh IDs.
+        # Extra pages/terms are fetched only when those cannot supply enough fresh IDs.
         initial = min(3, len(queries))
         pending = list(range(initial))
         while len(chosen) < LIMIT and requests < 10:
@@ -251,7 +251,7 @@ def select_for_project(folder, query, preferred=None, cancel=None, update=lambda
                 if not pending: break
             i = pending.pop(0)
             term = queries[i]
-            update(f'Tìm Pixabay {requests+1}/10 · {term} · đã chọn {len(chosen)}/15 video mới')
+            update(f'Tìm Pixabay {requests+1}/10 · {term} · đã chọn {len(chosen)}/{LIMIT} video mới')
             hits = search(term, page=pages[i], ratio=ratio)
             pages[i] += 1; requests += 1
             if term not in searched: searched.append(term)
@@ -260,14 +260,14 @@ def select_for_project(folder, query, preferred=None, cancel=None, update=lambda
             rng.shuffle(fresh); pools[i].extend(fresh)
             if requests >= initial: fill()
         if len(chosen) < LIMIT:
-            raise ValueError(f'Chỉ còn {len(chosen)} video Pixabay mới theo từ khóa này; cần 15 video {ratio} không trùng phiên trước. Đã thử các chủ đề liên quan phù hợp; hãy nhập chủ đề rộng hơn rồi dựng lại.')
+            raise ValueError(f'Chỉ còn {len(chosen)} video Pixabay mới theo từ khóa này; cần {LIMIT} video {ratio} không trùng phiên trước. Đã thử các chủ đề liên quan phù hợp; hãy nhập chủ đề rộng hơn rồi dựng lại.')
         if cancel is not None and Path(cancel).exists(): raise Cancelled()
         rng.shuffle(chosen)
         for hit in chosen: history[str(hit['id'])] = folder.name
         # History first: a crash can reserve unused IDs but never duplicate them.
         atomic(history_file, history)
         atomic(reservation, dict(query=query, searched_queries=searched, search_requests=requests, hits=chosen))
-        update(f'Đã chọn 15 video Pixabay mới từ {len(searched)} từ khóa liên quan')
+        update(f'Đã chọn {LIMIT} video Pixabay mới từ {len(searched)} từ khóa liên quan')
         return chosen
 
 
@@ -287,11 +287,11 @@ class CDNRedirect(__import__('urllib.request',fromlist=['HTTPRedirectHandler']).
 def download(folder, selected, cancel, update, *, ratio='16:9'):
     """Count distinct downloads per ratio and retain previous project assets."""
     if ratio not in RATIOS:raise ValueError('Tỷ lệ video Pixabay không hợp lệ.')
-    if len(selected)>LIMIT:raise ValueError('Mỗi dự án tối đa 15 video Pixabay.')
+    if len(selected)>LIMIT:raise ValueError(f'Mỗi tỷ lệ tối đa {LIMIT} video Pixabay.')
     folder=Path(folder);manifest=folder/'pixabay-downloads.json'
     records=read(manifest) if manifest.exists() else {}
     if len(set(ratio_records(records, ratio))|{str(int(hit['id'])) for hit in selected})>LIMIT:
-        raise ValueError(f'Dự án đã đạt giới hạn 15 video Pixabay {ratio}. Hãy dùng lại video đã tải.')
+        raise ValueError(f'Dự án đã đạt giới hạn {LIMIT} video Pixabay {ratio}. Hãy dùng lại video đã tải.')
     from urllib.request import build_opener
     opener=build_opener(CDNRedirect())
     result=[]
