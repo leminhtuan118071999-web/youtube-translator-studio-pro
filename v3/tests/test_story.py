@@ -228,9 +228,9 @@ class StoryTests(unittest.TestCase):
         hits=[dict(id=i,width=1920,height=1080,url=response.geturl.return_value,pageURL=f'https://pixabay.com/videos/id-{i}/') for i in range(20)]
         with patch('v3.pixabay.search',return_value=hits) as search,patch('urllib.request.build_opener',return_value=opener):
             prepare(run)
-            self.assertEqual(search.call_count,3)
+            self.assertEqual(search.call_count,5)
             prepare(run)
-            self.assertEqual(search.call_count,3);self.assertEqual(opener.open.call_count,20)
+            self.assertEqual(search.call_count,5);self.assertEqual(opener.open.call_count,20)
         result=projects.read(run/'render-project.json');self.assertEqual(len(result['scenes']),20)
 
     def test_keep_box_restores_requested_detail(self):

@@ -116,7 +116,7 @@ def panel(project,folder,locked,output_panel=None):
             x=d.slider('Vị trí ngang · trái → phải',0,100,int(prefs['x']),disabled=locked)
             y=e.slider('Vị trí dọc · trên → dưới',0,100,int(prefs['y']),disabled=locked)
             model=st.selectbox('Model nhận diện cho video kể chuyện',['small','base','tiny'],index=['small','base','tiny'].index(prefs['asr_model']),disabled=locked)
-            auto_pixabay=st.checkbox(f'Tự tải {pixabay.LIMIT} video Pixabay mới · phối nhiều chủ đề liên quan · tránh trùng dự án trước',value=prefs['auto_pixabay'],disabled=locked)
+            auto_pixabay=st.checkbox(f'Tự tải {pixabay.LIMIT} video Pixabay mới · trộn nhiều chủ đề khác nhau · tránh trùng dự án trước',value=prefs['auto_pixabay'],disabled=locked)
             preferences=dict(prefs,auto_theme=auto_theme,enabled=enabled,remove_background=remove,restore_missing=restore_missing,keep_attached_objects=keep_attached_objects,
                              width=width,x=x,y=y,auto_subtitles=subtitles,asr_model=model,auto_pixabay=auto_pixabay,subscribe_corner=subscribe_corner,pixabay_aspect=ratio)
             if not locked and preferences != store.story_defaults():

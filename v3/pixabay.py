@@ -18,6 +18,9 @@ MAX_BYTES=500*1024*1024
 
 
 RATIOS = ('16:9', '9:16')
+BACKGROUND_THEMES = ('nature landscape', 'cloudy sky', 'flowing water', 'city skyline',
+                     'ocean waves', 'mountain landscape', 'countryside', 'garden flowers',
+                     'leaves in wind', 'rain window', 'abstract light', 'architecture')
 
 
 def matches_ratio(video, ratio='16:9'):
@@ -194,7 +197,7 @@ def diversity_queries(query):
 
 
 def select_for_project(folder, query, preferred=None, cancel=None, update=lambda _:None, *, ratio='16:9', allow_partial=False, excluded=()):
-    """Mix related queries and top up automatic batches from other background themes."""
+    """Mix unrelated themes in automatic batches and reserve unused clip IDs."""
     folder = Path(folder)
     reservation = selection_path(folder, ratio)
     with (home()/'pixabay-history.lock').open('a') as lock:
@@ -221,7 +224,9 @@ def select_for_project(folder, query, preferred=None, cancel=None, update=lambda
         for hit in preferred or []:
             if len(chosen) >= LIMIT: break
             take(hit)
-        queries = diversity_queries(query)
+        related = diversity_queries(query)
+        queries = (list(dict.fromkeys(related[:1] + list(BACKGROUND_THEMES) + related[1:]))
+                   if allow_partial else related)
         pools = [[] for _ in queries]
         pages = [1 for _ in queries]
         exhausted = set()
@@ -239,9 +244,8 @@ def select_for_project(folder, query, preferred=None, cancel=None, update=lambda
                             break
                     if len(chosen) >= LIMIT: break
                 if not added: break
-        # Initially sample up to three closely related queries even if one is plentiful.
-        # Extra pages/terms are fetched only when those cannot supply enough fresh IDs.
-        initial = min(3, len(queries))
+        # Search several themes before taking any clips, even if one term has enough.
+        initial = min(5 if allow_partial else 3, len(queries))
         pending = list(range(initial))
         while len(chosen) < LIMIT and requests < 10:
             if cancel is not None and Path(cancel).exists(): raise Cancelled()
@@ -259,10 +263,7 @@ def select_for_project(folder, query, preferred=None, cancel=None, update=lambda
             rng.shuffle(fresh); pools[i].extend(fresh)
             if requests >= initial: fill(pools)
         if allow_partial and len(chosen) < LIMIT:
-            fallback_terms = ('nature landscape', 'cloudy sky', 'flowing water',
-                              'leaves in wind', 'mountain landscape', 'ocean waves',
-                              'countryside', 'garden flowers', 'city skyline')
-            remaining_terms = [term for term in fallback_terms if term not in searched]
+            remaining_terms = [term for term in queries if term not in searched]
             for start in range(0, len(remaining_terms), 3):
                 fallback_pools = []
                 for term in remaining_terms[start:start + 3]:

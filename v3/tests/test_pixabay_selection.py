@@ -74,6 +74,24 @@ class SelectionTests(unittest.TestCase):
             self.assertEqual({hit['theme'] for hit in result}, {'forest sunlight', *fallback})
             self.assertEqual(len({hit['id'] for hit in result}), pixabay.LIMIT)
 
+    def test_automatic_selection_mixes_topics_even_when_first_keyword_can_fill_batch(self):
+        with tempfile.TemporaryDirectory() as tmp, patch.dict(os.environ, LMT_V3_HOME=tmp):
+            folder = projects.project_dir(projects.create('Automatic variety')['id'])
+            terms = ('forest sunlight', 'nature landscape', 'cloudy sky', 'flowing water', 'city skyline')
+            def search(term, page=1, *, ratio='16:9'):
+                self.assertEqual(ratio, '9:16')
+                self.assertEqual(page, 1)
+                start = terms.index(term) * 100
+                return [dict(id=i, width=1080, height=1920, theme=term)
+                        for i in range(start, start + 20)]
+            with patch.object(pixabay, 'search', side_effect=search) as api:
+                result = pixabay.select_for_project(folder, 'forest sunlight',
+                                                     ratio='9:16', allow_partial=True)
+            self.assertEqual(api.call_count, len(terms))
+            self.assertEqual(len(result), pixabay.LIMIT)
+            self.assertEqual({term: sum(hit['theme'] == term for hit in result) for term in terms},
+                             dict.fromkeys(terms, 4))
+
     def test_related_query_finds_new_videos_without_unrelated_fallback(self):
         with tempfile.TemporaryDirectory() as tmp, patch.dict(os.environ,LMT_V3_HOME=tmp):
             folder=projects.project_dir(projects.create('New')['id'])
