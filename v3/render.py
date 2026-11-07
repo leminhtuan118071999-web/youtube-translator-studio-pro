@@ -368,15 +368,18 @@ def render(project, assets_folder, output_folder, update):
         move_duration = min(.4, total / 4)
         intro_duration = min(7, total - 2 * move_duration)
         # After the move, overlay repeats the last frame of the small badge.
-        sticker_duration = intro_duration + move_duration + 2 / FPS
-        args += ['-loop', '1', '-framerate', str(FPS), '-t', f'{sticker_duration:.6f}', '-i', sticker.name]
+        sticker_frames = math.ceil((intro_duration + move_duration) * FPS) + 2
+        # Read the PNG inside the filter graph so a second input demuxer cannot
+        # block the main video while the finite sticker stream reaches EOF.
+        sticker_source = (f'movie={sticker.name},loop=loop={sticker_frames - 1}:size=1:start=0,'
+                          f'settb=1/{FPS},setpts=N')
         move = f'min(1,max(0,(t-{intro_duration:.6f})/{move_duration:.6f}))'
         corner_scale = min(width, height) * .21 / sticker_width
         scale = f'1-{1-corner_scale:.6f}*{move}'
         # Four slow pulses over seven seconds, followed by a steady corner badge.
         visible = f'gte(t,{intro_duration:.6f})+lt(mod(t,1.75),1.25)'
         filters.append(
-            f"[{index}:v]scale=w='2*round(iw*({scale})/2)':h=-2:eval=frame[subscribe]"
+            f"{sticker_source},scale=w='2*round(iw*({scale})/2)':h=-2:eval=frame[subscribe]"
         )
         filters.append(
             f"{base_video}[subscribe]overlay="
