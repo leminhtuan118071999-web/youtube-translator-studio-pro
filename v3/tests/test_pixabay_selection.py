@@ -29,6 +29,14 @@ class SelectionTests(unittest.TestCase):
                     pixabay.select_for_project(folder,'forest')
             self.assertFalse((folder/'pixabay-selection.json').exists())
 
+    def test_partial_batch_can_keep_valid_clips_when_no_more_are_available(self):
+        with tempfile.TemporaryDirectory() as tmp, patch.dict(os.environ,LMT_V3_HOME=tmp):
+            folder=projects.project_dir(projects.create('Partial')['id'])
+            hits=[dict(id=i,width=1080,height=1920) for i in range(3)]
+            with patch.object(pixabay,'search',return_value=hits):
+                selected=pixabay.select_for_project(folder,'forest',ratio='9:16',allow_partial=True)
+            self.assertEqual({h['id'] for h in selected},{0,1,2})
+
     def test_related_query_finds_new_videos_without_unrelated_fallback(self):
         with tempfile.TemporaryDirectory() as tmp, patch.dict(os.environ,LMT_V3_HOME=tmp):
             folder=projects.project_dir(projects.create('New')['id'])
@@ -62,7 +70,7 @@ class SelectionTests(unittest.TestCase):
             self.assertEqual(len({h['id'] for h in result}),20)
             self.assertEqual({term:sum(h['origin']==term for h in result) for term in queries},dict(zip(queries,[7,7,6])))
             self.assertEqual(projects.read(folder/'pixabay-selection.json')['searched_queries'],queries)
-            self.assertIn('20 video',updates[-1])
+            self.assertIn('20/20 video',updates[-1])
 
     def test_duplicate_results_and_exhaustion_keep_ten_request_cap(self):
         with tempfile.TemporaryDirectory() as tmp, patch.dict(os.environ,LMT_V3_HOME=tmp):

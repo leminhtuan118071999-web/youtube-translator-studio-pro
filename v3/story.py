@@ -182,7 +182,7 @@ def prepare(run):
         update(2, 'Bước 1/6 · Dựng video nền và giọng đọc')
     update(10,'Bước 2/6 · Chuẩn bị video nền')
     from .pixabay import (download, select_for_project, selection_path, matches_ratio,
-                          ratio_records, drop_reserved_video, WrongRatio, LIMIT)
+                          ratio_records, drop_reserved_video, LIMIT)
     ratio = cfg.get('pixabay_aspect', '16:9')
     reservation = selection_path(folder, ratio)
     selected = [hit for hit in cfg.get('pixabay_selected', []) if matches_ratio(hit, ratio)]
@@ -201,20 +201,27 @@ def prepare(run):
                 from .thumbnail_theme import resolve_query
                 query=resolve_query(folder,cfg,cancel,lambda stage:update(10,stage))
             effective['story']['resolved_query']=query
-            selected=select_for_project(folder,query,selected,cancel,update=lambda stage:update(10,stage),ratio=ratio)
+            selected=select_for_project(folder,query,selected,cancel,update=lambda stage:update(10,stage),ratio=ratio,allow_partial=True)
             auto_batch = True
+    skipped = 0
     for attempt in range(4):
-        try:
-            downloaded = download(folder, selected, cancel, lambda p,s:update(10+round(10*p),s), ratio=ratio)
+        rejected = []
+        downloaded = download(folder, selected, cancel, lambda p,s:update(10+round(10*p),s),
+                              ratio=ratio, on_wrong_ratio=rejected.append)
+        if not rejected:
             break
-        except WrongRatio as exc:
-            if not auto_batch:
-                raise
-            drop_reserved_video(folder, ratio, exc.video_id)
-            if attempt == 3:
-                raise
-            update(10, f'Pixabay trả clip sai tỷ lệ {ratio} · đang tìm clip thay thế')
-            selected = select_for_project(folder, query, cancel=cancel, update=lambda stage:update(10,stage), ratio=ratio)
+        skipped += len(rejected)
+        if not auto_batch:
+            break
+        for error in rejected:
+            drop_reserved_video(folder, ratio, error.video_id)
+        if attempt == 3:
+            break
+        update(10, f'Đã bỏ {skipped} clip sai tỷ lệ {ratio} · đang tìm clip thay thế')
+        selected = select_for_project(folder, query, cancel=cancel, update=lambda stage:update(10,stage),
+                                      ratio=ratio, allow_partial=True)
+    if skipped and not downloaded and not cfg.get('backgrounds'):
+        raise ValueError(f'Không có clip Pixabay tải được đúng tỷ lệ {ratio}. Hãy đổi từ khóa hoặc chọn clip khác.')
     effective['story']['downloaded']=read(folder/'pixabay-downloads.json') if (folder/'pixabay-downloads.json').exists() else {}
     current=read(folder/'project.json');current['story']['downloaded']=effective['story']['downloaded'];save(current)
     backgrounds=list(dict.fromkeys(cfg.get('backgrounds',[])+downloaded))

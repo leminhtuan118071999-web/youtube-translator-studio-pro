@@ -193,7 +193,7 @@ def diversity_queries(query):
                               and protected<=set(q.casefold().split())))[:7]
 
 
-def select_for_project(folder, query, preferred=None, cancel=None, update=lambda _:None, *, ratio='16:9'):
+def select_for_project(folder, query, preferred=None, cancel=None, update=lambda _:None, *, ratio='16:9', allow_partial=False):
     """Mix related queries within ten requests; reserve fresh IDs atomically."""
     folder = Path(folder)
     reservation = selection_path(folder, ratio)
@@ -259,7 +259,7 @@ def select_for_project(folder, query, preferred=None, cancel=None, update=lambda
             fresh = [h for h in hits if str(int(h['id'])) not in used]
             rng.shuffle(fresh); pools[i].extend(fresh)
             if requests >= initial: fill()
-        if len(chosen) < LIMIT:
+        if len(chosen) < LIMIT and not (allow_partial and chosen):
             raise ValueError(f'Chỉ còn {len(chosen)} video Pixabay mới theo từ khóa này; cần {LIMIT} video {ratio} không trùng phiên trước. Đã thử các chủ đề liên quan phù hợp; hãy nhập chủ đề rộng hơn rồi dựng lại.')
         if cancel is not None and Path(cancel).exists(): raise Cancelled()
         rng.shuffle(chosen)
@@ -267,7 +267,7 @@ def select_for_project(folder, query, preferred=None, cancel=None, update=lambda
         # History first: a crash can reserve unused IDs but never duplicate them.
         atomic(history_file, history)
         atomic(reservation, dict(query=query, searched_queries=searched, search_requests=requests, hits=chosen))
-        update(f'Đã chọn {LIMIT} video Pixabay mới từ {len(searched)} từ khóa liên quan')
+        update(f'Đã chọn {len(chosen)}/{LIMIT} video Pixabay từ {len(searched)} từ khóa liên quan')
         return chosen
 
 
@@ -284,7 +284,7 @@ class CDNRedirect(__import__('urllib.request',fromlist=['HTTPRedirectHandler']).
         return super().redirect_request(req,fp,code,msg,headers,newurl)
 
 
-def download(folder, selected, cancel, update, *, ratio='16:9'):
+def download(folder, selected, cancel, update, *, ratio='16:9', on_wrong_ratio=None):
     """Count distinct downloads per ratio and retain previous project assets."""
     if ratio not in RATIOS:raise ValueError('Tỷ lệ video Pixabay không hợp lệ.')
     if len(selected)>LIMIT:raise ValueError(f'Mỗi tỷ lệ tối đa {LIMIT} video Pixabay.')
@@ -295,6 +295,12 @@ def download(folder, selected, cancel, update, *, ratio='16:9'):
     from urllib.request import build_opener
     opener=build_opener(CDNRedirect())
     result=[]
+    def reject(key, media):
+        error = WrongRatio(key, ratio, media)
+        if on_wrong_ratio is None:
+            raise error
+        on_wrong_ratio(error)
+
     for i,hit in enumerate(selected):
         if cancel.exists():raise Cancelled()
         key=str(int(hit['id']));existing=records.get(key)
@@ -308,7 +314,8 @@ def download(folder, selected, cancel, update, *, ratio='16:9'):
             else:
                 media = probe(path)
                 if not matches_ratio(media, ratio):
-                    raise WrongRatio(key, ratio, media)
+                    reject(key, media)
+                    continue
                 result.append(existing['file'])
                 continue
         if not matches_ratio(hit, ratio):
@@ -327,7 +334,9 @@ def download(folder, selected, cancel, update, *, ratio='16:9'):
                     dest.write(chunk)
             media=probe(partial)
             if not media['video']:raise ValueError('Tệp Pixabay không phải video hợp lệ.')
-            if not matches_ratio(media, ratio):raise WrongRatio(key, ratio, media)
+            if not matches_ratio(media, ratio):
+                reject(key, media)
+                continue
             partial.replace(target)
             records[key]=dict(file=name,pageURL=hit.get('pageURL',''),user=hit.get('user',''),aspect=ratio)
             atomic(manifest,records);result.append(name)

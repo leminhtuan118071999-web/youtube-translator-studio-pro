@@ -161,18 +161,23 @@ class StoryTests(unittest.TestCase):
             command('-display_rotation:v:0','90','-i',str(self.assets/'bg.mp4'),'-c','copy',str(portrait))
         except subprocess.CalledProcessError:
             command('-i',str(self.assets/'bg.mp4'),'-c','copy','-metadata:s:v:0','rotate=90',str(portrait))
+        wrong = self.assets/'wrong-portrait.mp4'
+        command('-f','lavfi','-i','color=blue:s=540x958:r=30','-t','0.2',
+                '-c:v','libx264','-threads','1',str(wrong))
         response=MagicMock()
         response.__enter__.return_value=response
         response.geturl.return_value='https://cdn.pixabay.com/video/portrait.mp4'
-        response.read.side_effect=[portrait.read_bytes(),b'',(self.assets/'bg.mp4').read_bytes(),b'']
+        response.read.side_effect=[wrong.read_bytes(),b'',portrait.read_bytes(),b'']
         opener=MagicMock()
         opener.open.return_value=response
         hit=dict(id=201,width=1080,height=1920,url=response.geturl.return_value)
+        rejected = []
         with patch('urllib.request.build_opener',return_value=opener):
-            files=pixabay.download(self.folder,[hit],self.folder/'cancel',lambda *a:None,ratio='9:16')
-            self.assertTrue(pixabay.matches_ratio(probe(self.assets/files[0]),'9:16'))
-            with self.assertRaisesRegex(ValueError,'không đúng tỷ lệ 9:16'):
-                pixabay.download(self.folder,[dict(hit,id=202)],self.folder/'cancel',lambda *a:None,ratio='9:16')
+            files=pixabay.download(self.folder,[dict(hit,id=202),hit],self.folder/'cancel',lambda *a:None,
+                                   ratio='9:16',on_wrong_ratio=rejected.append)
+        self.assertEqual([error.video_id for error in rejected],[202])
+        self.assertEqual(len(files),1)
+        self.assertTrue(pixabay.matches_ratio(probe(self.assets/files[0]),'9:16'))
         records=projects.read(self.folder/'pixabay-downloads.json')
         self.assertEqual(records['201']['aspect'],'9:16')
         self.assertNotIn('202',records)
