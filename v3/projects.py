@@ -105,7 +105,8 @@ def save_output_defaults(settings):
 
 STORY_DEFAULTS = dict(enabled=True, remove_background=True, restore_missing=True, keep_attached_objects=True, auto_theme=True,
                       width=75, x=50, y=100, auto_subtitles=True,
-                      asr_model='small', auto_pixabay=True, export_include_assets=True, subscribe_corner=True, pixabay_aspect='16:9')
+                      asr_model='small', auto_pixabay=True, export_include_assets=True, subscribe_corner=True,
+                      pixabay_aspect='16:9', query='forest sunlight')
 
 
 def validate_story_defaults(settings):
@@ -118,6 +119,8 @@ def validate_story_defaults(settings):
             valid = value in ('16:9', '9:16')
         elif key == 'asr_model':
             valid = value in ('small','base','tiny')
+        elif key == 'query':
+            valid = isinstance(value, str) and len(value) <= 600
         else:
             valid = type(value) is int and (10 if key == 'width' else 0) <= value <= 100
         if not valid:raise ValueError('Cấu hình mục 05 không hợp lệ: '+key)

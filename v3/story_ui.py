@@ -22,11 +22,19 @@ def panel(project,folder,locked,output_panel=None):
                 try:pixabay.save_key(key);st.success('Đã lưu khóa trên máy; không đưa vào bản xuất dự án.')
                 except ValueError as exc:st.error(str(exc))
     pending='theme_query_pending_'+pid
-    if pending in st.session_state:st.session_state['pixabay_query_'+pid]=st.session_state.pop(pending)
+    query_key='pixabay_query_'+pid
+    if pending in st.session_state:st.session_state[query_key]=st.session_state.pop(pending)
+    def save_query():
+        value=st.session_state[query_key]
+        store.save_story_defaults(dict(store.story_defaults(), query=value))
+        latest=store.read(folder/'project.json')
+        latest.setdefault('story', {})['query']=value
+        store.save(latest)
+
     auto_theme=st.checkbox('Tự chọn chủ đề video nền theo ảnh thumbnail',value=prefs['auto_theme'],disabled=locked)
-    query = st.text_area('Từ khóa tìm video nền Pixabay', value=cfg.get('query', 'forest sunlight'),
-                         max_chars=600, height=100, key='pixabay_query_'+pid, disabled=locked,
-                         help=f'Nhập tối đa {pixabay.KEYWORD_LIMIT} cụm, cách nhau bằng dấu phẩy hoặc xuống dòng.')
+    query = st.text_area('Từ khóa tìm video nền Pixabay', value=cfg.get('query', prefs['query']),
+                         max_chars=600, height=100, key=query_key, disabled=locked, on_change=save_query,
+                         help=f'Nhập tối đa {pixabay.KEYWORD_LIMIT} cụm, cách nhau bằng dấu phẩy hoặc xuống dòng. Từ khóa bạn nhập được lưu trên máy cho các phiên mới.')
     theme_cache=folder/'thumbnail-theme.json'
     if theme_cache.exists():
         detected=store.read(theme_cache)

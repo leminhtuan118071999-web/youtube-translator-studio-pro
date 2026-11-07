@@ -8,6 +8,28 @@ from v3 import projects
 
 
 class EditorUITests(unittest.TestCase):
+    def test_pixabay_keywords_persist_for_new_projects_and_keep_saved_project_keywords(self):
+        with tempfile.TemporaryDirectory() as folder, patch.dict(os.environ,LMT_V3_HOME=folder):
+            first=projects.create('First')
+            path=str(Path(__file__).parents[1]/'studio_app.py')
+            label='Từ khóa tìm video nền Pixabay'
+            app=AppTest.from_file(path,default_timeout=15).run()
+            keywords='forest sunlight, mountain lake\nautumn road'
+            next(t for t in app.text_area if t.label==label).set_value(keywords).run()
+            self.assertFalse(app.exception)
+            self.assertEqual(projects.story_defaults()['query'],keywords)
+            self.assertEqual(projects.read(projects.project_dir(first['id'])/'project.json')['story']['query'],keywords)
+
+            projects.create('Second')
+            reopened=AppTest.from_file(path,default_timeout=15).run()
+            self.assertFalse(reopened.exception)
+            self.assertEqual(next(t for t in reopened.text_area if t.label==label).value,keywords)
+            next(t for t in reopened.text_area if t.label==label).set_value('city rain').run()
+            next(b for b in reopened.button if b.label=='First').click().run()
+            self.assertFalse(reopened.exception)
+            self.assertEqual(next(t for t in reopened.text_area if t.label==label).value,keywords)
+            self.assertEqual(projects.story_defaults()['query'],'city rain')
+
     def test_story_options_autosave_and_survive_new_project_and_app_restart(self):
         with tempfile.TemporaryDirectory() as folder, patch.dict(os.environ,LMT_V3_HOME=folder):
             first=projects.create('First')
