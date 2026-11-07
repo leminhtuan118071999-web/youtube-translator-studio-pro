@@ -69,7 +69,7 @@ def available_name(name, exclude=None, unique_copy=False):
 
 OUTPUT_DEFAULTS = dict(aspect='16:9', resolution=720, fit='cover', transition='cut',
                        sync_voice=True, original_volume=0, music_volume=0.15,
-                       voice_volume=1.0, duck=True, font_size=48, subtitle_mode='words')
+                       voice_volume=1.0, duck=True, font_size=48, subtitle_mode='words', subscribe_sticker=False)
 
 
 def validate_output_defaults(settings):
@@ -80,7 +80,7 @@ def validate_output_defaults(settings):
         value = settings.get(key, result[key])
         if value not in options: raise ValueError('Cấu hình xuất không hợp lệ: '+key)
         result[key] = value
-    for key in ('sync_voice','duck'):
+    for key in ('sync_voice','duck','subscribe_sticker'):
         value = settings.get(key, result[key])
         if type(value) is not bool: raise ValueError('Cấu hình xuất không hợp lệ: '+key)
         result[key] = value
@@ -295,3 +295,4 @@ def import_bundle(directory):
         shutil.rmtree(target,ignore_errors=True)
         raise
     return project
+

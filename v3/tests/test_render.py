@@ -50,6 +50,26 @@ class RealRenderTests(unittest.TestCase):
         audio=subprocess.run(['ffmpeg','-v','error','-i',str(out/'output.mp4'),'-t','1','-f','s16le','-ac','1','pipe:1'],capture_output=True,check=True).stdout
         self.assertTrue(any(audio))
 
+    def test_subscribe_sticker_appears_only_in_last_three_seconds(self):
+        self.p['scenes'] = [dict(id='b', name='Blue', file='blue.mp4', duration=4)]
+        self.p['settings']['subscribe_sticker'] = True
+        self.p['subtitle_text'] = 'Phụ đề cùng video.'
+        out = self.folder/'subscribe-render'
+        render(self.p, self.folder, out, lambda *_: None)
+
+        def sample(at):
+            return subprocess.run(
+                ['ffmpeg', '-v', 'error', '-ss', str(at), '-i', str(out/'output.mp4'),
+                 '-vf', 'format=rgb24,crop=1:1:580:45', '-frames:v', '1',
+                 '-threads', '1', '-f', 'rawvideo', 'pipe:1'],
+                capture_output=True, check=True,
+            ).stdout
+
+        before, during = sample(.5), sample(2)
+        self.assertGreater(before[2], 180)
+        self.assertGreater(during[0], 150)
+        self.assertLess(during[2], 100)
+
     def test_real_word_highlight_render(self):
         from v3.speech import to_srt
         words=[dict(start=.2,end=.6,text=' Xin'),dict(start=.7,end=1.1,text=' chào.')]
@@ -157,3 +177,4 @@ class RealRenderTests(unittest.TestCase):
 
 
 if __name__=='__main__':unittest.main()
+

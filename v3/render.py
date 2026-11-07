@@ -166,6 +166,25 @@ def run_ffmpeg(args, folder, cancel, progress=None, duration=1):
     if cancel.exists(): raise Cancelled()
 
 
+def draw_subscribe_sticker(path, width, height):
+    from PIL import Image, ImageDraw, ImageFont
+
+    unit = min(width, height) / 720
+    badge = Image.new('RGBA', (round(220 * unit), round(56 * unit)))
+    draw = ImageDraw.Draw(badge)
+    draw.rounded_rectangle((0, 0, badge.width - 1, badge.height - 1),
+                           radius=round(12 * unit), fill='#cc1528')
+    draw.polygon([(round(x * unit), round(y * unit)) for x, y in
+                  ((20, 16), (20, 40), (41, 28))], fill='white')
+    try:
+        font = ImageFont.load_default(size=round(28 * unit))
+    except TypeError:  # Pillow versions before scalable default fonts.
+        font = ImageFont.load_default()
+    draw.text((round(130 * unit), badge.height // 2), 'Subscribe',
+              fill='white', font=font, anchor='mm')
+    badge.save(path)
+
+
 def render(project, assets_folder, output_folder, update):
     if not shutil.which('ffmpeg') or not shutil.which('ffprobe'):
         raise ValueError('Cần cài FFmpeg và ffprobe.')
@@ -214,6 +233,7 @@ def render(project, assets_folder, output_folder, update):
         if voice_name and cfg['duck']:
             filters.append('[music][side]sidechaincompress=threshold=0.03:ratio=8:attack=20:release=300[duck]');mix.append('[duck]')
         else: mix.append('[music]')
+        index += 1
     filters.append(''.join(mix)+f'amix=inputs={len(mix)}:duration=longest:normalize=0,alimiter=limit=0.95:latency=1[audio]')
     source_video='0:v'
     if story and project.get('overlay_image'):
@@ -224,6 +244,7 @@ def render(project, assets_folder, output_folder, update):
         filters.append(f'[{index}:v]scale={round(width*size/100)}:{round(height*.95)}:force_original_aspect_ratio=decrease,format=rgba[character]')
         filters.append(f'[0:v][character]overlay=x=(W-w)*{x/100}:y=(H-h)*{y/100}:shortest=1[composite]')
         source_video='composite'
+        index += 1
     subtitles=''
     if project.get('captions'):
         subtitles=validate_srt(asset(assets_folder,project['captions']).read_text(encoding='utf-8-sig'),total)
@@ -242,6 +263,19 @@ def render(project, assets_folder, output_folder, update):
             filters.append(f"[{source_video}]subtitles=captions.srt:force_style='PlayResX={width},PlayResY={height},FontName=Arial,FontSize={cfg['font_size']},Outline=2,Shadow=0,MarginV=40,MarginL=32,MarginR=32'[video]")
         video='[video]'
     else: video='[composite]' if source_video=='composite' else '0:v:0'
+    if cfg.get('subscribe_sticker', False):
+        sticker = output_folder/'subscribe.png'
+        draw_subscribe_sticker(sticker, width, height)
+        args += ['-i', sticker.name]
+        sticker_input = f'[{index}:v]'
+        base_video = video if video.startswith('[') else f'[{video}]'
+        start = max(0, total - 3)
+        margin = round(min(width, height) * .045)
+        filters.append(
+            f"{base_video}{sticker_input}overlay=x=W-w-{margin}:y={margin}:"
+            f"enable='gte(t,{start:.6f})'[with_subscribe]"
+        )
+        video = '[with_subscribe]'
     update(72,'Đang ghép âm thanh, phụ đề và xuất MP4')
     run_ffmpeg(args+['-filter_complex',';'.join(filters),'-map',video,'-map','[audio]','-t',str(total),'-r',str(FPS),*encode,'-movflags','+faststart','output.pending.mp4'],output_folder,cancel,
                lambda fraction:update(72+27*fraction,'Đang xuất MP4'),total)
