@@ -119,6 +119,26 @@ class StoryTests(unittest.TestCase):
             self.assertEqual(names,again);self.assertEqual(opener.open.call_count,1)
         self.assertEqual(projects.read(self.folder/'pixabay-downloads.json')['123']['file'],names[0])
 
+    def test_portrait_download_checks_actual_media(self):
+        portrait = self.assets/'portrait-source.mp4'
+        command('-f','lavfi','-i','color=blue:s=180x320:r=30','-t','0.4',
+                '-c:v','libx264','-threads','1',str(portrait))
+        response=MagicMock()
+        response.__enter__.return_value=response
+        response.geturl.return_value='https://cdn.pixabay.com/video/portrait.mp4'
+        response.read.side_effect=[portrait.read_bytes(),b'',(self.assets/'bg.mp4').read_bytes(),b'']
+        opener=MagicMock()
+        opener.open.return_value=response
+        hit=dict(id=201,width=1080,height=1920,url=response.geturl.return_value)
+        with patch('urllib.request.build_opener',return_value=opener):
+            files=pixabay.download(self.folder,[hit],self.folder/'cancel',lambda *a:None,ratio='9:16')
+            self.assertTrue(pixabay.matches_ratio(probe(self.assets/files[0]),'9:16'))
+            with self.assertRaisesRegex(ValueError,'không đúng tỷ lệ 9:16'):
+                pixabay.download(self.folder,[dict(hit,id=202)],self.folder/'cancel',lambda *a:None,ratio='9:16')
+        records=projects.read(self.folder/'pixabay-downloads.json')
+        self.assertEqual(records['201']['aspect'],'9:16')
+        self.assertNotIn('202',records)
+
     def test_automatic_pixabay_search_on_start_then_reuses_downloads(self):
         self.p['story'].update(backgrounds=[],auto_pixabay=True,query='forest')
         run=self.folder/'runs'/'automatic';run.mkdir(parents=True);projects.atomic(run/'snapshot.json',self.p)
@@ -146,7 +166,9 @@ class StoryTests(unittest.TestCase):
 class PixabayTests(unittest.TestCase):
     def test_cap_and_reuse_persist_across_retries(self):
         with tempfile.TemporaryDirectory() as tmp:
-            folder=Path(tmp);(folder/'assets').mkdir();(folder/'assets'/'existing.mp4').touch()
+            folder=Path(tmp);(folder/'assets').mkdir()
+            command('-f','lavfi','-i','color=blue:s=320x180:r=30','-t','0.2',
+                    '-c:v','libx264','-threads','1',str(folder/'assets'/'existing.mp4'))
             records={str(i):dict(file='existing.mp4') for i in range(15)};projects.atomic(folder/'pixabay-downloads.json',records)
             with patch('urllib.request.build_opener') as network:
                 self.assertEqual(pixabay.download(folder,[dict(id=1)],folder/'cancel',lambda *a:None),['existing.mp4'])

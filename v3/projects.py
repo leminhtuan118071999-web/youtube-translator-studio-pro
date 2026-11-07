@@ -105,7 +105,7 @@ def save_output_defaults(settings):
 
 STORY_DEFAULTS = dict(enabled=True, no_intro=False, remove_background=True, restore_missing=True, keep_attached_objects=True, auto_theme=True,
                       width=75, x=50, y=100, auto_subtitles=True,
-                      asr_model='small', auto_pixabay=True, export_include_assets=True, subscribe_corner=True)
+                      asr_model='small', auto_pixabay=True, export_include_assets=True, subscribe_corner=True, pixabay_aspect='16:9')
 
 
 def validate_story_defaults(settings):
@@ -114,6 +114,8 @@ def validate_story_defaults(settings):
         value = settings.get(key, default)
         if type(default) is bool:
             valid = type(value) is bool
+        elif key == 'pixabay_aspect':
+            valid = value in ('16:9', '9:16')
         elif key == 'asr_model':
             valid = value in ('small','base','tiny')
         else:

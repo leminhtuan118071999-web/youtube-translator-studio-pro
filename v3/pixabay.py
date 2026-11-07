@@ -17,11 +17,31 @@ LIMIT=15
 MAX_BYTES=500*1024*1024
 
 
-def is_widescreen(video):
-    """16:9 with at most one pixel of encoder rounding; never generic landscape."""
+RATIOS = ('16:9', '9:16')
+
+
+def matches_ratio(video, ratio='16:9'):
     width, height = video.get('width'), video.get('height')
-    return (type(width) is int and type(height) is int and width > height > 0
-            and abs(width * 9 - height * 16) <= 16)
+    if ratio not in RATIOS or type(width) is not int or type(height) is not int:
+        return False
+    long_side, short_side = (width, height) if ratio == '16:9' else (height, width)
+    return long_side > short_side > 0 and abs(long_side * 9 - short_side * 16) <= 16
+
+
+def is_widescreen(video):
+    return matches_ratio(video)
+
+
+def selection_path(folder, ratio):
+    if ratio not in RATIOS:
+        raise ValueError('Tỷ lệ video Pixabay không hợp lệ.')
+    filename = 'pixabay-selection.json' if ratio == '16:9' else 'pixabay-selection-9x16.json'
+    return Path(folder)/filename
+
+
+def ratio_records(records, ratio):
+    # Downloads from older V3 versions used landscape exclusively.
+    return {key: item for key, item in records.items() if item.get('aspect', '16:9') == ratio}
 
 
 def save_key(value):
@@ -36,14 +56,15 @@ def api_key():
     return read(path).get('key','') if path.exists() else ''
 
 
-def search(query, page=1):
+def search(query, page=1, *, ratio='16:9'):
+    if ratio not in RATIOS:raise ValueError('Tỷ lệ video Pixabay không hợp lệ.')
     query=query.strip()
     if not 1<=len(query)<=100:raise ValueError('Từ khóa Pixabay cần từ 1 đến 100 ký tự.')
     key=api_key()
     if not key:raise ValueError('Chưa lưu khóa Pixabay. Nhập khóa trong mục Cấu hình Pixabay.')
     cache=home()/'pixabay-cache';cache.mkdir(exist_ok=True)
-    filename=cache/(hashlib.sha256(('16x9-v1|'+query.casefold()+'|'+str(page)).encode()).hexdigest()+'.json')
-    if filename.exists() and time.time()-filename.stat().st_mtime<86400:return [h for h in read(filename)['hits'] if is_widescreen(h)]
+    filename=cache/(hashlib.sha256((ratio.replace(':','x')+'-v1|'+query.casefold()+'|'+str(page)).encode()).hexdigest()+'.json')
+    if filename.exists() and time.time()-filename.stat().st_mtime<86400:return [h for h in read(filename)['hits'] if matches_ratio(h, ratio)]
     url='https://pixabay.com/api/videos/?'+urlencode(dict(key=key,q=query,page=page,per_page=50,safesearch='true'))
     try:
         with urlopen(Request(url,headers={'User-Agent':'LMTStudioPro/3'}),timeout=25) as response:
@@ -55,9 +76,9 @@ def search(query, page=1):
     except (URLError,TimeoutError):raise ValueError('Chưa kết nối được Pixabay. Kiểm tra Internet và thử lại.') from None
     hits=[]
     for item in data.get('hits',[]):
-        choices=[v for v in item.get('videos',{}).values() if is_widescreen(v) and v.get('width',0)>=640 and v.get('size',MAX_BYTES+1)<=MAX_BYTES]
+        choices=[v for v in item.get('videos',{}).values() if matches_ratio(v, ratio) and max(v['width'], v['height'])>=640 and v.get('size',MAX_BYTES+1)<=MAX_BYTES]
         if not choices:continue
-        hd=[v for v in choices if v['width']>=1280]
+        hd=[v for v in choices if max(v['width'], v['height'])>=1280]
         video=min(hd or choices,key=lambda v:v.get('size',MAX_BYTES))
         hits.append(dict(id=int(item['id']),url=video['url'],width=video['width'],height=video['height'],
                          duration=item.get('duration',0),pageURL=item['pageURL'],user=item.get('user',''),tags=item.get('tags','')))
@@ -153,17 +174,17 @@ def diversity_queries(query):
                               and protected<=set(q.casefold().split())))[:7]
 
 
-def select_for_project(folder, query, preferred=None, cancel=None, update=lambda _:None):
+def select_for_project(folder, query, preferred=None, cancel=None, update=lambda _:None, *, ratio='16:9'):
     """Mix related queries within ten requests; reserve fresh IDs atomically."""
     folder = Path(folder)
-    reservation = folder/'pixabay-selection.json'
+    reservation = selection_path(folder, ratio)
     with (home()/'pixabay-history.lock').open('a') as lock:
         fcntl.flock(lock, fcntl.LOCK_EX)
         if reservation.exists():
             update('Dùng lại 15 video Pixabay đã chọn cho dự án này')
             hits = read(reservation)['hits']
-            if not all(is_widescreen(h) for h in hits):
-                raise ValueError('Bộ video cũ có video không phải 16:9 hoặc thiếu kích thước. Hãy tạo dự án mới để lấy bộ 15 video 16:9; nguyên liệu cũ vẫn được giữ.')
+            if not all(matches_ratio(h, ratio) for h in hits):
+                raise ValueError(f'Bộ video đã chọn không đúng tỷ lệ {ratio}. Hãy tìm lại trong dự án mới.')
             return hits
         history_file = home()/'pixabay-history.json'
         history = read(history_file) if history_file.exists() else {}
@@ -174,7 +195,7 @@ def select_for_project(folder, query, preferred=None, cancel=None, update=lambda
         chosen = []
         chosen_ids = set()
         def take(hit):
-            if not is_widescreen(hit): return False
+            if not matches_ratio(hit, ratio): return False
             key = str(int(hit['id']))
             if key in used or key in chosen_ids: return False
             chosen.append(hit); chosen_ids.add(key)
@@ -212,7 +233,7 @@ def select_for_project(folder, query, preferred=None, cancel=None, update=lambda
             i = pending.pop(0)
             term = queries[i]
             update(f'Tìm Pixabay {requests+1}/10 · {term} · đã chọn {len(chosen)}/15 video mới')
-            hits = search(term, page=pages[i])
+            hits = search(term, page=pages[i], ratio=ratio)
             pages[i] += 1; requests += 1
             if term not in searched: searched.append(term)
             if not hits: exhausted.add(i)
@@ -220,7 +241,7 @@ def select_for_project(folder, query, preferred=None, cancel=None, update=lambda
             rng.shuffle(fresh); pools[i].extend(fresh)
             if requests >= initial: fill()
         if len(chosen) < LIMIT:
-            raise ValueError(f'Chỉ còn {len(chosen)} video Pixabay mới theo từ khóa này; cần 15 video 16:9 không trùng phiên trước. Đã thử các chủ đề liên quan phù hợp; hãy nhập chủ đề rộng hơn rồi dựng lại.')
+            raise ValueError(f'Chỉ còn {len(chosen)} video Pixabay mới theo từ khóa này; cần 15 video {ratio} không trùng phiên trước. Đã thử các chủ đề liên quan phù hợp; hãy nhập chủ đề rộng hơn rồi dựng lại.')
         if cancel is not None and Path(cancel).exists(): raise Cancelled()
         rng.shuffle(chosen)
         for hit in chosen: history[str(hit['id'])] = folder.name
@@ -244,13 +265,14 @@ class CDNRedirect(__import__('urllib.request',fromlist=['HTTPRedirectHandler']).
         return super().redirect_request(req,fp,code,msg,headers,newurl)
 
 
-def download(folder, selected, cancel, update):
-    """Manifest counts successful distinct clips across every retry of this project."""
+def download(folder, selected, cancel, update, *, ratio='16:9'):
+    """Count distinct downloads per ratio and retain previous project assets."""
+    if ratio not in RATIOS:raise ValueError('Tỷ lệ video Pixabay không hợp lệ.')
     if len(selected)>LIMIT:raise ValueError('Mỗi dự án tối đa 15 video Pixabay.')
     folder=Path(folder);manifest=folder/'pixabay-downloads.json'
     records=read(manifest) if manifest.exists() else {}
-    if len(set(records)|{str(int(hit['id'])) for hit in selected})>LIMIT:
-        raise ValueError('Dự án đã đạt giới hạn 15 video Pixabay khác nhau. Hãy dùng lại video đã tải.')
+    if len(set(ratio_records(records, ratio))|{str(int(hit['id'])) for hit in selected})>LIMIT:
+        raise ValueError(f'Dự án đã đạt giới hạn 15 video Pixabay {ratio}. Hãy dùng lại video đã tải.')
     from urllib.request import build_opener
     opener=build_opener(CDNRedirect())
     result=[]
@@ -258,10 +280,19 @@ def download(folder, selected, cancel, update):
         if cancel.exists():raise Cancelled()
         key=str(int(hit['id']));existing=records.get(key)
         if existing:
-            try:asset(folder,existing['file']);result.append(existing['file']);continue
-            except ValueError:pass
-        if not is_widescreen(hit):
-            raise ValueError('Chỉ tải video Pixabay 16:9. Hãy tìm lại video hoặc tạo dự án mới.')
+            if existing.get('aspect', '16:9') != ratio:
+                raise ValueError('Video Pixabay này đã được tải ở tỷ lệ khác. Hãy chọn video khác.')
+            try:
+                path = asset(folder, existing['file'])
+            except ValueError:
+                pass
+            else:
+                if not matches_ratio(probe(path), ratio):
+                    raise ValueError(f'Video Pixabay đã lưu không đúng tỷ lệ {ratio}.')
+                result.append(existing['file'])
+                continue
+        if not matches_ratio(hit, ratio):
+            raise ValueError(f'Chỉ tải video Pixabay {ratio}. Hãy tìm lại video.')
         update(i/max(1,len(selected)),f'Đang tải video Pixabay {i+1}/{len(selected)}')
         url=safe_url(hit['url']);name=uuid4().hex+'.mp4';target=folder/'assets'/name;partial=target.with_suffix('.part')
         try:
@@ -276,9 +307,9 @@ def download(folder, selected, cancel, update):
                     dest.write(chunk)
             media=probe(partial)
             if not media['video']:raise ValueError('Tệp Pixabay không phải video hợp lệ.')
-            if not is_widescreen(media):raise ValueError('Video tải về không đúng tỷ lệ 16:9; không lưu vào dự án.')
+            if not matches_ratio(media, ratio):raise ValueError(f'Video tải về không đúng tỷ lệ {ratio}; không lưu vào dự án.')
             partial.replace(target)
-            records[key]=dict(file=name,pageURL=hit.get('pageURL',''),user=hit.get('user',''))
+            records[key]=dict(file=name,pageURL=hit.get('pageURL',''),user=hit.get('user',''),aspect=ratio)
             atomic(manifest,records);result.append(name)
         except (HTTPError,URLError,TimeoutError):raise ValueError('Chưa tải xong video Pixabay. Các video đã tải vẫn được giữ; có thể thử lại.') from None
         finally:

@@ -32,7 +32,7 @@ class SelectionTests(unittest.TestCase):
     def test_related_query_finds_new_videos_without_unrelated_fallback(self):
         with tempfile.TemporaryDirectory() as tmp, patch.dict(os.environ,LMT_V3_HOME=tmp):
             folder=projects.project_dir(projects.create('New')['id'])
-            def search(query, page=1):
+            def search(query, page=1, *, ratio='16:9'):
                 return [{'id':i,'width':1920,'height':1080} for i in range(15)] if query=='woodland sunlight' else []
             with patch.object(pixabay,'search',side_effect=search):
                 self.assertEqual(len(pixabay.select_for_project(folder,'forest sunlight')),15)
@@ -43,7 +43,7 @@ class SelectionTests(unittest.TestCase):
         with tempfile.TemporaryDirectory() as tmp, patch.dict(os.environ,LMT_V3_HOME=tmp):
             folder=projects.project_dir(projects.create('New')['id'])
             projects.atomic(projects.home()/'pixabay-history.json',{str(i):'old' for i in range(50)})
-            with patch.object(pixabay,'search',side_effect=lambda query,page=1: [{'id':i,'width':1920,'height':1080} for i in range(50)] if page==1 else [{'id':i,'width':1920,'height':1080} for i in range(50,100)]) as search:
+            with patch.object(pixabay,'search',side_effect=lambda query,page=1,**kwargs: [{'id':i,'width':1920,'height':1080} for i in range(50)] if page==1 else [{'id':i,'width':1920,'height':1080} for i in range(50,100)]) as search:
                 result=pixabay.select_for_project(folder,'forest')
                 self.assertLessEqual(search.call_count,10)
                 self.assertTrue(all(h['id']>=50 for h in result))
@@ -52,7 +52,7 @@ class SelectionTests(unittest.TestCase):
         with tempfile.TemporaryDirectory() as tmp, patch.dict(os.environ,LMT_V3_HOME=tmp):
             folder=projects.project_dir(projects.create('Mixed')['id'])
             queries=pixabay.diversity_queries('forest sunlight')[:3]
-            def search(term,page=1):
+            def search(term,page=1,*,ratio='16:9'):
                 start=queries.index(term)*100
                 return [dict(id=start+i,width=1920,height=1080,origin=term) for i in range(50)]
             updates=[]
@@ -108,9 +108,26 @@ class SelectionTests(unittest.TestCase):
             ])).encode()
             with patch.object(pixabay,'urlopen',return_value=response) as api:
                 first=pixabay.search('forest');second=pixabay.search('forest')
+                portrait=pixabay.search('forest',ratio='9:16')
+                self.assertEqual(portrait,pixabay.search('forest',ratio='9:16'))
             self.assertEqual([h['id'] for h in first],[1])
-            self.assertEqual(first,second);self.assertEqual(api.call_count,1)
+            self.assertEqual(first,second);self.assertEqual(api.call_count,2)
+            self.assertEqual([(h['width'], h['height']) for h in portrait],[(1080,1920)])
             self.assertEqual(first[0]['width'],1280)
+
+    def test_switching_ratio_keeps_separate_reservations_and_avoids_duplicate_ids(self):
+        with tempfile.TemporaryDirectory() as tmp, patch.dict(os.environ,LMT_V3_HOME=tmp):
+            folder=projects.project_dir(projects.create('Both ratios')['id'])
+            def search(query, page=1, *, ratio='16:9'):
+                width,height=(1920,1080) if ratio=='16:9' else (1080,1920)
+                return [dict(id=i,width=width,height=height) for i in range(40)]
+            with patch.object(pixabay,'search',side_effect=search):
+                landscape=pixabay.select_for_project(folder,'forest')
+                portrait=pixabay.select_for_project(folder,'forest',ratio='9:16')
+                self.assertEqual(pixabay.select_for_project(folder,'forest'),landscape)
+            self.assertEqual(len(portrait),15)
+            self.assertTrue(all(pixabay.matches_ratio(h,'9:16') for h in portrait))
+            self.assertFalse({h['id'] for h in landscape} & {h['id'] for h in portrait})
 
     def test_invalid_preferred_videos_cannot_be_reserved(self):
         with tempfile.TemporaryDirectory() as tmp, patch.dict(os.environ,LMT_V3_HOME=tmp):

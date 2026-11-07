@@ -181,23 +181,26 @@ def prepare(run):
     else:
         update(2, 'Bước 1/6 · Dựng video nền và giọng đọc')
     update(10,'Bước 2/6 · Chuẩn bị video nền')
-    from .pixabay import download,select_for_project
-    selected=cfg.get('pixabay_selected',[])
+    from .pixabay import download, select_for_project, selection_path, matches_ratio, ratio_records
+    ratio = cfg.get('pixabay_aspect', '16:9')
+    reservation = selection_path(folder, ratio)
+    selected = [hit for hit in cfg.get('pixabay_selected', []) if matches_ratio(hit, ratio)]
     if not cfg.get('backgrounds') and cfg.get('auto_pixabay',True):
         update(10,'Bước 2/6 · Đang chọn 15 video Pixabay mới, tránh trùng phiên trước')
         records=read(folder/'pixabay-downloads.json') if (folder/'pixabay-downloads.json').exists() else {}
-        if records and not (folder/'pixabay-selection.json').exists():
+        records = ratio_records(records, ratio)
+        if records and not reservation.exists() and not selected:
             # Preserve older projects that already downloaded their backgrounds.
             cfg['backgrounds']=[r['file'] for r in records.values()]
             selected=[]
         else:
             query=cfg.get('query','forest sunlight')
-            if not selected and not (folder/'pixabay-selection.json').exists():
+            if not selected and not reservation.exists():
                 from .thumbnail_theme import resolve_query
                 query=resolve_query(folder,cfg,cancel,lambda stage:update(10,stage))
             effective['story']['resolved_query']=query
-            selected=select_for_project(folder,query,selected,cancel,update=lambda stage:update(10,stage))
-    downloaded=download(folder,selected,cancel,lambda p,s:update(10+round(10*p),s))
+            selected=select_for_project(folder,query,selected,cancel,update=lambda stage:update(10,stage),ratio=ratio)
+    downloaded=download(folder,selected,cancel,lambda p,s:update(10+round(10*p),s),ratio=ratio)
     effective['story']['downloaded']=read(folder/'pixabay-downloads.json') if (folder/'pixabay-downloads.json').exists() else {}
     current=read(folder/'project.json');current['story']['downloaded']=effective['story']['downloaded'];save(current)
     backgrounds=list(dict.fromkeys(cfg.get('backgrounds',[])+downloaded))

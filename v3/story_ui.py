@@ -35,24 +35,31 @@ def panel(project,folder,locked,output_panel=None):
         choice=store.read(choice_cache)
         if choice.get('source_image')==cfg.get('image') and not choice.get('automatic'):
             st.warning('Chưa nhận diện rõ chủ đề; đang dùng từ khóa: '+choice.get('query',''))
+    ratio = st.selectbox('Tỷ lệ video tải từ Pixabay', pixabay.RATIOS,
+                         index=pixabay.RATIOS.index(prefs['pixabay_aspect']), disabled=locked,
+                         format_func=lambda value: '16:9 · Ngang' if value == '16:9' else '9:16 · Dọc')
+    hits_key = f'pixabay_hits_{pid}_{ratio}'
     if st.button('Tìm video trên Pixabay',disabled=locked,key='pixabay_search_'+pid):
         try:
-            with st.spinner('Đang tìm video trên Pixabay…'):st.session_state['pixabay_hits_'+pid]=pixabay.search(query)
+            with st.spinner('Đang tìm video trên Pixabay…'):st.session_state[hits_key]=pixabay.search(query, ratio=ratio)
         except (ValueError,OSError,json.JSONDecodeError) as exc:st.error(str(exc))
-    hits={str(h['id']):h for h in cfg.get('pixabay_selected',[])}
-    hits.update({str(h['id']):h for h in st.session_state.get('pixabay_hits_'+pid,[])})
+    hits={str(h['id']):h for h in cfg.get('pixabay_selected',[]) if pixabay.matches_ratio(h, ratio)}
+    hits.update({str(h['id']):h for h in st.session_state.get(hits_key,[])})
     records=store.read(folder/'pixabay-downloads.json') if (folder/'pixabay-downloads.json').exists() else cfg.get('downloaded',{})
-    st.caption(f'Đã tải {len(records)}/15 video Pixabay.')
-    selection_key='pixabay_selection_'+pid
+    ratio_downloads = pixabay.ratio_records(records, ratio)
+    hits = {key: hit for key, hit in hits.items() if key not in records or key in ratio_downloads}
+    st.caption(f'Đã tải {len(ratio_downloads)}/15 video Pixabay {ratio}.')
+    selection_key=f'pixabay_selection_{pid}_{ratio}'
     if st.session_state.pop('restore_story_selection_'+pid,False):
-        st.session_state[selection_key]=[str(h['id']) for h in cfg.get('pixabay_selected',[])]
-    if selection_key not in st.session_state:st.session_state[selection_key]=[str(h['id']) for h in cfg.get('pixabay_selected',[])]
+        st.session_state[selection_key]=[str(h['id']) for h in cfg.get('pixabay_selected',[]) if str(h['id']) in hits]
+    if selection_key not in st.session_state:st.session_state[selection_key]=[str(h['id']) for h in cfg.get('pixabay_selected',[]) if str(h['id']) in hits]
+    st.session_state[selection_key] = [key for key in st.session_state[selection_key] if key in hits]
     if hits and st.button('Tự chọn tối đa 15 video từ kết quả',disabled=locked,key='pixabay_auto_'+pid):
         chosen=[];new_count=0
         for key in hits:
             if len(chosen)>=15:break
-            if key in records:chosen.append(key)
-            elif len(records)+new_count<15:chosen.append(key);new_count+=1
+            if key in ratio_downloads:chosen.append(key)
+            elif key not in records and len(ratio_downloads)+new_count<15:chosen.append(key);new_count+=1
         st.session_state[selection_key]=chosen
     for hit in list(hits.values())[:6]:
         # Explicit source attribution, no autoplay/hotlink downloads.
@@ -86,8 +93,12 @@ def panel(project,folder,locked,output_panel=None):
             if cfg.get('intro'):st.caption('Đã có giọng mở đầu.')
         with b:
             videos=st.file_uploader('04 · Thêm nhiều video nền trên máy',type=['mp4','mov','mkv','webm'],accept_multiple_files=True,disabled=locked,key='story_backgrounds_'+pid)
-            existing=list(dict.fromkeys(cfg.get('backgrounds',[])+[r['file'] for r in records.values()]))
-            kept=st.multiselect('Video nền đã lưu muốn dùng',existing,default=cfg.get('backgrounds',[]),format_func=lambda n:cfg.get('background_names',{}).get(n,'Video đã tải · '+n[:8]),disabled=locked)
+            other_ratio_files = {r['file'] for key, r in records.items() if key not in ratio_downloads}
+            saved_backgrounds = [name for name in cfg.get('backgrounds', []) if name not in other_ratio_files]
+            existing = list(dict.fromkeys(saved_backgrounds + [r['file'] for r in ratio_downloads.values()]))
+            kept = st.multiselect('Video nền đã lưu muốn dùng', existing, default=saved_backgrounds,
+                                  format_func=lambda n:cfg.get('background_names',{}).get(n,'Video đã tải · '+n[:8]),
+                                  disabled=locked, key=f'pixabay_kept_{pid}_{ratio}')
             selected=st.multiselect('Chọn video Pixabay để tải khi dựng (tối đa 15)',list(hits),key=selection_key,format_func=lambda i:f"Pixabay {i} · {hits[i]['tags']} · {hits[i]['duration']} giây",max_selections=15,disabled=locked)
         if output_panel is not None:output_panel()
         with st.expander('**Cài đặt tùy chỉnh**',expanded=False):
@@ -102,9 +113,9 @@ def panel(project,folder,locked,output_panel=None):
             x=d.slider('Vị trí ngang · trái → phải',0,100,int(prefs['x']),disabled=locked)
             y=e.slider('Vị trí dọc · trên → dưới',0,100,int(prefs['y']),disabled=locked)
             model=st.selectbox('Model nhận diện cho video kể chuyện',['small','base','tiny'],index=['small','base','tiny'].index(prefs['asr_model']),disabled=locked)
-            auto_pixabay=st.checkbox('Tự tải 15 video Pixabay 16:9 mới · phối nhiều chủ đề liên quan · tránh trùng dự án trước',value=prefs['auto_pixabay'],disabled=locked)
+            auto_pixabay=st.checkbox('Tự tải 15 video Pixabay mới · phối nhiều chủ đề liên quan · tránh trùng dự án trước',value=prefs['auto_pixabay'],disabled=locked)
             preferences=dict(prefs,auto_theme=auto_theme,enabled=enabled,no_intro=no_intro,remove_background=remove,restore_missing=restore_missing,keep_attached_objects=keep_attached_objects,
-                             width=width,x=x,y=y,auto_subtitles=subtitles,asr_model=model,auto_pixabay=auto_pixabay,subscribe_corner=subscribe_corner)
+                             width=width,x=x,y=y,auto_subtitles=subtitles,asr_model=model,auto_pixabay=auto_pixabay,subscribe_corner=subscribe_corner,pixabay_aspect=ratio)
             if not locked and preferences != store.story_defaults():
                 store.save_story_defaults(preferences)
             def save_inputs():
@@ -120,10 +131,10 @@ def panel(project,folder,locked,output_panel=None):
                         raise ValueError('Ô giọng đọc chính chỉ nhận một file âm thanh và một file SRT.')
                     voice = next(iter(audio_files), None)
                     main_srt = next(iter(srt_files), None)
-                    new=dict(cfg,auto_theme=auto_theme,no_intro=no_intro,enabled=enabled,auto_pixabay=auto_pixabay,query=query,backgrounds=kept,pixabay_selected=[hits[i] for i in selected],remove_background=remove,restore_missing=restore_missing,keep_attached_objects=keep_attached_objects,
+                    new=dict(cfg,pixabay_aspect=ratio,auto_theme=auto_theme,no_intro=no_intro,enabled=enabled,auto_pixabay=auto_pixabay,query=query,backgrounds=kept,pixabay_selected=[hits[i] for i in selected],remove_background=remove,restore_missing=restore_missing,keep_attached_objects=keep_attached_objects,
                              width=width,x=x,y=y,auto_subtitles=subtitles,asr_model=model,subscribe_corner=subscribe_corner,
                              keep_boxes=[[float(row[k]) for k in ('Trái','Trên','Phải','Dưới')] for row in boxes])
-                    if len(set(records)|set(selected))>15:raise ValueError('Tổng số video Pixabay khác nhau của dự án vượt 15. Chọn lại video đã tải.')
+                    if len(set(ratio_downloads)|set(selected))>15:raise ValueError(f'Dự án đã đạt giới hạn 15 video Pixabay {ratio}. Chọn lại video đã tải.')
                     if photo:
                         stamp=store.signature_upload(photo)
                         if stamp!=cfg.get('image_upload'):
