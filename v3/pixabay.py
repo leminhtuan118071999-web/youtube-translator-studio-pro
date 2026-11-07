@@ -197,7 +197,7 @@ def diversity_queries(query):
 
 
 def select_for_project(folder, query, preferred=None, cancel=None, update=lambda _:None, *, ratio='16:9', allow_partial=False, excluded=()):
-    """Mix unrelated themes in automatic batches and reserve unused clip IDs."""
+    """Reserve unused clip IDs, mixing unrelated themes only for automatic portrait batches."""
     folder = Path(folder)
     reservation = selection_path(folder, ratio)
     with (home()/'pixabay-history.lock').open('a') as lock:
@@ -224,9 +224,10 @@ def select_for_project(folder, query, preferred=None, cancel=None, update=lambda
         for hit in preferred or []:
             if len(chosen) >= LIMIT: break
             take(hit)
+        mix_themes = allow_partial and ratio == '9:16'
         related = diversity_queries(query)
         queries = (list(dict.fromkeys(related[:1] + list(BACKGROUND_THEMES) + related[1:]))
-                   if allow_partial else related)
+                   if mix_themes else related)
         pools = [[] for _ in queries]
         pages = [1 for _ in queries]
         exhausted = set()
@@ -245,7 +246,7 @@ def select_for_project(folder, query, preferred=None, cancel=None, update=lambda
                     if len(chosen) >= LIMIT: break
                 if not added: break
         # Search several themes before taking any clips, even if one term has enough.
-        initial = min(5 if allow_partial else 3, len(queries))
+        initial = min(5 if mix_themes else 3, len(queries))
         pending = list(range(initial))
         while len(chosen) < LIMIT and requests < 10:
             if cancel is not None and Path(cancel).exists(): raise Cancelled()
@@ -262,7 +263,7 @@ def select_for_project(folder, query, preferred=None, cancel=None, update=lambda
             fresh = [h for h in hits if str(int(h['id'])) not in used]
             rng.shuffle(fresh); pools[i].extend(fresh)
             if requests >= initial: fill(pools)
-        if allow_partial and len(chosen) < LIMIT:
+        if mix_themes and len(chosen) < LIMIT:
             remaining_terms = [term for term in queries if term not in searched]
             for start in range(0, len(remaining_terms), 3):
                 fallback_pools = []

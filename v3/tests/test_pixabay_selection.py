@@ -92,6 +92,20 @@ class SelectionTests(unittest.TestCase):
             self.assertEqual({term: sum(hit['theme'] == term for hit in result) for term in terms},
                              dict.fromkeys(terms, 4))
 
+    def test_automatic_landscape_stays_on_related_topics_when_batch_is_short(self):
+        with tempfile.TemporaryDirectory() as tmp, patch.dict(os.environ, LMT_V3_HOME=tmp):
+            folder = projects.project_dir(projects.create('Landscape topic')['id'])
+            related = pixabay.diversity_queries('forest sunlight')
+            def search(term, page=1, *, ratio='16:9'):
+                self.assertIn(term, related)
+                self.assertEqual(ratio, '16:9')
+                if term == 'forest sunlight' and page == 1:
+                    return [dict(id=1, width=1920, height=1080)]
+                return []
+            with patch.object(pixabay, 'search', side_effect=search):
+                result = pixabay.select_for_project(folder, 'forest sunlight', allow_partial=True)
+            self.assertEqual([hit['id'] for hit in result], [1])
+
     def test_related_query_finds_new_videos_without_unrelated_fallback(self):
         with tempfile.TemporaryDirectory() as tmp, patch.dict(os.environ,LMT_V3_HOME=tmp):
             folder=projects.project_dir(projects.create('New')['id'])
