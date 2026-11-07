@@ -109,7 +109,10 @@ class StoryTests(unittest.TestCase):
         self.assertTrue(any(r > 170 and g > 170 and b < 100
                             for r,g,b in zip(frame[::3],frame[1::3],frame[2::3])))
 
-    def test_provided_main_srt_preserves_text_and_offsets_after_intro(self):
+    def test_provided_main_srt_preserves_text_offsets_after_intro_and_renders_yellow(self):
+        import subprocess
+        from v3.render import render
+
         (self.assets/'voice.srt').write_text(
             '1\n00:00:00,100 --> 00:00:00,600\nCiao, Ánna!\n', encoding='utf-8')
         self.p['story'].update(main_srt='voice.srt', main_srt_voice='main.wav', auto_subtitles=True)
@@ -127,6 +130,15 @@ class StoryTests(unittest.TestCase):
         self.assertNotIn('Chào.', text)
         self.assertIn('00:00:00,500 --> 00:00:01,000\nCiao, Ánna!', text)
         self.assertIn('voice.srt', projects.referenced_assets(result))
+
+        render(result, self.folder, run, lambda *_: None)
+        frame = subprocess.run(
+            ['ffmpeg', '-v', 'error', '-ss', '0.6', '-i', str(run/'output.mp4'),
+             '-frames:v', '1', '-pix_fmt', 'rgb24', '-threads', '1', '-f', 'rawvideo', 'pipe:1'],
+            capture_output=True, check=True,
+        ).stdout
+        self.assertTrue(any(r > 170 and g > 170 and b < 100
+                            for r, g, b in zip(frame[::3], frame[1::3], frame[2::3])))
 
     def test_subtitles_offset_and_cached_preparation(self):
         self.p['story']['auto_subtitles']=True

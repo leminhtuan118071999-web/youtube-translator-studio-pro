@@ -347,15 +347,19 @@ def render(project, assets_folder, output_folder, update):
             data=json.loads(asset(assets_folder,project['caption_words']).read_text(encoding='utf8'))
             if data.get('source_voice')!=voice_name:
                 raise ValueError('Phụ đề nhận diện thuộc file giọng đọc khác. Hãy nhận diện lại.')
-        if data is not None and not portrait_layout:
+        highlight_words = cfg.get('subtitle_mode', 'words') == 'words'
+        if data is not None and not portrait_layout and (highlight_words or not story):
             from .speech import to_ass
-            ass=to_ass(data,total,width,height,cfg['font_size'],cfg.get('subtitle_mode','words')=='words')
+            ass=to_ass(data,total,width,height,cfg['font_size'],highlight_words)
             (output_folder/'captions.ass').write_text(ass,encoding='utf8')
             filters.append(f'[{source_video}]subtitles=captions.ass[video]')
         else:
             style = f"PlayResX={width},PlayResY={height},FontName=Arial,FontSize={cfg['font_size']},Shadow=0,MarginL=32,MarginR=32"
-            style += (f',PrimaryColour=&H0000FFFF,OutlineColour=&H00000000,Bold=-1,Outline=3,MarginV={round(height*.12)}'
-                      if portrait_layout else ',Outline=2,MarginV=40')
+            if story:
+                style += ',PrimaryColour=&H0000FFFF,OutlineColour=&H00000000,Bold=-1,Outline=3'
+            else:
+                style += ',Outline=2'
+            style += f',MarginV={round(height*.12) if portrait_layout else 40}'
             filters.append(f"[{source_video}]subtitles=captions.srt:force_style='{style}'[video]")
         video='[video]'
     else: video='[composite]' if source_video=='composite' else '0:v:0'
