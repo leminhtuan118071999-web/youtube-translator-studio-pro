@@ -38,7 +38,7 @@ class EditorUITests(unittest.TestCase):
             self.assertEqual(projects.listing()[0]['name'],'Video thử nghiệm')
             self.assertEqual([tab.label for tab in app.tabs],['05 · Dựng kiểu video mẫu'])
             expanders=[e.label for e in app.expander]
-            self.assertLess(expanders.index('Cấu hình xuất video'),expanders.index('Cài đặt tùy chỉnh'))
+            self.assertLess(expanders.index('**Cấu hình xuất video**'),expanders.index('**Cài đặt tùy chỉnh**'))
             self.assertTrue(any(t.label=='Nơi lưu' for t in app.tabs[0].text_input))
             self.assertTrue(any(b.label=='🎬 Bắt đầu dựng MP4' for b in app.tabs[0].button))
             self.assertTrue(any(t.label=='05 · Dựng kiểu video mẫu' for t in app.tabs))

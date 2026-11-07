@@ -158,7 +158,7 @@ try:
     export_settings={}
     def output_panel():
         cfg=project['settings'] if locked else store.output_defaults()
-        with st.expander('Cấu hình xuất video',expanded=False):
+        with st.expander('**Cấu hình xuất video**',expanded=False):
             a,b=st.columns(2)
             with a:
                 aspect=st.selectbox('Khung hình',['9:16','16:9','1:1'],index=['9:16','16:9','1:1'].index(cfg['aspect']),disabled=locked)

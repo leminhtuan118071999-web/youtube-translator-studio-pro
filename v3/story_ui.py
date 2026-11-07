@@ -13,7 +13,7 @@ def panel(project,folder,locked,output_panel=None):
     pid=project['id'];cfg=project.get('story',{})
     prefs=dict(store.STORY_DEFAULTS, **cfg) if locked else store.story_defaults()
     st.subheader('Ảnh nhân vật trên video nền · như video mẫu')
-    with st.expander('Cấu hình Pixabay · chỉ lưu khóa trên máy này'):
+    with st.expander('**Cấu hình Pixabay** · chỉ lưu khóa trên máy này'):
         st.link_button('Lấy khóa API trên Pixabay','https://pixabay.com/api/docs/')
         st.caption('Đã lưu khóa trên máy.' if pixabay.api_key() else 'Chưa lưu khóa.')
         with st.form('pixabay_key_'+pid,clear_on_submit=True):
@@ -78,7 +78,7 @@ def panel(project,folder,locked,output_panel=None):
             kept=st.multiselect('Video nền đã lưu muốn dùng',existing,default=cfg.get('backgrounds',[]),format_func=lambda n:cfg.get('background_names',{}).get(n,'Video đã tải · '+n[:8]),disabled=locked)
             selected=st.multiselect('Chọn video Pixabay để tải khi dựng (tối đa 15)',list(hits),key=selection_key,format_func=lambda i:f"Pixabay {i} · {hits[i]['tags']} · {hits[i]['duration']} giây",max_selections=15,disabled=locked)
         if output_panel is not None:output_panel()
-        with st.expander('Cài đặt tùy chỉnh',expanded=False):
+        with st.expander('**Cài đặt tùy chỉnh**',expanded=False):
             remove=st.checkbox('Tự động xóa nền ảnh',value=prefs['remove_background'],disabled=locked)
             restore_missing=st.checkbox('Tự khôi phục phần nhân vật bị xóa nhầm',value=prefs['restore_missing'],disabled=locked or not remove)
             keep_attached_objects=st.checkbox('Giữ đồ vật nhân vật đang cầm, đeo hoặc ôm',value=prefs['keep_attached_objects'],disabled=locked or not remove)
