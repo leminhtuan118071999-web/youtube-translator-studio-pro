@@ -14,6 +14,7 @@ import time
 from .projects import asset, IMAGES, STORY_DEFAULTS
 
 FPS = 30
+EXPORT_STALL_SECONDS = 180
 NO_WINDOW = 0x08000000 if os.name == "nt" else 0
 
 
@@ -143,7 +144,7 @@ def validate_srt(text,duration, *, offset=0):
     return '\n'.join(out)
 
 
-def run_ffmpeg(args, folder, cancel, progress=None, duration=1):
+def run_ffmpeg(args, folder, cancel, progress=None, duration=1, *, watch_output=None):
     if cancel.exists(): raise Cancelled()
     base=['ffmpeg','-hide_banner','-loglevel','error','-nostdin','-y','-filter_threads','1','-filter_complex_threads','1']
     with (folder/'ffmpeg.log').open('a') as log:
@@ -152,15 +153,36 @@ def run_ffmpeg(args, folder, cancel, progress=None, duration=1):
         def read_progress():
             for line in process.stdout: messages.put(line.strip())
         reader=threading.Thread(target=read_progress,daemon=True);reader.start()
+        last_activity = time.monotonic()
+        next_file_check = last_activity
+        last_position = 0.0
+        last_write = None
         try:
             while process.poll() is None:
                 if cancel.exists(): raise Cancelled()
                 try: line=messages.get(timeout=.2)
-                except queue.Empty: continue
-                if line:
-                    if progress and line.startswith('out_time_us='):
-                        try: progress(min(1,float(line.split('=')[1])/1e6/duration))
-                        except ValueError: pass
+                except queue.Empty: line=''
+                if progress and line.startswith('out_time_us='):
+                    try: position = float(line.partition('=')[2]) / 1e6
+                    except ValueError: position = 0.0
+                    if position > last_position:
+                        last_position = position
+                        last_activity = time.monotonic()
+                        progress(min(1, position / duration))
+                if watch_output is not None and time.monotonic() >= next_file_check:
+                    now = time.monotonic()
+                    next_file_check = now + 1
+                    try:
+                        stat = watch_output.stat()
+                        write = (stat.st_size, stat.st_mtime_ns)
+                    except FileNotFoundError:
+                        write = None
+                    if write != last_write:
+                        last_write = write
+                        last_activity = now
+                    if now - last_activity >= EXPORT_STALL_SECONDS and process.poll() is None:
+                        raise RuntimeError('FFmpeg đã dừng tiến độ và không ghi thêm vào MP4 trong 3 phút. '
+                                           'Dự án đã lưu. Bạn có thể dựng lại.')
             if process.returncode:
                 tail=(folder/'ffmpeg.log').read_text(errors='replace')[-2500:]
                 raise RuntimeError('FFmpeg chưa dựng được video. Chi tiết: '+tail)
@@ -252,8 +274,18 @@ def render(project, assets_folder, output_folder, update):
             video_filters = ['-map','0:v:0','-vf',vf+tail]
         run_ffmpeg(args+video_filters+['-map',audio,'-af',f'aresample=48000,apad,atrim=duration={seconds},asetpts=PTS-STARTPTS','-t',str(seconds),*encode,f'scene-{i:04}.mp4'],output_folder,cancel)
     concat=''.join(f"file 'scene-{i:04}.mp4'\nduration {d:.9f}\n" for i,d in enumerate(durations))
+    if story:
+        # Repeat the normalized scene sequence without seeking an infinite concat input.
+        cycle_frames = sum(round(seconds * FPS) for seconds in durations)
+        concat *= (math.ceil(total * FPS) + cycle_frames - 1) // cycle_frames
     (output_folder/'scenes.txt').write_text(concat)
-    args=(['-stream_loop','-1'] if story else [])+['-f','concat','-safe','1','-i','scenes.txt']; filters=[f'[0:a]volume={cfg["original_volume"]}[base]'];mix=['[base]'];index=1
+    args = ['-f','concat','-safe','1','-i','scenes.txt']
+    filters = []
+    mix = []
+    if not (story and voice_name and cfg['original_volume'] == 0):
+        filters.append(f'[0:a]volume={cfg["original_volume"]}[base]')
+        mix.append('[base]')
+    index = 1
     if voice_name:
         args+=['-i',str(asset(assets_folder,voice_name))]
         filters.append(f'[{index}:a]aresample=48000,apad,atrim=duration={total},asetpts=PTS-STARTPTS,volume={cfg["voice_volume"]}[voice]');index+=1
@@ -327,12 +359,13 @@ def render(project, assets_folder, output_folder, update):
         )
         video = '[with_subscribe]'
     update(72,'Đang ghép âm thanh, phụ đề và xuất MP4')
+    pending = output_folder/'output.pending.mp4'
     run_ffmpeg(args+['-filter_complex',';'.join(filters),'-map',video,'-map','[audio]','-t',str(total),'-r',str(FPS),*encode,'-movflags','+faststart','output.pending.mp4'],output_folder,cancel,
-               lambda fraction:update(72+27*fraction,'Đang xuất MP4'),total)
-    result=probe(output_folder/'output.pending.mp4')
+               lambda fraction:update(72+27*fraction,'Đang xuất MP4'),total,watch_output=pending)
+    result=probe(pending)
     if not result['video'] or not result['audio'] or abs(result['duration']-total)>.3:
         raise ValueError('Video xuất chưa đạt kiểm tra thời lượng/âm thanh.')
-    (output_folder/'output.pending.mp4').replace(output_folder/'output.mp4')
+    pending.replace(output_folder/'output.mp4')
     update(100,'Hoàn thành và đã lưu MP4')
     return dict(duration=total,width=width,height=height,scenes=len(durations))
 

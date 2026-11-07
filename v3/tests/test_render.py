@@ -3,12 +3,13 @@ import json
 import os
 from pathlib import Path
 import subprocess
+import sys
 import tempfile
 import time
 import unittest
 from unittest.mock import patch
 from v3 import projects
-from v3.render import plan, render, probe, validate_srt, estimated_srt, Cancelled
+from v3.render import plan, render, probe, validate_srt, estimated_srt, run_ffmpeg, Cancelled
 from v3.render_worker import launch, current
 
 
@@ -110,6 +111,23 @@ class RealRenderTests(unittest.TestCase):
         out=self.folder/'cancelled';out.mkdir();(out/'cancel').touch()
         with self.assertRaises(Cancelled):render(self.p,self.folder,out,lambda *a:None)
         self.assertFalse((out/'output.mp4').exists())
+
+    def test_stalled_export_stops_the_ffmpeg_process(self):
+        out = self.folder/'stalled'
+        out.mkdir()
+        popen = subprocess.Popen
+        processes = []
+
+        def stalled_process(_args, **kwargs):
+            process = popen([sys.executable, '-c', 'import time; time.sleep(30)'], **kwargs)
+            processes.append(process)
+            return process
+
+        with patch('v3.render.subprocess.Popen', side_effect=stalled_process), \
+                patch('v3.render.EXPORT_STALL_SECONDS', 0):
+            with self.assertRaisesRegex(RuntimeError, 'FFmpeg đã dừng tiến độ'):
+                run_ffmpeg([], out, out/'cancel', watch_output=out/'output.pending.mp4')
+        self.assertIsNotNone(processes[0].poll())
 
     def test_detached_job_uses_snapshot_and_can_cancel_while_waiting(self):
         # Hold global renderer lock to keep the detached child predictably queued.
