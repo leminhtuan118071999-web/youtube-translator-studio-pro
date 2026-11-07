@@ -50,29 +50,31 @@ class RealRenderTests(unittest.TestCase):
         audio=subprocess.run(['ffmpeg','-v','error','-i',str(out/'output.mp4'),'-t','1','-f','s16le','-ac','1','pipe:1'],capture_output=True,check=True).stdout
         self.assertTrue(any(audio))
 
-    def test_subscribe_sticker_defaults_to_top_left_throughout_and_can_be_disabled(self):
-        self.p['scenes'] = [dict(id='b', name='Blue', file='blue.mp4', duration=4)]
+    def test_subscribe_grows_in_center_then_moves_to_corner_and_can_be_disabled(self):
+        self.p['scenes'] = [dict(id='b', name='Blue', file='blue.mp4', duration=6)]
         self.p['subtitle_text'] = 'Phụ đề cùng video.'
         out = self.folder/'subscribe-render'
         render(self.p, self.folder, out, lambda *_: None)
 
-        def sample(at):
+        def sample(at, x, y):
             return subprocess.run(
                 ['ffmpeg', '-v', 'error', '-ss', str(at), '-i', str(out/'output.mp4'),
-                 '-vf', 'format=rgb24,crop=1:1:70:29', '-frames:v', '1',
+                 '-vf', f'format=rgb24,crop=1:1:{x}:{y}', '-frames:v', '1',
                  '-threads', '1', '-f', 'rawvideo', 'pipe:1'],
                 capture_output=True, check=True,
             ).stdout
 
-        for at in (.1, 2, 3.8):
-            pixel = sample(at)
-            self.assertGreater(pixel[0], 150)
-            self.assertLess(pixel[2], 100)
+        # The growing sticker covers this pixel near the center only later.
+        self.assertGreater(sample(.1, 255, 625)[2], 180)
+        self.assertGreater(sample(4.8, 255, 625)[0], 150)
+        self.assertGreater(sample(4.8, 70, 29)[2], 180)
+        self.assertGreater(sample(5.7, 255, 625)[2], 180)
+        self.assertGreater(sample(5.7, 70, 29)[0], 150)
 
         self.p['story'] = dict(subscribe_corner=False)
         out = self.folder/'subscribe-disabled'
         render(self.p, self.folder, out, lambda *_: None)
-        self.assertGreater(sample(2)[2], 180)
+        self.assertGreater(sample(5.7, 70, 29)[2], 180)
 
     def test_real_word_highlight_render(self):
         from v3.speech import to_srt

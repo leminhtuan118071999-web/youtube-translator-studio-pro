@@ -75,7 +75,7 @@ def panel(project,folder,locked,output_panel=None):
         if output_panel is not None:output_panel()
         with st.expander('Cài đặt tùy chỉnh',expanded=False):
             subscribe_corner = st.checkbox(
-                'Hiện nhãn Subscribe ở góc trên bên trái',
+                'Hiện hiệu ứng Subscribe rồi thu về góc trên bên trái',
                 value=prefs['subscribe_corner'], disabled=locked,
             )
             remove=st.checkbox('Tự động xóa nền ảnh',value=prefs['remove_background'],disabled=locked)

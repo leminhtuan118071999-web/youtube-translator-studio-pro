@@ -169,7 +169,7 @@ def run_ffmpeg(args, folder, cancel, progress=None, duration=1):
 def draw_subscribe_sticker(path, width, height):
     from PIL import Image, ImageDraw, ImageFont
 
-    unit = min(width, height) / 720 * .68
+    unit = min(width, height) / 720 * 1.12
     badge = Image.new('RGBA', (round(220 * unit), round(56 * unit)))
     draw = ImageDraw.Draw(badge)
     draw.rounded_rectangle((0, 0, badge.width - 1, badge.height - 1),
@@ -266,11 +266,26 @@ def render(project, assets_folder, output_folder, update):
     if project.get('story', {}).get('subscribe_corner', STORY_DEFAULTS['subscribe_corner']):
         sticker = output_folder/'subscribe.png'
         draw_subscribe_sticker(sticker, width, height)
-        args += ['-i', sticker.name]
-        sticker_input = f'[{index}:v]'
         base_video = video if video.startswith('[') else f'[{video}]'
         margin = round(min(width, height) * .025)
-        filters.append(f'{base_video}{sticker_input}overlay=x={margin}:y={margin}[with_subscribe]')
+        # Leave room for the move and the corner badge even on short videos.
+        move_duration = min(.4, total / 4)
+        intro_duration = min(5, total - 2 * move_duration)
+        # After the move, overlay repeats the last frame of the small badge.
+        sticker_duration = intro_duration + move_duration + 2 / FPS
+        args += ['-loop', '1', '-framerate', str(FPS), '-t', f'{sticker_duration:.6f}', '-i', sticker.name]
+        growth = f'min(1,max(0,t/{intro_duration:.6f}))'
+        move = f'min(1,max(0,(t-{intro_duration:.6f})/{move_duration:.6f}))'
+        corner_scale = .68 / 1.12
+        scale = f'(.55+.45*{growth})*(1-{move})+{corner_scale:.6f}*{move}'
+        filters.append(
+            f"[{index}:v]scale=w='2*round(iw*({scale})/2)':h=-2:eval=frame[subscribe]"
+        )
+        filters.append(
+            f"{base_video}[subscribe]overlay="
+            f"x='(W-w)/2*(1-{move})+{margin}*{move}':"
+            f"y='(H-h)/2*(1-{move})+{margin}*{move}'[with_subscribe]"
+        )
         video = '[with_subscribe]'
     update(72,'Đang ghép âm thanh, phụ đề và xuất MP4')
     run_ffmpeg(args+['-filter_complex',';'.join(filters),'-map',video,'-map','[audio]','-t',str(total),'-r',str(FPS),*encode,'-movflags','+faststart','output.pending.mp4'],output_folder,cancel,
