@@ -82,18 +82,14 @@ class StoryTests(unittest.TestCase):
         run.mkdir(parents=True)
         projects.atomic(run/'snapshot.json', self.p)
 
-        def recognize_intro(subrun, report=None):
-            self.assertEqual(projects.read(subrun/'snapshot.json')['voice'], 'intro.wav')
-            projects.atomic(subrun/'words.json', dict(words=[dict(start=.05, end=.2, text=' Chào.')]))
-
-        with patch('v3.speech.transcribe', side_effect=recognize_intro) as recognize:
+        with patch('v3.speech.transcribe') as recognize:
             prepare(run)
             prepare(run)
-            recognize.assert_called_once()
+            recognize.assert_not_called()
         result = projects.read(run/'render-project.json')
         self.assertIsNone(result['caption_words'])
         text = (self.assets/result['captions']).read_text(encoding='utf-8')
-        self.assertIn('00:00:00,050 --> 00:00:00,200\nChào.', text)
+        self.assertNotIn('Chào.', text)
         self.assertIn('00:00:00,500 --> 00:00:01,000\nCiao, Ánna!', text)
         self.assertIn('voice.srt', projects.referenced_assets(result))
 
@@ -101,13 +97,13 @@ class StoryTests(unittest.TestCase):
         self.p['story']['auto_subtitles']=True
         run=self.folder/'runs'/'prepare';run.mkdir(parents=True);projects.atomic(run/'snapshot.json',self.p)
         def fake_transcribe(subrun,report=None):
-            p=projects.read(subrun/'snapshot.json');language='vi' if p['voice']=='intro.wav' else 'it'
-            projects.atomic(subrun/'words.json',dict(language=language,words=[dict(start=.05,end=.2,text=' Chào.' if language=='vi' else ' Ciao.')]))
+            self.assertEqual(projects.read(subrun/'snapshot.json')['voice'], 'main.wav')
+            projects.atomic(subrun/'words.json',dict(language='it',words=[dict(start=.05,end=.2,text=' Ciao.')]))
         with patch('v3.speech.transcribe',side_effect=fake_transcribe) as recognize:
             prepare(run);prepared=projects.read(run/'render-project.json');data=projects.read(self.assets/prepared['caption_words'])
-            self.assertEqual(data['language'],'vi+it');self.assertEqual(data['words'][1]['start'],.45)
-            self.assertEqual(recognize.call_count,2)
-            prepare(run);self.assertEqual(recognize.call_count,2)
+            self.assertEqual(data['language'],'it');self.assertEqual([w['start'] for w in data['words']],[.45])
+            self.assertEqual(recognize.call_count,1)
+            prepare(run);self.assertEqual(recognize.call_count,1)
         self.assertEqual(len(layout_preview(dict(prepared,story=dict(prepared['story'],backgrounds=['bg.mp4'])),self.folder))>100,True)
 
     def test_download_validates_media_and_reuses_file(self):

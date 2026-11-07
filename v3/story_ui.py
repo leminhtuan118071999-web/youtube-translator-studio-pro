@@ -80,7 +80,8 @@ def panel(project,folder,locked,output_panel=None):
                 'Hiệu ứng',
                 value=prefs['subscribe_corner'], disabled=locked,
             )
-            subtitles=st.checkbox('Tạo phụ đề',value=prefs['auto_subtitles'],disabled=locked)
+            subtitles=st.checkbox('Tạo phụ đề',value=prefs['auto_subtitles'],disabled=locked,
+                                  help='Tự nhận diện giọng chính nếu chưa có SRT. Phần mở đầu không có phụ đề tự động.')
             st.caption('Đã có giọng chính.' if project.get('voice') else 'Chưa có giọng chính.')
             if cfg.get('intro'):st.caption('Đã có giọng mở đầu.')
         with b:
