@@ -47,8 +47,42 @@ CUTOUT_VERSION = 'birefnet-attached-details-v3'
 
 
 def cutout_signature(config):
-    return signature(dict(version=CUTOUT_VERSION, **{k:config.get(k) for k in
-        ('image','remove_background','restore_missing','keep_attached_objects','keep_boxes')}))
+    inputs = {key: config.get(key) for key in
+              ('image','remove_background','restore_missing','keep_attached_objects','keep_boxes')}
+    if config.get('image_edge_softness', 'off') != 'off':
+        inputs['image_edge_softness'] = config['image_edge_softness']
+    return signature(dict(version=CUTOUT_VERSION, **inputs))
+
+
+def soften_image_edge(image, level):
+    """Fade the frame or the cutout contour by changing only its alpha."""
+    from PIL import Image, ImageChops, ImageFilter
+
+    strength = {'light': .02, 'medium': .045, 'strong': .08}.get(level)
+    if strength is None:
+        return
+    alpha = image.getchannel('A')
+    width, height = image.size
+    short_side = min(width, height)
+    if alpha.getextrema() == (255, 255):
+        feather = max(1, round(short_side * strength))
+
+        def edge_strip(length):
+            if length < 3:
+                return Image.new('L', (length, 1), 255)
+            strip = Image.new('L', (length, 1))
+            strip.putdata([min(255, round(255 * min(i, length - 1 - i) / feather))
+                           for i in range(length)])
+            return strip
+
+        horizontal = edge_strip(width).resize(image.size, Image.Resampling.NEAREST)
+        vertical = edge_strip(height).transpose(Image.Transpose.TRANSPOSE)
+        softened = ImageChops.darker(horizontal, vertical.resize(image.size, Image.Resampling.NEAREST))
+    else:
+        # Keep the contour feather narrower than the rectangular frame fade.
+        radius = max(.5, min(12, short_side * strength * .12))
+        softened = ImageChops.darker(alpha, alpha.filter(ImageFilter.GaussianBlur(radius)))
+    image.putalpha(softened)
 
 
 def attached_details(candidate,person):
@@ -147,6 +181,8 @@ def cutout(folder,config):
         result.paste(original.crop(bounds),bounds[:2])
     bbox=result.getchannel('A').getbbox()
     if bbox is None:raise ValueError('Ảnh tách nền bị rỗng. Hãy dùng PNG đã tách nền hoặc chỉnh vùng giữ thêm.')
+    # Use the full mask before cropping so the contour sees adjacent transparency.
+    soften_image_edge(result, config.get('image_edge_softness', 'off'))
     result=result.crop(bbox)
     name=uuid4().hex+'.png';result.save(Path(folder)/'assets'/name)
     return name
@@ -371,7 +407,8 @@ def preview_cutout(run):
     run=Path(run);project=read(run/'snapshot.json');folder=project_dir(project['id'])
     cfg=project['story'];cache_path=folder/'story-cache.json';cache=read(cache_path) if cache_path.exists() else {}
     sig=cutout_signature(cfg)
-    atomic(run/'status.json',dict(state='running',task='cutout',progress=5,stage='Đang tách nền ảnh; lần đầu tải model',updated=time.time()))
+    stage = 'Đang tách nền ảnh; lần đầu tải model' if cfg.get('remove_background', True) else 'Đang chuẩn bị ảnh xem trước'
+    atomic(run/'status.json',dict(state='running',task='cutout',progress=5,stage=stage,updated=time.time()))
     image=cutout(folder,cfg)
     cache['cutout']=dict(signature=sig,file=image);atomic(cache_path,cache)
     current=read(folder/'project.json');current.setdefault('story',{})['cutout']=image;save(current)

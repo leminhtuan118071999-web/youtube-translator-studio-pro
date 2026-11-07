@@ -103,7 +103,9 @@ def save_output_defaults(settings):
     atomic(home()/'output-defaults.json', validate_output_defaults(settings))
 
 
+IMAGE_EDGE_LEVELS = ('off', 'light', 'medium', 'strong')
 STORY_DEFAULTS = dict(enabled=True, remove_background=True, restore_missing=True, keep_attached_objects=True, auto_theme=True,
+                      image_edge_softness='off', snow_overlay=False,
                       width=75, x=50, y=100, auto_subtitles=True,
                       asr_model='small', auto_pixabay=True, export_include_assets=True, subscribe_corner=True,
                       pixabay_aspect='16:9', query='forest sunlight')
@@ -119,6 +121,8 @@ def validate_story_defaults(settings):
             valid = value in ('16:9', '9:16')
         elif key == 'asr_model':
             valid = value in ('small','base','tiny')
+        elif key == 'image_edge_softness':
+            valid = value in IMAGE_EDGE_LEVELS
         elif key == 'query':
             valid = isinstance(value, str) and len(value) <= 600
         else:

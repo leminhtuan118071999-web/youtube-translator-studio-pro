@@ -235,6 +235,40 @@ def draw_subscribe_sticker(path, width, height):
     return badge.width
 
 
+def add_snow_filters(filters, source, folder, width, height):
+    """Scroll two sparse, transparent snow layers continuously over the video."""
+    from random import Random
+    from PIL import Image, ImageDraw
+
+    rng = Random(27)
+    scale = min(width, height) / 720
+    density = width * height / (1280 * 720 * scale ** 2)
+    for layer, count, radius, opacity, dx, dy in (
+        (0, 47, (.65, 1.55), (58, 136), 20, 30),
+        (1, 24, (1.2, 2.7), (104, 190), 38, 57),
+    ):
+        filename = f'snow-{layer}.png'
+        # Keep snow sparse and soften the edges of each dot before compositing.
+        mask = Image.new('L', (width * 2, height * 2))
+        draw = ImageDraw.Draw(mask)
+        for _ in range(round(count * density)):
+            x = rng.randrange(6, mask.width - 6)
+            y = rng.randrange(6, mask.height - 6)
+            r = rng.uniform(*radius) * scale * 2
+            draw.ellipse((x-r, y-r, x+r, y+r), fill=rng.randint(*opacity))
+        snow = Image.new('RGBA', (width, height), (247, 251, 255, 255))
+        snow.putalpha(mask.resize(snow.size, Image.Resampling.LANCZOS))
+        snow.save(folder/filename)
+        filters.append(
+            f'movie={filename},loop=loop=-1:size=1:start=0,settb=1/{FPS},setpts=N,'
+            f'format=yuva444p,scroll=h={-dx * scale / (FPS * width):.9f}:'
+            f'v={-dy * scale / (FPS * height):.9f}[snow{layer}]'
+        )
+        filters.append(f'[{source}][snow{layer}]overlay=shortest=1[snowed{layer}]')
+        source = f'snowed{layer}'
+    return source
+
+
 def render(project, assets_folder, output_folder, update):
     if not shutil.which('ffmpeg') or not shutil.which('ffprobe'):
         raise ValueError('Cần cài FFmpeg và ffprobe.')
@@ -336,6 +370,8 @@ def render(project, assets_folder, output_folder, update):
         filters.append(f'[0:v][character]overlay=x=(W-w)*{x/100}:y=(H-h)*{y/100}:eof_action=repeat[composite]')
         source_video='composite'
         index += 1
+    if project.get('story', {}).get('snow_overlay', False):
+        source_video = add_snow_filters(filters, source_video, output_folder, width, height)
     subtitles=''
     if project.get('captions'):
         subtitles=validate_srt(asset(assets_folder,project['captions']).read_text(encoding='utf-8-sig'),total)
@@ -362,7 +398,7 @@ def render(project, assets_folder, output_folder, update):
             style += f',MarginV={round(height*.12) if portrait_layout else 40}'
             filters.append(f"[{source_video}]subtitles=captions.srt:force_style='{style}'[video]")
         video='[video]'
-    else: video='[composite]' if source_video=='composite' else '0:v:0'
+    else: video=f'[{source_video}]' if source_video!='0:v' else '0:v:0'
     if project.get('story', {}).get('subscribe_corner', STORY_DEFAULTS['subscribe_corner']):
         sticker = output_folder/'subscribe.png'
         sticker_width = draw_subscribe_sticker(sticker, width, height)

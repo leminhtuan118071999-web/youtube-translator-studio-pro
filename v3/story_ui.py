@@ -116,6 +116,17 @@ def panel(project,folder,locked,output_panel=None):
         if output_panel is not None:output_panel(enabled and ratio == '9:16')
         with st.expander('**Cài đặt tùy chỉnh**',expanded=False):
             remove=st.checkbox('Tự động xóa nền ảnh',value=prefs['remove_background'],disabled=locked)
+            edge_labels = dict(off='Tắt', light='Nhẹ', medium='Vừa', strong='Mạnh')
+            image_edge_softness = st.selectbox(
+                'Làm mềm viền ảnh', store.IMAGE_EDGE_LEVELS,
+                index=store.IMAGE_EDGE_LEVELS.index(prefs['image_edge_softness']),
+                format_func=edge_labels.__getitem__, disabled=locked,
+                help='Làm mờ dần mép khung ảnh hoặc đường cắt của ảnh đã tách nền.',
+            )
+            snow_overlay = st.checkbox(
+                'Tuyết bay chéo nhẹ · toàn video', value=prefs['snow_overlay'], disabled=locked,
+                help='Thêm hạt tuyết nhỏ bay chéo liên tục qua các cảnh.',
+            )
             restore_missing=st.checkbox('Tự khôi phục phần nhân vật bị xóa nhầm',value=prefs['restore_missing'],disabled=locked or not remove)
             keep_attached_objects=st.checkbox('Giữ đồ vật nhân vật đang cầm, đeo hoặc ôm',value=prefs['keep_attached_objects'],disabled=locked or not remove)
             with st.container():
@@ -129,6 +140,7 @@ def panel(project,folder,locked,output_panel=None):
             auto_pixabay=st.checkbox(f'Tự tải {pixabay.LIMIT} video Pixabay mới · tránh trùng dự án trước',value=prefs['auto_pixabay'],disabled=locked,
                                      help='9:16 trộn các chủ đề khác nhau. 16:9 tìm theo từ khóa và chủ đề liên quan.')
             preferences=dict(prefs,auto_theme=auto_theme,enabled=enabled,remove_background=remove,restore_missing=restore_missing,keep_attached_objects=keep_attached_objects,
+                             image_edge_softness=image_edge_softness,snow_overlay=snow_overlay,
                              width=width,x=x,y=y,auto_subtitles=subtitles,asr_model=model,auto_pixabay=auto_pixabay,subscribe_corner=subscribe_corner,pixabay_aspect=ratio)
             if not locked and preferences != store.story_defaults():
                 store.save_story_defaults(preferences)
@@ -146,6 +158,7 @@ def panel(project,folder,locked,output_panel=None):
                     voice = next(iter(audio_files), None)
                     main_srt = next(iter(srt_files), None)
                     new=dict(cfg,pixabay_aspect=ratio,auto_theme=auto_theme,enabled=enabled,auto_pixabay=auto_pixabay,query=query,backgrounds=kept,pixabay_selected=[hits[i] for i in selected],remove_background=remove,restore_missing=restore_missing,keep_attached_objects=keep_attached_objects,
+                             image_edge_softness=image_edge_softness,snow_overlay=snow_overlay,
                              width=width,x=x,y=y,auto_subtitles=subtitles,asr_model=model,subscribe_corner=subscribe_corner,
                              keep_boxes=[[float(row[k]) for k in ('Trái','Trên','Phải','Dưới')] for row in boxes])
                     if len(set(ratio_downloads)|set(selected))>pixabay.LIMIT:raise ValueError(f'Dự án đã đạt giới hạn {pixabay.LIMIT} video Pixabay {ratio}. Chọn lại video đã tải.')
@@ -204,8 +217,9 @@ def panel(project,folder,locked,output_panel=None):
                     except (ValueError,OSError,RuntimeError):st.error('Chưa tải hoặc chạy được model nhận diện ảnh. Kiểm tra mạng hoặc nhập từ khóa thủ công.')
             if st.button('Lưu nguyên liệu và bố cục kể chuyện',disabled=locked):
                 if save_inputs():st.rerun()
-    if cfg.get('image'):
-        if st.button('Tách nền để xem trước',disabled=locked,key='story_cutout_'+pid):
+    if cfg.get('image') or photo:
+        preview_label = 'Tách nền để xem trước' if remove and image_edge_softness == 'off' else 'Chuẩn bị ảnh xem trước'
+        if st.button(preview_label,disabled=locked,key='story_cutout_'+pid):
             if save_inputs():launch(project,'cutout');st.rerun()
     @st.fragment(run_every=2)
     def preview_status():
@@ -219,7 +233,7 @@ def panel(project,folder,locked,output_panel=None):
                 st.session_state['cutout_seen_'+status['run_id']]=True;st.rerun()
     preview_status()
     if cfg.get('cutout'):
-        st.image(str(store.asset(folder,cfg['cutout'])),caption='Ảnh đã tách nền',width=350)
+        st.image(str(store.asset(folder,cfg['cutout'])),caption='Ảnh ghép đã chuẩn bị',width=350)
         if st.button('Xem thử bố cục trên nền',disabled=locked,key='story_preview_'+pid):
             try:
                 from .story import layout_preview
