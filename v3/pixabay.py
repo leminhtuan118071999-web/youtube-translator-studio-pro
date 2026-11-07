@@ -194,7 +194,7 @@ def diversity_queries(query):
 
 
 def select_for_project(folder, query, preferred=None, cancel=None, update=lambda _:None, *, ratio='16:9', allow_partial=False, excluded=()):
-    """Mix related queries and try neutral backgrounds if an automatic batch is empty."""
+    """Mix related queries and top up automatic batches from other background themes."""
     folder = Path(folder)
     reservation = selection_path(folder, ratio)
     with (home()/'pixabay-history.lock').open('a') as lock:
@@ -228,11 +228,11 @@ def select_for_project(folder, query, preferred=None, cancel=None, update=lambda
         searched = []
         requests = 0
         rng = random.SystemRandom()
-        def fill():
+        def fill(candidate_pools):
             # Round-robin selection avoids letting the first query take all slots.
             while len(chosen) < LIMIT:
                 added = False
-                for pool in pools:
+                for pool in candidate_pools:
                     while pool:
                         if take(pool.pop()):
                             added = True
@@ -257,23 +257,24 @@ def select_for_project(folder, query, preferred=None, cancel=None, update=lambda
             if not hits: exhausted.add(i)
             fresh = [h for h in hits if str(int(h['id'])) not in used]
             rng.shuffle(fresh); pools[i].extend(fresh)
-            if requests >= initial: fill()
-        if allow_partial and not chosen:
-            # Only broaden beyond the theme when no related clip can be used.
-            for term in ('nature landscape', 'cloudy sky', 'flowing water', 'leaves in wind'):
-                if cancel is not None and Path(cancel).exists():
-                    raise Cancelled()
-                if term in searched:
-                    continue
-                update(f'Chưa có video đúng tỷ lệ {ratio} · thử nền dự phòng: {term}')
-                hits = list(search(term, ratio=ratio))
-                searched.append(term)
-                requests += 1
-                rng.shuffle(hits)
-                for hit in hits:
-                    take(hit)
-                    if len(chosen) >= LIMIT:
-                        break
+            if requests >= initial: fill(pools)
+        if allow_partial and len(chosen) < LIMIT:
+            fallback_terms = ('nature landscape', 'cloudy sky', 'flowing water',
+                              'leaves in wind', 'mountain landscape', 'ocean waves',
+                              'countryside', 'garden flowers', 'city skyline')
+            remaining_terms = [term for term in fallback_terms if term not in searched]
+            for start in range(0, len(remaining_terms), 3):
+                fallback_pools = []
+                for term in remaining_terms[start:start + 3]:
+                    if cancel is not None and Path(cancel).exists():
+                        raise Cancelled()
+                    update(f'Tìm thêm nền Pixabay {ratio} · {term} · đã chọn {len(chosen)}/{LIMIT}')
+                    hits = list(search(term, ratio=ratio))
+                    searched.append(term)
+                    requests += 1
+                    rng.shuffle(hits)
+                    fallback_pools.append(hits)
+                fill(fallback_pools)
                 if len(chosen) >= LIMIT:
                     break
         if len(chosen) < LIMIT and not allow_partial:
@@ -284,7 +285,7 @@ def select_for_project(folder, query, preferred=None, cancel=None, update=lambda
         # History first: a crash can reserve unused IDs but never duplicate them.
         atomic(history_file, history)
         atomic(reservation, dict(query=query, searched_queries=searched, search_requests=requests, hits=chosen))
-        update(f'Đã chọn {len(chosen)}/{LIMIT} video Pixabay từ {len(searched)} từ khóa liên quan')
+        update(f'Đã chọn {len(chosen)}/{LIMIT} video Pixabay qua {len(searched)} từ khóa')
         return chosen
 
 

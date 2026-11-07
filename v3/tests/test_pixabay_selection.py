@@ -54,6 +54,26 @@ class SelectionTests(unittest.TestCase):
                     folder, 'forest sunlight', ratio='9:16', allow_partial=True, excluded={'4'})
             self.assertEqual([hit['id'] for hit in selected], [3])
 
+    def test_automatic_batch_tops_up_from_multiple_other_themes(self):
+        with tempfile.TemporaryDirectory() as tmp, patch.dict(os.environ, LMT_V3_HOME=tmp):
+            folder = projects.project_dir(projects.create('Mixed fallback')['id'])
+            fallback = ('nature landscape', 'cloudy sky', 'flowing water')
+            def search(term, page=1, *, ratio='16:9'):
+                self.assertEqual(ratio, '9:16')
+                if term == 'forest sunlight' and page == 1:
+                    return [dict(id=1, width=1080, height=1920, theme=term)]
+                if term not in fallback:
+                    return []
+                start = (fallback.index(term) + 1) * 100
+                return [dict(id=i, width=1080, height=1920, theme=term)
+                        for i in range(start, start + 20)]
+            with patch.object(pixabay, 'search', side_effect=search):
+                result = pixabay.select_for_project(folder, 'forest sunlight',
+                                                     ratio='9:16', allow_partial=True)
+            self.assertEqual(len(result), pixabay.LIMIT)
+            self.assertEqual({hit['theme'] for hit in result}, {'forest sunlight', *fallback})
+            self.assertEqual(len({hit['id'] for hit in result}), pixabay.LIMIT)
+
     def test_related_query_finds_new_videos_without_unrelated_fallback(self):
         with tempfile.TemporaryDirectory() as tmp, patch.dict(os.environ,LMT_V3_HOME=tmp):
             folder=projects.project_dir(projects.create('New')['id'])
