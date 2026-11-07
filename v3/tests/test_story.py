@@ -74,6 +74,41 @@ class StoryTests(unittest.TestCase):
         self.assertTrue(media['audio'] and media['video'])
         self.assertAlmostEqual(media['duration'], .8, delta=.1)
 
+    def test_portrait_pixabay_mode_exports_landscape_with_blurred_sides(self):
+        import subprocess
+        from v3.render import render
+
+        command('-f','lavfi','-i','color=blue:s=180x320:r=30','-t','0.5',
+                '-vf','drawbox=x=0:y=160:w=180:h=160:c=lime:t=fill',
+                '-c:v','libx264','-threads','1',str(self.assets/'portrait.mp4'))
+        self.p['story'].update(pixabay_aspect='9:16', backgrounds=['portrait.mp4'], subscribe_corner=False)
+        self.p['story'].pop('image')
+        self.p['settings']['aspect'] = '9:16'
+        self.p['subtitle_text'] = 'Phụ đề màu vàng.'
+        run = self.folder/'runs'/'portrait-layout'
+        run.mkdir(parents=True)
+        projects.atomic(run/'snapshot.json', self.p)
+        prepare(run)
+        effective = projects.read(run/'render-project.json')
+        self.assertEqual(effective['settings']['aspect'], '16:9')
+        details = render(effective, self.folder, run, lambda *_: None)
+        self.assertEqual((details['width'], details['height']), (1280, 720))
+        frame = subprocess.run(
+            ['ffmpeg','-v','error','-ss','0.2','-i',str(run/'output.mp4'),
+             '-frames:v','1','-pix_fmt','rgb24','-threads','1','-f','rawvideo','pipe:1'],
+            capture_output=True, check=True,
+        ).stdout
+        def pixel(x,y):
+            index = (y * 1280 + x) * 3
+            return frame[index:index+3]
+        self.assertGreater(pixel(640, 325)[2], 200)
+        self.assertGreater(pixel(640, 395)[1], 200)
+        _, green, blue = pixel(90, 325)
+        self.assertGreater(green, 25)
+        self.assertGreater(blue, 25)
+        self.assertTrue(any(r > 170 and g > 170 and b < 100
+                            for r,g,b in zip(frame[::3],frame[1::3],frame[2::3])))
+
     def test_provided_main_srt_preserves_text_and_offsets_after_intro(self):
         (self.assets/'voice.srt').write_text(
             '1\n00:00:00,100 --> 00:00:00,600\nCiao, Ánna!\n', encoding='utf-8')

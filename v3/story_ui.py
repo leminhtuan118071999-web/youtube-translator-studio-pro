@@ -38,6 +38,8 @@ def panel(project,folder,locked,output_panel=None):
     ratio = st.selectbox('Tỷ lệ video tải từ Pixabay', pixabay.RATIOS,
                          index=pixabay.RATIOS.index(prefs['pixabay_aspect']), disabled=locked,
                          format_func=lambda value: '16:9 · Ngang' if value == '16:9' else '9:16 · Dọc')
+    if ratio == '9:16':
+        st.caption('Xuất video 16:9 với clip dọc ở giữa và nền mờ hai bên.')
     hits_key = f'pixabay_hits_{pid}_{ratio}'
     if st.button('Tìm video trên Pixabay',disabled=locked,key='pixabay_search_'+pid):
         try:
@@ -100,7 +102,7 @@ def panel(project,folder,locked,output_panel=None):
                                   format_func=lambda n:cfg.get('background_names',{}).get(n,'Video đã tải · '+n[:8]),
                                   disabled=locked, key=f'pixabay_kept_{pid}_{ratio}')
             selected=st.multiselect('Chọn video Pixabay để tải khi dựng (tối đa 15)',list(hits),key=selection_key,format_func=lambda i:f"Pixabay {i} · {hits[i]['tags']} · {hits[i]['duration']} giây",max_selections=15,disabled=locked)
-        if output_panel is not None:output_panel()
+        if output_panel is not None:output_panel(enabled and ratio == '9:16')
         with st.expander('**Cài đặt tùy chỉnh**',expanded=False):
             remove=st.checkbox('Tự động xóa nền ảnh',value=prefs['remove_background'],disabled=locked)
             restore_missing=st.checkbox('Tự khôi phục phần nhân vật bị xóa nhầm',value=prefs['restore_missing'],disabled=locked or not remove)

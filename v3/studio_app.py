@@ -156,12 +156,12 @@ if locked:st.info('Dự án đang xử lý · cấu hình đã khóa.')
 story_tab,=st.tabs(['05 · Dựng kiểu video mẫu'])
 try:
     export_settings={}
-    def output_panel():
+    def output_panel(portrait_layout=False):
         cfg=project['settings'] if locked else store.output_defaults()
         with st.expander('**Cấu hình xuất video**',expanded=False):
             a,b=st.columns(2)
             with a:
-                aspect=st.selectbox('Khung hình',['9:16','16:9','1:1'],index=['9:16','16:9','1:1'].index(cfg['aspect']),disabled=locked)
+                aspect=st.selectbox('Khung hình',['9:16','16:9','1:1'],index=['9:16','16:9','1:1'].index('16:9' if portrait_layout else cfg['aspect']),disabled=locked or portrait_layout)
                 resolution=st.selectbox('Độ phân giải',[1080,720],index=[1080,720].index(cfg['resolution']),disabled=locked)
                 fit=st.selectbox('Căn hình',['contain','cover'],index=['contain','cover'].index(cfg['fit']),format_func=lambda v:'Giữ toàn bộ · viền đen' if v=='contain' else 'Lấp đầy · cắt phần thừa',disabled=locked)
                 transition=st.selectbox('Chuyển cảnh',['cut','fade'],index=['cut','fade'].index(cfg['transition']),format_func=lambda v:'Cắt thẳng' if v=='cut' else 'Mờ qua đen',disabled=locked)
@@ -173,7 +173,7 @@ try:
                 duck=st.checkbox('Tự hạ nhạc khi có lời đọc',value=cfg['duck'],disabled=locked)
                 font=st.slider('Cỡ chữ phụ đề',16,64,cfg['font_size'],disabled=locked)
                 subtitle_mode=st.selectbox('Cách hiện phụ đề nhận diện',['words','sentence'],index=0 if cfg.get('subtitle_mode','words')=='words' else 1,format_func=lambda value:'Tô sáng từng từ đang đọc' if value=='words' else 'Theo cụm lời · không tô từng từ',disabled=locked)
-            current_settings=dict(aspect=aspect,resolution=resolution,fit=fit,transition=transition,sync_voice=sync,original_volume=original/100,music_volume=music/100,voice_volume=voice/100,duck=duck,font_size=font,subtitle_mode=subtitle_mode)
+            current_settings=dict(aspect=cfg['aspect'] if portrait_layout else aspect,resolution=resolution,fit=fit,transition=transition,sync_voice=sync,original_volume=original/100,music_volume=music/100,voice_volume=voice/100,duck=duck,font_size=font,subtitle_mode=subtitle_mode)
             export_settings.update(current_settings)
             if not locked and current_settings != store.output_defaults():
                 store.save_output_defaults(current_settings)

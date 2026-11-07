@@ -8,7 +8,7 @@ import sys
 import time
 from uuid import uuid4
 from .projects import home, project_dir, asset, read, atomic, save
-from .render import probe, run_ffmpeg, validate_srt, Cancelled
+from .render import probe, run_ffmpeg, validate_srt, portrait_blur_filter, Cancelled
 
 
 def signature(value):return hashlib.sha256(json.dumps(value,sort_keys=True,ensure_ascii=False).encode()).hexdigest()
@@ -225,6 +225,8 @@ def prepare(run):
         remember('voice',sig,joined)
     effective.update(voice_track=joined,scenes=scenes,overlay_image=png)
     effective['settings'].update(sync_voice=True,original_volume=0,fit='cover')
+    if ratio == '9:16':
+        effective['settings']['aspect'] = '16:9'
     def intro_offset():
         intro = cfg.get('intro')
         if not intro:
@@ -288,11 +290,24 @@ def layout_preview(project,folder):
     import io
     import subprocess
     from PIL import Image, ImageOps
-    cfg=project['story'];backgrounds=cfg.get('backgrounds',[])+[r['file'] for r in cfg.get('downloaded',{}).values()]
+    from .pixabay import ratio_records
+    cfg = project['story']
+    ratio = cfg.get('pixabay_aspect', '16:9')
+    downloads = ratio_records(cfg.get('downloaded', {}), ratio)
+    backgrounds = cfg.get('backgrounds', []) + [r['file'] for r in downloads.values()]
     if not backgrounds:raise ValueError('Thêm video nền trên máy hoặc dựng một lần để tải video Pixabay trước khi xem bố cục.')
-    info=project['settings'];short=480
-    width,height={'9:16':(short,round(short*16/9)),'16:9':(round(short*16/9),short),'1:1':(short,short)}[info['aspect']]
-    command=['ffmpeg','-v','error','-i',str(asset(folder,backgrounds[0])),'-vf',f'scale={width}:{height}:force_original_aspect_ratio=increase,crop={width}:{height}',
+    short = 480
+    portrait_layout = ratio == '9:16'
+    aspect = '16:9' if portrait_layout else project['settings']['aspect']
+    width,height={'9:16':(short,round(short*16/9)),'16:9':(round(short*16/9),short),'1:1':(short,short)}[aspect]
+    source = asset(folder, backgrounds[0])
+    media = probe(source)
+    if portrait_layout and 0 < media['width'] < media['height']:
+        width += width % 2
+        filters = ['-filter_complex', portrait_blur_filter(width, height), '-map', '[framed]']
+    else:
+        filters = ['-vf', f'scale={width}:{height}:force_original_aspect_ratio=increase,crop={width}:{height}']
+    command=['ffmpeg','-v','error','-i',str(source),*filters,
              '-frames:v','1','-threads','1','-f','image2pipe','-vcodec','png','pipe:1']
     result=subprocess.run(command,capture_output=True,timeout=30)
     if result.returncode:raise ValueError('Chưa đọc được video nền để xem trước.')

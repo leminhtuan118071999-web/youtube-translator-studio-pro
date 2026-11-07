@@ -166,6 +166,18 @@ def run_ffmpeg(args, folder, cancel, progress=None, duration=1):
     if cancel.exists(): raise Cancelled()
 
 
+def portrait_blur_filter(width, height, tail=''):
+    # Blur at lower resolution, then expand the background behind the sharp clip.
+    small_width, small_height = max(2, width//8*2), max(2, height//8*2)
+    return (
+        f'[0:v]split[blur_src][sharp_src];'
+        f'[blur_src]scale={small_width}:{small_height}:force_original_aspect_ratio=increase:force_divisible_by=2,'
+        f'crop={small_width}:{small_height},gblur=sigma=12,scale={width}:{height},setsar=1[blur];'
+        f'[sharp_src]scale={width}:{height}:force_original_aspect_ratio=decrease:force_divisible_by=2,setsar=1[sharp];'
+        f'[blur][sharp]overlay=(W-w)/2:(H-h)/2{tail}[framed]'
+    )
+
+
 def draw_subscribe_sticker(path, width, height):
     from PIL import Image, ImageDraw, ImageFont
 
@@ -192,6 +204,7 @@ def render(project, assets_folder, output_folder, update):
     cancel=output_folder/'cancel'
     durations=plan(project,assets_folder); total=sum(durations); cfg=project['settings']
     story=project.get('story',{}).get('enabled',False)
+    portrait_layout = story and project['story'].get('pixabay_aspect') == '9:16'
     voice_name=(project.get('voice_track') if story else None) or project.get('voice')
     if story:total=probe(asset(assets_folder,voice_name))['duration']
     if project.get('captions') or project.get('subtitle_text','').strip():
@@ -214,10 +227,15 @@ def render(project, assets_folder, output_folder, update):
         else: audio='0:a:0'
         vf=f'fps={FPS},scale={width}:{height}:force_original_aspect_ratio='+('increase' if cfg['fit']=='cover' else 'decrease')
         vf+=f',crop={width}:{height}' if cfg['fit']=='cover' else f',pad={width}:{height}:(ow-iw)/2:(oh-ih)/2:color=black'
-        vf+=',setsar=1,setpts=PTS-STARTPTS'
+        tail=',setsar=1,setpts=PTS-STARTPTS'
         if cfg['transition']=='fade':
-            fade=min(.25,seconds/3);vf+=f',fade=t=in:st=0:d={fade},fade=t=out:st={seconds-fade}:d={fade}'
-        run_ffmpeg(args+['-map','0:v:0','-map',audio,'-vf',vf,'-af',f'aresample=48000,apad,atrim=duration={seconds},asetpts=PTS-STARTPTS','-t',str(seconds),*encode,f'scene-{i:04}.mp4'],output_folder,cancel)
+            fade=min(.25,seconds/3);tail+=f',fade=t=in:st=0:d={fade},fade=t=out:st={seconds-fade}:d={fade}'
+        if portrait_layout and 0 < media['width'] < media['height']:
+            video_filters = ['-filter_complex', portrait_blur_filter(width, height, f',fps={FPS}'+tail),
+                             '-map', '[framed]']
+        else:
+            video_filters = ['-map','0:v:0','-vf',vf+tail]
+        run_ffmpeg(args+video_filters+['-map',audio,'-af',f'aresample=48000,apad,atrim=duration={seconds},asetpts=PTS-STARTPTS','-t',str(seconds),*encode,f'scene-{i:04}.mp4'],output_folder,cancel)
     concat=''.join(f"file 'scene-{i:04}.mp4'\nduration {d:.9f}\n" for i,d in enumerate(durations))
     (output_folder/'scenes.txt').write_text(concat)
     args=(['-stream_loop','-1'] if story else [])+['-f','concat','-safe','1','-i','scenes.txt']; filters=[f'[0:a]volume={cfg["original_volume"]}[base]'];mix=['[base]'];index=1
@@ -251,16 +269,21 @@ def render(project, assets_folder, output_folder, update):
     elif project.get('subtitle_text','').strip(): subtitles=estimated_srt(project['subtitle_text'],total)
     if subtitles:
         (output_folder/'captions.srt').write_text(subtitles,encoding='utf8')
+        data = None
         if project.get('caption_words') and project.get('captions_origin')=='asr':
-            from .speech import to_ass
             data=json.loads(asset(assets_folder,project['caption_words']).read_text(encoding='utf8'))
             if data.get('source_voice')!=voice_name:
                 raise ValueError('Phụ đề nhận diện thuộc file giọng đọc khác. Hãy nhận diện lại.')
+        if data is not None and not portrait_layout:
+            from .speech import to_ass
             ass=to_ass(data,total,width,height,cfg['font_size'],cfg.get('subtitle_mode','words')=='words')
             (output_folder/'captions.ass').write_text(ass,encoding='utf8')
             filters.append(f'[{source_video}]subtitles=captions.ass[video]')
         else:
-            filters.append(f"[{source_video}]subtitles=captions.srt:force_style='PlayResX={width},PlayResY={height},FontName=Arial,FontSize={cfg['font_size']},Outline=2,Shadow=0,MarginV=40,MarginL=32,MarginR=32'[video]")
+            style = f"PlayResX={width},PlayResY={height},FontName=Arial,FontSize={cfg['font_size']},Shadow=0,MarginL=32,MarginR=32"
+            style += (f',PrimaryColour=&H0000FFFF,OutlineColour=&H00000000,Bold=-1,Outline=3,MarginV={round(height*.12)}'
+                      if portrait_layout else ',Outline=2,MarginV=40')
+            filters.append(f"[{source_video}]subtitles=captions.srt:force_style='{style}'[video]")
         video='[video]'
     else: video='[composite]' if source_video=='composite' else '0:v:0'
     if project.get('story', {}).get('subscribe_corner', STORY_DEFAULTS['subscribe_corner']):
