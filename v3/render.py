@@ -162,13 +162,14 @@ def run_ffmpeg(args, folder, cancel, progress=None, duration=1, *, watch_output=
                 if cancel.exists(): raise Cancelled()
                 try: line=messages.get(timeout=.2)
                 except queue.Empty: line=''
-                if progress and line.startswith('out_time_us='):
+                if (progress or watch_output is not None) and line.startswith('out_time_us='):
                     try: position = float(line.partition('=')[2]) / 1e6
                     except ValueError: position = 0.0
                     if position > last_position:
                         last_position = position
                         last_activity = time.monotonic()
-                        progress(min(1, position / duration))
+                        if progress:
+                            progress(min(1, position / duration))
                 if watch_output is not None and time.monotonic() >= next_file_check:
                     now = time.monotonic()
                     next_file_check = now + 1
@@ -181,7 +182,7 @@ def run_ffmpeg(args, folder, cancel, progress=None, duration=1, *, watch_output=
                         last_write = write
                         last_activity = now
                     if now - last_activity >= EXPORT_STALL_SECONDS and process.poll() is None:
-                        raise RuntimeError('FFmpeg đã dừng tiến độ và không ghi thêm vào MP4 trong 3 phút. '
+                        raise RuntimeError('FFmpeg đã dừng tiến độ và không ghi thêm dữ liệu trong 3 phút. '
                                            'Dự án đã lưu. Bạn có thể dựng lại.')
             if process.returncode:
                 tail=(folder/'ffmpeg.log').read_text(errors='replace')[-2500:]
@@ -253,7 +254,9 @@ def render(project, assets_folder, output_folder, update):
     short=cfg['resolution']
     width,height={'9:16':(short,round(short*16/9)), '16:9':(round(short*16/9),short),'1:1':(short,short)}[cfg['aspect']]
     width+=width%2;height+=height%2
-    encode=['-c:v','libx264','-preset','veryfast','-crf','20','-threads','2','-pix_fmt','yuv420p','-c:a','aac','-ar','48000','-ac','2']
+    video_encode=['-c:v','libx264','-preset','veryfast','-crf','20','-threads','2','-pix_fmt','yuv420p']
+    audio_encode=['-c:a','aac','-ar','48000','-ac','2']
+    encode=video_encode+audio_encode
     for i,(scene,seconds) in enumerate(zip(project['scenes'],durations)):
         update(5+65*i/len(durations),f'Đang dựng cảnh {i+1}/{len(durations)}')
         path=asset(assets_folder,scene['file']); media=probe(path)
@@ -280,26 +283,36 @@ def render(project, assets_folder, output_folder, update):
         concat *= (math.ceil(total * FPS) + cycle_frames - 1) // cycle_frames
     (output_folder/'scenes.txt').write_text(concat)
     args = ['-f','concat','-safe','1','-i','scenes.txt']
+    # Keep the narration and the concat demuxer out of the same FFmpeg scheduler.
+    separate_audio = story and voice_name and cfg['original_volume'] == 0
+    audio_args = [] if separate_audio else args
     filters = []
     mix = []
-    if not (story and voice_name and cfg['original_volume'] == 0):
+    if not separate_audio:
         filters.append(f'[0:a]volume={cfg["original_volume"]}[base]')
         mix.append('[base]')
-    index = 1
+    index = 0 if separate_audio else 1
     if voice_name:
-        args+=['-i',str(asset(assets_folder,voice_name))]
+        audio_args+=['-i',str(asset(assets_folder,voice_name))]
         filters.append(f'[{index}:a]aresample=48000,apad,atrim=duration={total},asetpts=PTS-STARTPTS,volume={cfg["voice_volume"]}[voice]');index+=1
         if project.get('music') and cfg['duck']:
             filters.append('[voice]asplit=2[voiceout][side]');mix.append('[voiceout]')
         else: mix.append('[voice]')
     if project.get('music'):
-        args+=['-stream_loop','-1','-i',str(asset(assets_folder,project['music']))]
+        audio_args+=['-stream_loop','-1','-i',str(asset(assets_folder,project['music']))]
         filters.append(f'[{index}:a]aresample=48000,atrim=duration={total},asetpts=PTS-STARTPTS,volume={cfg["music_volume"]}[music]')
         if voice_name and cfg['duck']:
             filters.append('[music][side]sidechaincompress=threshold=0.03:ratio=8:attack=20:release=300[duck]');mix.append('[duck]')
         else: mix.append('[music]')
         index += 1
     filters.append(''.join(mix)+f'amix=inputs={len(mix)}:duration=longest:normalize=0,alimiter=limit=0.95:latency=1[audio]')
+    if separate_audio:
+        update(71, 'Đang xử lý giọng đọc và âm thanh')
+        soundtrack = output_folder/'soundtrack.m4a'
+        run_ffmpeg(audio_args+['-filter_complex',';'.join(filters),'-map','[audio]','-t',str(total),
+                               *audio_encode,soundtrack.name],output_folder,cancel,watch_output=soundtrack)
+        filters = []
+        index = 1
     source_video='0:v'
     if story and project.get('overlay_image'):
         overlay=project.get('story',{})
@@ -358,10 +371,25 @@ def render(project, assets_folder, output_folder, update):
             f"y='(H-h)/2*(1-{move})+{margin}*{move}':enable='{visible}'[with_subscribe]"
         )
         video = '[with_subscribe]'
-    update(72,'Đang ghép âm thanh, phụ đề và xuất MP4')
+    update(72, 'Đang xử lý phụ đề, hiệu ứng và xuất video')
     pending = output_folder/'output.pending.mp4'
-    run_ffmpeg(args+['-filter_complex',';'.join(filters),'-map',video,'-map','[audio]','-t',str(total),'-r',str(FPS),*encode,'-movflags','+faststart','output.pending.mp4'],output_folder,cancel,
-               lambda fraction:update(72+27*fraction,'Đang xuất MP4'),total,watch_output=pending)
+    if separate_audio:
+        picture = output_folder/'picture.mp4'
+        graph = ['-filter_complex',';'.join(filters)] if filters else []
+        run_ffmpeg(args+graph+['-map',video,'-an','-t',str(total),'-r',str(FPS),*video_encode,picture.name],
+                   output_folder,cancel,lambda fraction:update(72+24*fraction,'Đang mã hóa hình ảnh'),
+                   total,watch_output=picture)
+        update(97, 'Đang ghép hình ảnh và âm thanh vào MP4')
+        run_ffmpeg(['-i',picture.name,'-i',soundtrack.name,'-map','0:v:0','-map','1:a:0',
+                    '-c','copy','-movflags','+faststart',pending.name],
+                   output_folder,cancel,watch_output=pending)
+        picture.unlink()
+        soundtrack.unlink()
+    else:
+        run_ffmpeg(args+['-filter_complex',';'.join(filters),'-map',video,'-map','[audio]',
+                         '-t',str(total),'-r',str(FPS),*encode,'-movflags','+faststart',pending.name],
+                   output_folder,cancel,lambda fraction:update(72+27*fraction,'Đang xuất MP4'),
+                   total,watch_output=pending)
     result=probe(pending)
     if not result['video'] or not result['audio'] or abs(result['duration']-total)>.3:
         raise ValueError('Video xuất chưa đạt kiểm tra thời lượng/âm thanh.')
