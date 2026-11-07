@@ -226,7 +226,7 @@ def referenced_assets(project):
     story=project.get('story',{})
     return sorted({scene['file'] for scene in project.get('scenes',[])} |
                   {project[key] for key in ('voice','music','captions','caption_words','voice_track','overlay_image') if project.get(key)} |
-                  {story[key] for key in ('image','intro','cutout') if story.get(key)} |
+                  {story[key] for key in ('image','intro','cutout','main_srt') if story.get(key)} |
                   set(story.get('backgrounds',[])) |
                   {item['file'] for item in story.get('downloaded',{}).values()})
 

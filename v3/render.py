@@ -117,7 +117,7 @@ def estimated_srt(text,duration):
     return '\n'.join(out)
 
 
-def validate_srt(text,duration):
+def validate_srt(text,duration, *, offset=0):
     cues=re.findall(r'(\d{2,}:\d{2}:\d{2}[,.]\d{3})\s*-->\s*(\d{2,}:\d{2}:\d{2}[,.]\d{3})\s*\n([^\n]+(?:\n(?!\s*\n)[^\n]+)*)',text.strip())
     if not cues: raise ValueError('Phụ đề SRT chưa có mốc thời gian hợp lệ.')
     def secs(t):
@@ -131,7 +131,7 @@ def validate_srt(text,duration):
             raise ValueError('Mốc SRT bị chồng lấn hoặc vượt thời lượng video.')
         # Escape ASS override sequences while retaining plain Unicode text.
         body=re.sub(r'<[^>]*>','',body).replace('{','(').replace('}',')')
-        out.append(f'{len(out)+1}\n{timestamp(a)} --> {timestamp(b)}\n{body}\n');previous=b
+        out.append(f'{len(out)+1}\n{timestamp(a+offset)} --> {timestamp(b+offset)}\n{body}\n');previous=b
     return '\n'.join(out)
 
 

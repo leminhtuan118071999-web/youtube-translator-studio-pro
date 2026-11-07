@@ -4,7 +4,7 @@ from pathlib import Path
 import streamlit as st
 import pandas as pd
 from . import projects as store
-from .render import probe
+from .render import probe, validate_srt
 from .render_worker import launch,current
 from . import pixabay
 
@@ -70,6 +70,13 @@ def panel(project,folder,locked,output_panel=None):
                 value=prefs['subscribe_corner'], disabled=locked,
             )
             subtitles=st.checkbox('Tạo phụ đề',value=prefs['auto_subtitles'],disabled=locked)
+            main_srt = st.file_uploader('Phụ đề SRT đi kèm giọng chính (tùy chọn)',
+                                        type=['srt'], disabled=locked, key=f"story_srt_{pid}_{cfg.get('main_srt', '')}")
+            if cfg.get('main_srt'):
+                st.caption('Đã lưu phụ đề SRT đi kèm giọng chính.')
+                remove_srt = st.checkbox('Bỏ phụ đề SRT đã lưu', disabled=locked, key='remove_story_srt_'+pid)
+            else:
+                remove_srt = False
             st.caption('Đã có giọng chính.' if project.get('voice') else 'Chưa có giọng chính.')
             if cfg.get('intro'):st.caption('Đã có giọng mở đầu.')
         with b:
@@ -114,6 +121,18 @@ def panel(project,folder,locked,output_panel=None):
                                 if field=='voice':project['voice']=name
                                 else:new['intro']=name
                                 new[field+'_upload']=stamp
+                    if remove_srt or new.get('main_srt_voice') != project.get('voice'):
+                        for key in ('main_srt', 'main_srt_voice', 'main_srt_upload'):
+                            new.pop(key, None)
+                    if main_srt and not remove_srt:
+                        if not project.get('voice'):
+                            raise ValueError('Hãy tải giọng chính đi kèm file SRT.')
+                        stamp = store.signature_upload(main_srt)
+                        if stamp != new.get('main_srt_upload'):
+                            duration = probe(store.asset(folder, project['voice']))['duration']
+                            validate_srt(main_srt.getvalue().decode('utf-8-sig').replace('\r\n', '\n'), duration)
+                            new.update(main_srt=store.upload(folder, main_srt, {'.srt'}),
+                                       main_srt_voice=project['voice'], main_srt_upload=stamp)
                     if no_intro:new.pop('intro',None);new.pop('intro_upload',None)
                     names=dict(cfg.get('background_names',{}));uploads=dict(cfg.get('background_uploads',{}))
                     for video in videos:

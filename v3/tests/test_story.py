@@ -74,6 +74,29 @@ class StoryTests(unittest.TestCase):
         self.assertTrue(media['audio'] and media['video'])
         self.assertAlmostEqual(media['duration'], .8, delta=.1)
 
+    def test_provided_main_srt_preserves_text_and_offsets_after_intro(self):
+        (self.assets/'voice.srt').write_text(
+            '1\n00:00:00,100 --> 00:00:00,600\nCiao, Ánna!\n', encoding='utf-8')
+        self.p['story'].update(main_srt='voice.srt', main_srt_voice='main.wav', auto_subtitles=True)
+        run = self.folder/'runs'/'provided'
+        run.mkdir(parents=True)
+        projects.atomic(run/'snapshot.json', self.p)
+
+        def recognize_intro(subrun, report=None):
+            self.assertEqual(projects.read(subrun/'snapshot.json')['voice'], 'intro.wav')
+            projects.atomic(subrun/'words.json', dict(words=[dict(start=.05, end=.2, text=' Chào.')]))
+
+        with patch('v3.speech.transcribe', side_effect=recognize_intro) as recognize:
+            prepare(run)
+            prepare(run)
+            recognize.assert_called_once()
+        result = projects.read(run/'render-project.json')
+        self.assertIsNone(result['caption_words'])
+        text = (self.assets/result['captions']).read_text(encoding='utf-8')
+        self.assertIn('00:00:00,050 --> 00:00:00,200\nChào.', text)
+        self.assertIn('00:00:00,500 --> 00:00:01,000\nCiao, Ánna!', text)
+        self.assertIn('voice.srt', projects.referenced_assets(result))
+
     def test_subtitles_offset_and_cached_preparation(self):
         self.p['story']['auto_subtitles']=True
         run=self.folder/'runs'/'prepare';run.mkdir(parents=True);projects.atomic(run/'snapshot.json',self.p)

@@ -8,7 +8,7 @@ import sys
 import time
 from uuid import uuid4
 from .projects import home, project_dir, asset, read, atomic, save
-from .render import probe, run_ffmpeg, Cancelled
+from .render import probe, run_ffmpeg, validate_srt, Cancelled
 
 
 def signature(value):return hashlib.sha256(json.dumps(value,sort_keys=True,ensure_ascii=False).encode()).hexdigest()
@@ -222,7 +222,40 @@ def prepare(run):
         remember('voice',sig,joined)
     effective.update(voice_track=joined,scenes=scenes,overlay_image=png)
     effective['settings'].update(sync_voice=True,original_volume=0,fit='cover')
-    if cfg.get('auto_subtitles',True):
+    if cfg.get('main_srt') and cfg.get('main_srt_voice') == project['voice']:
+        main_duration = probe(asset(folder, project['voice']))['duration']
+        intro = cfg.get('intro')
+        intro_auto = bool(intro and cfg.get('auto_subtitles', True))
+        key = signature(['provided-srt-v1', joined, cfg['main_srt'], intro_auto, cfg.get('asr_model', 'small')])
+        srtfile = cached('provided-srt', key)
+        if not srtfile:
+            update(25, 'Bước 4/6 · Dùng phụ đề có sẵn của giọng chính')
+            offset = 0
+            if intro:
+                # Measure decoded samples so MP3 encoder padding cannot shift the subtitles.
+                intro_pcm = run/'caption-intro.wav'
+                run_ffmpeg(['-i', str(asset(folder, intro)), '-vn', '-ar', '48000',
+                            '-ac', '2', '-c:a', 'pcm_s16le', str(intro_pcm)], run, cancel)
+                offset = probe(intro_pcm)['duration']
+                intro_pcm.unlink()
+            source = asset(folder, cfg['main_srt']).read_text(encoding='utf-8-sig')
+            main_cues = validate_srt(source, main_duration, offset=offset)
+            if intro_auto:
+                from .speech import transcribe, to_srt
+                subrun = run/'speech-intro'
+                subrun.mkdir(exist_ok=True)
+                atomic(subrun/'snapshot.json', dict(project, voice=intro, asr_model=cfg.get('asr_model', 'small')))
+                transcribe(subrun, report=lambda p,s:update(25+round(25*p/100), 'Bước 4/6 · '+s))
+                words = read(subrun/'words.json')['words']
+                # Keep opening captions within the intro, even when container durations vary.
+                words = [dict(word, end=min(word['end'], offset)) for word in words if word['start'] < offset]
+                main_cues = to_srt(words) + '\n' + main_cues
+            srtfile = uuid4().hex+'.srt'
+            duration = probe(asset(folder, joined))['duration']
+            (folder/'assets'/srtfile).write_text(validate_srt(main_cues, duration), encoding='utf-8')
+            remember('provided-srt', key, srtfile)
+        effective.update(captions=srtfile, caption_words=None, captions_origin='provided')
+    elif cfg.get('auto_subtitles',True):
         from .speech import transcribe,to_srt
         key=signature([voices,joined,cfg.get('asr_model','small')]);wordfile=cached('words',key)
         srtfile=cached('srt',key)
@@ -242,7 +275,7 @@ def prepare(run):
         effective.update(captions=srtfile,caption_words=wordfile,captions_origin='asr')
     else:
         # Manual captions in this mode must cover the entire intro+main timeline.
-        if project.get('captions_origin')=='asr':
+        if project.get('captions_origin') in ('asr', 'provided'):
             effective.update(captions=None,caption_words=None,subtitle_text='')
     if png:
         effective['story']['cutout'] = png
