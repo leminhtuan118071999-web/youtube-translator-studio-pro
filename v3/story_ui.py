@@ -66,10 +66,10 @@ def panel(project,folder,locked,output_panel=None):
             intro=st.file_uploader('03 · File giọng đọc mở đầu (tùy chọn)',type=sorted(x[1:] for x in store.AUDIO),disabled=locked,key='story_intro_'+pid)
             no_intro=st.checkbox('Không dùng giọng mở đầu',value=prefs['no_intro'],disabled=locked)
             subscribe_corner = st.checkbox(
-                'Hiện hiệu ứng Subscribe rồi thu về góc trên bên trái',
+                'Hiệu ứng',
                 value=prefs['subscribe_corner'], disabled=locked,
             )
-            subtitles=st.checkbox('Tự tạo phụ đề cho cả mở đầu và giọng chính',value=prefs['auto_subtitles'],disabled=locked)
+            subtitles=st.checkbox('Tạo phụ đề',value=prefs['auto_subtitles'],disabled=locked)
             st.caption('Đã có giọng chính.' if project.get('voice') else 'Chưa có giọng chính.')
             if cfg.get('intro'):st.caption('Đã có giọng mở đầu.')
         with b:
