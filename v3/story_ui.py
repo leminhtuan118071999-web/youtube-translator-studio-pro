@@ -83,8 +83,10 @@ def panel(project,folder,locked,output_panel=None):
                 remove_srt = st.checkbox('Bỏ phụ đề SRT đã lưu', disabled=locked, key='remove_story_srt_'+pid)
             else:
                 remove_srt = False
-            intro=st.file_uploader('03 · File giọng đọc mở đầu (tùy chọn)',type=sorted(x[1:] for x in store.AUDIO),disabled=locked,key='story_intro_'+pid)
-            no_intro=st.checkbox('Không dùng giọng mở đầu',value=prefs['no_intro'],disabled=locked)
+            intro = st.file_uploader('03 · File giọng đọc mở đầu (tùy chọn)',
+                                     type=sorted(x[1:] for x in store.AUDIO), disabled=locked,
+                                     key='story_intro_'+pid,
+                                     help='Chọn file để ghép vào đầu video. Để trống để bỏ qua.')
             subscribe_corner = st.checkbox(
                 'Hiệu ứng',
                 value=prefs['subscribe_corner'], disabled=locked,
@@ -92,7 +94,6 @@ def panel(project,folder,locked,output_panel=None):
             subtitles=st.checkbox('Tạo phụ đề',value=prefs['auto_subtitles'],disabled=locked,
                                   help='Tự nhận diện giọng chính nếu chưa có SRT. Phần mở đầu không có phụ đề tự động.')
             st.caption('Đã có giọng chính.' if project.get('voice') else 'Chưa có giọng chính.')
-            if cfg.get('intro'):st.caption('Đã có giọng mở đầu.')
         with b:
             videos=st.file_uploader('04 · Thêm nhiều video nền trên máy',type=['mp4','mov','mkv','webm'],accept_multiple_files=True,disabled=locked,key='story_backgrounds_'+pid)
             other_ratio_files = {r['file'] for key, r in records.items() if key not in ratio_downloads}
@@ -116,7 +117,7 @@ def panel(project,folder,locked,output_panel=None):
             y=e.slider('Vị trí dọc · trên → dưới',0,100,int(prefs['y']),disabled=locked)
             model=st.selectbox('Model nhận diện cho video kể chuyện',['small','base','tiny'],index=['small','base','tiny'].index(prefs['asr_model']),disabled=locked)
             auto_pixabay=st.checkbox('Tự tải 15 video Pixabay mới · phối nhiều chủ đề liên quan · tránh trùng dự án trước',value=prefs['auto_pixabay'],disabled=locked)
-            preferences=dict(prefs,auto_theme=auto_theme,enabled=enabled,no_intro=no_intro,remove_background=remove,restore_missing=restore_missing,keep_attached_objects=keep_attached_objects,
+            preferences=dict(prefs,auto_theme=auto_theme,enabled=enabled,remove_background=remove,restore_missing=restore_missing,keep_attached_objects=keep_attached_objects,
                              width=width,x=x,y=y,auto_subtitles=subtitles,asr_model=model,auto_pixabay=auto_pixabay,subscribe_corner=subscribe_corner,pixabay_aspect=ratio)
             if not locked and preferences != store.story_defaults():
                 store.save_story_defaults(preferences)
@@ -133,7 +134,7 @@ def panel(project,folder,locked,output_panel=None):
                         raise ValueError('Ô giọng đọc chính chỉ nhận một file âm thanh và một file SRT.')
                     voice = next(iter(audio_files), None)
                     main_srt = next(iter(srt_files), None)
-                    new=dict(cfg,pixabay_aspect=ratio,auto_theme=auto_theme,no_intro=no_intro,enabled=enabled,auto_pixabay=auto_pixabay,query=query,backgrounds=kept,pixabay_selected=[hits[i] for i in selected],remove_background=remove,restore_missing=restore_missing,keep_attached_objects=keep_attached_objects,
+                    new=dict(cfg,pixabay_aspect=ratio,auto_theme=auto_theme,enabled=enabled,auto_pixabay=auto_pixabay,query=query,backgrounds=kept,pixabay_selected=[hits[i] for i in selected],remove_background=remove,restore_missing=restore_missing,keep_attached_objects=keep_attached_objects,
                              width=width,x=x,y=y,auto_subtitles=subtitles,asr_model=model,subscribe_corner=subscribe_corner,
                              keep_boxes=[[float(row[k]) for k in ('Trái','Trên','Phải','Dưới')] for row in boxes])
                     if len(set(ratio_downloads)|set(selected))>15:raise ValueError(f'Dự án đã đạt giới hạn 15 video Pixabay {ratio}. Chọn lại video đã tải.')
@@ -162,7 +163,10 @@ def panel(project,folder,locked,output_panel=None):
                             validate_srt(main_srt.getvalue().decode('utf-8-sig').replace('\r\n', '\n'), duration)
                             new.update(main_srt=store.upload(folder, main_srt, {'.srt'}),
                                        main_srt_voice=project['voice'], main_srt_upload=stamp)
-                    if no_intro:new.pop('intro',None);new.pop('intro_upload',None)
+                    new.pop('no_intro', None)
+                    if intro is None:
+                        new.pop('intro', None)
+                        new.pop('intro_upload', None)
                     names=dict(cfg.get('background_names',{}));uploads=dict(cfg.get('background_uploads',{}))
                     for video in videos:
                         stamp=store.signature_upload(video)
