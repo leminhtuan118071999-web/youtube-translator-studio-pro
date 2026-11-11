@@ -11,6 +11,7 @@ from uuid import uuid4
 from .projects import home, project_dir, atomic, read, save, export_run
 import shutil
 import signal
+import re
 from .render import render, Cancelled
 
 
@@ -85,6 +86,44 @@ def current(folder, task="render"):
     if status['state'] in ('queued','running') and not busy(folder):
         status.update(state='interrupted',stage='Tiến trình đã dừng. Có thể dựng lại từ dự án đã lưu.')
     return dict(status,run_id=ref['run_id'],folder=run)
+
+
+def resume(folder, run_id):
+    """Retry the latest stopped render with its original snapshot and prepared assets."""
+    folder=Path(folder)
+    with (folder/'render.lock').open('a') as lock:
+        if (folder/'.deleting').exists():raise ValueError('Dự án đang được xóa.')
+        try:fcntl.flock(lock,fcntl.LOCK_EX|fcntl.LOCK_NB)
+        except BlockingIOError:raise ValueError('Dự án đang xử lý; chờ tác vụ hiện tại kết thúc.') from None
+        if starting(folder):raise ValueError('Dự án đang khởi động tác vụ.')
+        reference=folder/'latest.json'
+        ref=read(reference)
+        if ref['run_id']!=run_id:raise ValueError('Lần dựng đã thay đổi; hãy làm mới trạng thái.')
+        if not isinstance(run_id,str) or not re.fullmatch(r'[a-f0-9]{32}',run_id):
+            raise ValueError('Lần dựng không hợp lệ.')
+        run=folder/'runs'/run_id
+        status=read(run/'status.json')
+        if status['state'] not in ('failed','cancelled','interrupted','queued','running'):
+            raise ValueError('Lần dựng này đã hoàn thành.')
+        snapshot=read(run/'snapshot.json')
+        if project_dir(snapshot['id'])!=folder:raise ValueError('Dự án không khớp lần dựng đã lưu.')
+        task=read(run/'task.json').get('task','render') if (run/'task.json').exists() else 'render'
+        if task!='render':raise ValueError('Đây không phải tác vụ dựng video.')
+        cancelled=(run/'cancel').exists()
+        (run/'cancel').unlink(missing_ok=True)
+        atomic(run/'status.json',dict(state='queued',task='render',progress=0,
+               stage='Tiếp tục dự án · đang chờ dựng lại từ dữ liệu đã lưu',updated=time.time()))
+        try:
+            with (run/'worker.log').open('a') as log:
+                process=spawn_worker(run,lock,log)
+            threading.Thread(target=process.wait,daemon=True).start()
+            atomic(reference,dict(run_id=run_id,pid=process.pid))
+        except OSError:
+            (folder/'render.starting.json').unlink(missing_ok=True)
+            atomic(run/'status.json',status)
+            if cancelled:(run/'cancel').touch()
+            raise
+    return run_id
 
 
 def recognize(project,run,cancel):
@@ -170,7 +209,8 @@ def main(run,fd):
                 stage='Đã tạo phụ đề theo giọng đọc · '+details['language']
             else:
                 if project.get('story',{}).get('enabled'):
-                    project=prepare_story(run)
+                    prepared=run/'render-project.json'
+                    project=read(prepared) if prepared.exists() else prepare_story(run)
                     details=render(project,project_dir(project['id']),run,lambda p,s:update(50+p*.49,'Bước 5/6 · '+s))
                 else:details=render(project,project_dir(project['id']),run,update)
                 stage='Hoàn thành và đã lưu MP4'

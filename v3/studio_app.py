@@ -9,7 +9,7 @@ if str(ROOT) not in sys.path: sys.path.insert(0,str(ROOT))
 import streamlit as st
 from v3 import projects as store
 from v3.render import probe, plan
-from v3.render_worker import launch, busy, current, delete_all_projects
+from v3.render_worker import launch, busy, current, delete_all_projects, resume
 
 st.set_page_config(page_title='LMT Video Editor V3',page_icon='🎞️',layout='wide')
 st.markdown('''<style>.stApp{background:#0b1320}h1,h2,h3{color:#e4ecfb}.block-container{max-width:1240px;padding-top:2rem}div.stButton>button[kind=primary]{background:#357cef}section[data-testid=stSidebar]{background:#101c2b}</style>''',unsafe_allow_html=True)
@@ -132,7 +132,16 @@ def progress_panel(folder, controls_locked):
             if sys.platform in ('darwin','win32') and st.button('Mở thư mục video',key='finder_'+status['run_id']):
                 if sys.platform=='win32':os.startfile(str(output.parent))
                 else:subprocess.run(['open',str(output.parent)],check=True)
-    else:st.warning(status['stage'])
+    else:
+        st.warning(status['stage'])
+        if status['state'] in ('failed','cancelled','interrupted'):
+            st.caption('Tiếp tục với nguyên liệu và cấu hình đã lưu của lần dựng này. Bước xuất MP4 sẽ chạy lại.')
+            if st.button('▶ Tiếp tục dự án',type='primary',key='resume_'+status['run_id'],
+                         disabled=controls_locked or busy(folder)):
+                try:
+                    resume(folder,status['run_id']);st.rerun()
+                except (ValueError,OSError,KeyError,TypeError) as exc:
+                    st.error('Chưa tiếp tục được dự án: '+str(exc))
     if st.button('Làm mới trạng thái và các nút'): st.rerun()
 @st.fragment(run_every=2)
 def speech_progress(folder):
