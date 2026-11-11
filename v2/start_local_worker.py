@@ -127,9 +127,14 @@ def run_worker(config):
         keep_awake = subprocess.Popen(['caffeinate','-i','-w',str(os.getpid())],
                                       stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
     try:
-        print('Worker đã kết nối. Có thể đóng trình duyệt; giữ cửa sổ Terminal này mở.', flush=True)
+        if os.environ.get('LMT_V2_BACKGROUND')=='1':
+            print('Worker nền V2 đã kết nối. Không cần mở cửa sổ Terminal.',flush=True)
+        else:
+            print('Worker đã kết nối. Có thể đóng trình duyệt; giữ cửa sổ Terminal này mở.', flush=True)
         print('Máy phải có mạng và không tắt/ngủ. Trên Mac, giữ nắp máy mở và cắm sạc.', flush=True)
-        print('Nhấn Ctrl+C để dừng; checkpoint được giữ trong Supabase.', flush=True)
+        print('Dừng bằng background_worker.py stop; checkpoint được giữ trong Supabase.'
+              if os.environ.get('LMT_V2_BACKGROUND')=='1' else
+              'Nhấn Ctrl+C để dừng; checkpoint được giữ trong Supabase.', flush=True)
         worker.main()
     finally:
         if keep_awake:
@@ -159,3 +164,4 @@ if __name__ == '__main__':
         print('Chưa chạy được worker. Kiểm tra Python, mạng, DATABASE_URL, khóa V1 và migration V2.')
         print('Nếu cần nhập lại cấu hình: python3 v2/start_local_worker.py --configure')
         sys.exit(1)
+
