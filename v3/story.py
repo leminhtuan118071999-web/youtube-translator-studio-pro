@@ -397,7 +397,12 @@ def layout_preview(project,folder):
     if result.returncode:raise ValueError('Chưa đọc được video nền để xem trước.')
     with Image.open(io.BytesIO(result.stdout)) as image:canvas=image.convert('RGBA')
     with Image.open(asset(folder,cfg['cutout'])) as image:character=image.convert('RGBA')
-    character.thumbnail((round(width*cfg.get('width',75)/100),round(height*.95)),Image.Resampling.LANCZOS)
+    character=ImageOps.contain(character,(round(width*cfg.get('width',75)/100),round(height*.95)),
+                               Image.Resampling.LANCZOS)
+    opacity=cfg.get('image_opacity',100)
+    if type(opacity) is not int or not 0<=opacity<=100:raise ValueError('Độ hiển thị ảnh phải từ 0 đến 100%.')
+    if opacity!=100:
+        character.putalpha(character.getchannel('A').point(lambda value:round(value*opacity/100)))
     x=round((width-character.width)*cfg.get('x',50)/100);y=round((height-character.height)*cfg.get('y',100)/100)
     canvas.alpha_composite(character,(x,y))
     out=io.BytesIO();canvas.convert('RGB').save(out,format='PNG');return out.getvalue()

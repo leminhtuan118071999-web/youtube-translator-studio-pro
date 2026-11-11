@@ -58,15 +58,18 @@ class EditorUITests(unittest.TestCase):
             app=AppTest.from_file(path,default_timeout=15).run()
             next(c for c in app.checkbox if c.label=='Tạo phụ đề').uncheck().run()
             next(c for c in app.slider if c.label=='Chiều rộng nhân vật (% khung)').set_value(60).run()
+            next(c for c in app.slider if c.label=='Độ hiển thị ảnh (%)').set_value(85).run()
             self.assertFalse(app.exception)
             self.assertFalse(projects.story_defaults()['auto_subtitles'])
             self.assertEqual(projects.story_defaults()['width'],60)
+            self.assertEqual(projects.story_defaults()['image_opacity'],85)
             projects.create('Second')
             reopened=AppTest.from_file(path,default_timeout=15).run()
             self.assertFalse(reopened.exception)
             self.assertFalse(next(c for c in reopened.checkbox if c.label=='Tạo phụ đề').value)
             self.assertNotIn('Không dùng giọng mở đầu', [c.label for c in reopened.checkbox])
             self.assertEqual(next(c for c in reopened.slider if c.label=='Chiều rộng nhân vật (% khung)').value,60)
+            self.assertEqual(next(c for c in reopened.slider if c.label=='Độ hiển thị ảnh (%)').value,85)
             self.assertNotIn('story',projects.read(projects.project_dir(first['id'])/'project.json'))
 
     def test_create_and_reopen_project_without_credentials(self):

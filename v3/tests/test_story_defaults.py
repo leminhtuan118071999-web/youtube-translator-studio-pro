@@ -11,8 +11,9 @@ class StoryDefaultsTests(unittest.TestCase):
             old=projects.create('Old')
             defaults=projects.story_defaults()
             self.assertEqual(defaults['image_edge_softness'],'off')
+            self.assertEqual(defaults['image_opacity'],100)
             self.assertFalse(defaults['snow_overlay'])
-            prefs=dict(defaults,width=60,x=20,y=80,image_edge_softness='medium',snow_overlay=True,
+            prefs=dict(defaults,width=60,x=20,y=80,image_edge_softness='medium',image_opacity=85,snow_overlay=True,
                        auto_subtitles=False,asr_model='base',remove_background=False,
                        auto_pixabay=False,export_include_assets=False)
             projects.save_story_defaults(dict(prefs,no_intro=True,image='private.png',keep_boxes=[[0,0,50,50]]))
@@ -30,6 +31,7 @@ class StoryDefaultsTests(unittest.TestCase):
             prefs=projects.story_defaults();projects.save_story_defaults(prefs)
             for change in [dict(width=9),dict(x=101),dict(y=float('nan')),
                            dict(auto_subtitles='false'),dict(asr_model='unknown'),
-                           dict(image_edge_softness='unknown'),dict(snow_overlay='true')]:
+                           dict(image_edge_softness='unknown'),dict(snow_overlay='true'),
+                           dict(image_opacity=-1),dict(image_opacity=101),dict(image_opacity=True)]:
                 with self.assertRaises(ValueError):projects.save_story_defaults(dict(prefs,**change))
             self.assertEqual(projects.story_defaults(),prefs)

@@ -105,7 +105,7 @@ def save_output_defaults(settings):
 
 IMAGE_EDGE_LEVELS = ('off', 'light', 'medium', 'strong')
 STORY_DEFAULTS = dict(enabled=True, remove_background=True, restore_missing=True, keep_attached_objects=True, auto_theme=True,
-                      image_edge_softness='off', snow_overlay=False,
+                      image_edge_softness='off', image_opacity=100, snow_overlay=False,
                       width=75, x=50, y=100, auto_subtitles=True,
                       asr_model='small', auto_pixabay=True, export_include_assets=True, subscribe_corner=True,
                       pixabay_aspect='16:9', query='forest sunlight')

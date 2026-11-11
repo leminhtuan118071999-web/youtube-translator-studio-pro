@@ -74,6 +74,36 @@ class StoryTests(unittest.TestCase):
         self.assertTrue(media['audio'] and media['video'])
         self.assertAlmostEqual(media['duration'], .8, delta=.1)
 
+    def test_image_opacity_blends_video_and_preview_and_preserves_alpha(self):
+        import io
+        import subprocess
+        from v3.render import render
+        self.p['story'].update(subscribe_corner=False)
+        self.p['story'].pop('intro')
+        run=self.folder/'opacity-prepare'
+        run.mkdir()
+        projects.atomic(run/'snapshot.json',self.p)
+        prepare(run)
+        prepared=projects.read(run/'render-project.json')
+        png=self.assets/prepared['overlay_image']
+        for opacity,alpha,green in [(100,255,255),(50,255,128),(0,255,0),(50,128,64)]:
+            with self.subTest(opacity=opacity,alpha=alpha):
+                with Image.open(png) as opened:image=opened.convert('RGBA')
+                image.putalpha(alpha)
+                image.save(png)
+                prepared['story']['image_opacity']=opacity
+                preview=Image.open(io.BytesIO(layout_preview(prepared,self.folder))).convert('RGB')
+                self.assertAlmostEqual(preview.getpixel((240,400))[1],green,delta=2)
+                out=self.folder/f'opacity-{opacity}-{alpha}'
+                render(prepared,self.folder,out,lambda *_:None)
+                pixel=subprocess.run(
+                    ['ffmpeg','-v','error','-ss','0.2','-i',str(out/'output.mp4'),
+                     '-vf','format=rgb24,crop=1:1:360:600','-frames:v','1',
+                     '-threads','1','-f','rawvideo','pipe:1'],
+                    capture_output=True,check=True).stdout
+                self.assertAlmostEqual(pixel[1],green,delta=8)
+                self.assertAlmostEqual(pixel[2],255-green,delta=8)
+
     def test_portrait_pixabay_mode_exports_landscape_with_blurred_sides(self):
         import subprocess
         from v3.render import render

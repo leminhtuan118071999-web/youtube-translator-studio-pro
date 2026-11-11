@@ -400,8 +400,11 @@ def render(project, assets_folder, output_folder, update):
         overlay=project.get('story',{})
         size=float(overlay.get('width',75));x=float(overlay.get('x',50));y=float(overlay.get('y',100))
         if not 10<=size<=100 or not 0<=x<=100 or not 0<=y<=100:raise ValueError('Vị trí hoặc kích thước nhân vật không hợp lệ.')
+        opacity=overlay.get('image_opacity',100)
+        if type(opacity) is not int or not 0<=opacity<=100:raise ValueError('Độ hiển thị ảnh phải từ 0 đến 100%.')
         args+=['-i',str(asset(assets_folder,project['overlay_image']))]
-        filters.append(f'[{index}:v]scale={round(width*size/100)}:{round(height*.95)}:force_original_aspect_ratio=decrease,format=rgba[character]')
+        alpha=f',colorchannelmixer=aa={opacity/100:.4f}' if opacity!=100 else ''
+        filters.append(f'[{index}:v]scale={round(width*size/100)}:{round(height*.95)}:force_original_aspect_ratio=decrease,format=rgba{alpha}[character]')
         filters.append(f'[0:v][character]overlay=x=(W-w)*{x/100}:y=(H-h)*{y/100}:eof_action=repeat[composite]')
         source_video='composite'
         index += 1

@@ -123,6 +123,10 @@ def panel(project,folder,locked,output_panel=None):
                 format_func=edge_labels.__getitem__, disabled=locked,
                 help='Làm mờ dần mép khung ảnh hoặc đường cắt của ảnh đã tách nền.',
             )
+            image_opacity = st.slider(
+                'Độ hiển thị ảnh (%)', 0, 100, int(prefs['image_opacity']), disabled=locked,
+                help='100% hiện rõ hoàn toàn. Giảm xuống 80–90% để ảnh hơi trong suốt và thấy video nền phía sau.',
+            )
             snow_overlay = st.checkbox(
                 'Tuyết bay chéo nhẹ · toàn video', value=prefs['snow_overlay'], disabled=locked,
                 help='Thêm hạt tuyết nhỏ bay chéo liên tục qua các cảnh.',
@@ -140,7 +144,7 @@ def panel(project,folder,locked,output_panel=None):
             auto_pixabay=st.checkbox(f'Tự tải {pixabay.LIMIT} video Pixabay mới · tránh trùng dự án trước',value=prefs['auto_pixabay'],disabled=locked,
                                      help='9:16 trộn các chủ đề khác nhau. 16:9 tìm theo từ khóa và chủ đề liên quan.')
             preferences=dict(prefs,auto_theme=auto_theme,enabled=enabled,remove_background=remove,restore_missing=restore_missing,keep_attached_objects=keep_attached_objects,
-                             image_edge_softness=image_edge_softness,snow_overlay=snow_overlay,
+                             image_edge_softness=image_edge_softness,image_opacity=image_opacity,snow_overlay=snow_overlay,
                              width=width,x=x,y=y,auto_subtitles=subtitles,asr_model=model,auto_pixabay=auto_pixabay,subscribe_corner=subscribe_corner,pixabay_aspect=ratio)
             if not locked and preferences != store.story_defaults():
                 store.save_story_defaults(preferences)
@@ -158,7 +162,7 @@ def panel(project,folder,locked,output_panel=None):
                     voice = next(iter(audio_files), None)
                     main_srt = next(iter(srt_files), None)
                     new=dict(cfg,pixabay_aspect=ratio,auto_theme=auto_theme,enabled=enabled,auto_pixabay=auto_pixabay,query=query,backgrounds=kept,pixabay_selected=[hits[i] for i in selected],remove_background=remove,restore_missing=restore_missing,keep_attached_objects=keep_attached_objects,
-                             image_edge_softness=image_edge_softness,snow_overlay=snow_overlay,
+                             image_edge_softness=image_edge_softness,image_opacity=image_opacity,snow_overlay=snow_overlay,
                              width=width,x=x,y=y,auto_subtitles=subtitles,asr_model=model,subscribe_corner=subscribe_corner,
                              keep_boxes=[[float(row[k]) for k in ('Trái','Trên','Phải','Dưới')] for row in boxes])
                     if len(set(ratio_downloads)|set(selected))>pixabay.LIMIT:raise ValueError(f'Dự án đã đạt giới hạn {pixabay.LIMIT} video Pixabay {ratio}. Chọn lại video đã tải.')
@@ -237,7 +241,10 @@ def panel(project,folder,locked,output_panel=None):
         if st.button('Xem thử bố cục trên nền',disabled=locked,key='story_preview_'+pid):
             try:
                 from .story import layout_preview
-                st.image(layout_preview(project,folder),caption='Xem trước bố cục')
+                if save_inputs():
+                    if not project['story'].get('cutout'):
+                        raise ValueError('Hãy chuẩn bị ảnh xem trước sau khi thay ảnh.')
+                    st.image(layout_preview(project,folder),caption='Xem trước bố cục')
             except (ValueError,OSError,RuntimeError) as exc:st.error(str(exc))
     return save_inputs
 
