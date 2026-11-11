@@ -8,6 +8,21 @@ from v3 import projects
 
 
 class EditorUITests(unittest.TestCase):
+    def test_stopped_render_always_offers_diagnostic_download(self):
+        from uuid import uuid4
+        for state in ('failed','cancelled','interrupted'):
+            with self.subTest(state=state), tempfile.TemporaryDirectory() as temp, patch.dict(os.environ,LMT_V3_HOME=temp):
+                project=projects.create('Diagnostics')
+                folder=projects.project_dir(project['id'])
+                run=folder/'runs'/uuid4().hex
+                run.mkdir(parents=True)
+                projects.atomic(run/'snapshot.json',project)
+                projects.atomic(run/'status.json',dict(state=state,progress=87,stage='Stopped'))
+                projects.atomic(folder/'latest.json',dict(run_id=run.name,pid=0))
+                app=AppTest.from_file(str(Path(__file__).parents[1]/'studio_app.py'),default_timeout=15).run()
+                self.assertFalse(app.exception)
+                self.assertIn('Tải nhật ký lỗi',[button.label for button in app.get('download_button')])
+
     def test_failed_render_has_resume_button_under_progress(self):
         from uuid import uuid4
         with tempfile.TemporaryDirectory() as temp, patch.dict(os.environ,LMT_V3_HOME=temp):
