@@ -161,25 +161,43 @@ def metadata_for_job(text, title, description, language, call, progress, *, fast
         work = {}
     brief = work.get('context')
     if not isinstance(brief, str) or not brief:
-        report = progress.partial_result().get('optimization_review_json')
-        try:report = json.loads(report or '{}')
-        except (ValueError,TypeError):report = {}
-        if not isinstance(report,dict):report = {}
-        contexts = report.get('seo_contexts')
-        if (report.get('output_sha256') == source_hash(text) and report.get('target_language') == language
-                and isinstance(contexts,list) and contexts and len(contexts)==report.get('reviewed_parts')
-                and all(isinstance(v,str) and 0<len(v)<=1800 for v in contexts)):
-            brief = overview('\n\n'.join(contexts), call, progress, context_limit=context_limit)
+        originals_complete=(isinstance(title,str) and bool(title.strip())
+                            and isinstance(description,str) and bool(description.strip())
+                            and isinstance(original_tags,list) and bool(original_tags)
+                            and all(isinstance(tag,str) and tag.strip() for tag in original_tags))
+        if fast and originals_complete:
+            # Supplied metadata is translated, never recreated from the plot.
+            # Full-story AI summaries are unnecessary here. Keep a little exact
+            # source context for ambiguous names/terms; translation still uses
+            # the entire source independently.
+            brief=(text if len(text)<=3000 else
+                   'Source excerpts for disambiguation only, not a complete plot summary:\n'
+                   +text[:1500]+'\n[intervening source omitted from metadata context]\n'+text[-1300:])
         else:
-            brief = overview(text, call, progress, context_limit=context_limit)
+            brief = metadata_story_context(text,language,call,progress,context_limit)
     def checkpoint(candidate):
         progress.publish('seo_work_json', json.dumps(dict(identity=identity, context=brief, candidate=candidate), ensure_ascii=False))
-    progress.update(97, 'Đang tạo và đối chiếu SEO; tự khôi phục kết quả đã lưu khi cần')
+    progress.update(97, 'Đang dịch tiêu đề, mô tả và tag' if fast else 'Đang tạo và đối chiếu SEO; tự khôi phục kết quả đã lưu khi cần')
     tag_options = {'original_tags': original_tags} if original_tags else {}
     result = generate_youtube_metadata(brief, title, description, language, call,
                                       resume_candidate=work.get('candidate'), checkpoint=checkpoint, self_check_only=fast, **tag_options)
     progress.publish('seo_work_json', '')
     return result
+
+
+def metadata_story_context(text, language, call, progress, context_limit):
+    """Cover the whole story when any original metadata field needs generation."""
+    report = progress.partial_result().get('optimization_review_json')
+    try:report = json.loads(report or '{}')
+    except (ValueError,TypeError):report = {}
+    if not isinstance(report,dict):report = {}
+    contexts = report.get('seo_contexts')
+    if (report.get('output_sha256') == source_hash(text) and report.get('target_language') == language
+            and isinstance(contexts,list) and contexts and len(contexts)==report.get('reviewed_parts')
+            and all(isinstance(v,str) and 0<len(v)<=1800 for v in contexts)):
+        return overview('\n\n'.join(contexts), call, progress, context_limit=context_limit)
+    else:
+        return overview(text, call, progress, context_limit=context_limit)
 
 
 def run_full_job(snapshot, progress):
