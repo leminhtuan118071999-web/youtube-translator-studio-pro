@@ -11,7 +11,7 @@ import threading
 import shutil
 import subprocess
 import time
-from .projects import asset, IMAGES, STORY_DEFAULTS
+from .projects import asset, IMAGES, STORY_DEFAULTS, atomic, read
 
 FPS = 30
 EXPORT_STALL_SECONDS = 180
@@ -197,6 +197,35 @@ def run_ffmpeg(args, folder, cancel, progress=None, duration=1, *, watch_output=
     if cancel.exists(): raise Cancelled()
 
 
+def cached_ffmpeg(args, folder, cancel, *, inputs, watch_output=None):
+    """Reuse only completed intermediates with matching commands and input files."""
+    if cancel.exists():raise Cancelled()
+    output=folder/args[-1]
+    marker=output.with_name(output.name+'.cache.json')
+    sources=[]
+    for path in inputs:
+        path=Path(path).resolve()
+        stat=path.stat()
+        sources.append([str(path),stat.st_size,stat.st_mtime_ns])
+    signature=dict(version=1,args=args,inputs=sources)
+    try:
+        cached=read(marker)
+        stat=output.stat()
+        if (cached['signature']==signature and
+                cached['output']==[stat.st_size,stat.st_mtime_ns] and stat.st_size>0):
+            return True
+    except (OSError,ValueError,KeyError,TypeError):
+        pass
+    marker.unlink(missing_ok=True)
+    run_ffmpeg(args,folder,cancel,watch_output=watch_output)
+    media=probe(output)
+    if media['duration']<=0 or not (media['video'] or media['audio']):
+        raise ValueError('Tệp trung gian chưa hoàn chỉnh: '+output.name)
+    stat=output.stat()
+    atomic(marker,dict(signature=signature,output=[stat.st_size,stat.st_mtime_ns]))
+    return False
+
+
 def portrait_blur_filter(width, height, tail=''):
     # Blur at lower resolution, then expand the background behind the sharp clip.
     small_width, small_height = max(2, width//8*2), max(2, height//8*2)
@@ -288,7 +317,8 @@ def render(project, assets_folder, output_folder, update):
     short=cfg['resolution']
     width,height={'9:16':(short,round(short*16/9)), '16:9':(round(short*16/9),short),'1:1':(short,short)}[cfg['aspect']]
     width+=width%2;height+=height%2
-    video_encode=['-c:v','libx264','-preset','veryfast','-crf','20','-threads','2','-pix_fmt','yuv420p']
+    threads=max(2,min(8,(os.cpu_count() or 4)//2))
+    video_encode=['-c:v','libx264','-preset','veryfast','-crf','20','-threads',str(threads),'-pix_fmt','yuv420p']
     audio_encode=['-c:a','aac','-ar','48000','-ac','2']
     encode=video_encode+audio_encode
     separate_audio = story and voice_name and cfg['original_volume'] == 0
@@ -316,21 +346,25 @@ def render(project, assets_folder, output_folder, update):
                              '-map', '[framed]']
         else:
             video_filters = ['-map','0:v:0','-vf',vf+tail]
-        run_ffmpeg(args+video_filters+scene_audio+['-t',str(seconds),*video_encode,f'scene-{i:04}.mp4'],
-                   output_folder,cancel)
+        reused=cached_ffmpeg(args+video_filters+scene_audio+['-t',str(seconds),*video_encode,f'scene-{i:04}.mp4'],
+                            output_folder,cancel,inputs=[path])
+        if reused:update(5+65*(i+1)/len(durations),f'Dùng lại cảnh đã dựng {i+1}/{len(durations)}')
     concat=''.join(f"file 'scene-{i:04}.mp4'\nduration {d:.9f}\n" for i,d in enumerate(durations))
     if story:
         # Repeat the normalized scene sequence without seeking an infinite concat input.
         cycle_frames = sum(round(seconds * FPS) for seconds in durations)
         concat *= (math.ceil(total * FPS) + cycle_frames - 1) // cycle_frames
-    (output_folder/'scenes.txt').write_text(concat)
+    concat_path=output_folder/'scenes.txt'
+    if not concat_path.exists() or concat_path.read_text()!=concat:
+        concat_path.write_text(concat)
     args = ['-f','concat','-safe','1','-i','scenes.txt']
     if separate_audio:
         # Final filters read one regular video stream, without concat demuxing or unused scene audio.
         update(70, 'Đang nối các cảnh đã dựng')
         background = output_folder/'background.mp4'
-        run_ffmpeg(args+['-map','0:v:0','-c:v','copy',background.name],
-                   output_folder,cancel,watch_output=background)
+        cached_ffmpeg(args+['-map','0:v:0','-c:v','copy',background.name],
+                      output_folder,cancel,watch_output=background,
+                      inputs=[concat_path,*[output_folder/f'scene-{i:04}.mp4' for i in range(len(durations))]])
         args = ['-i',background.name]
     audio_args = [] if separate_audio else args
     filters = []
@@ -356,8 +390,9 @@ def render(project, assets_folder, output_folder, update):
     if separate_audio:
         update(71, 'Đang xử lý giọng đọc và âm thanh')
         soundtrack = output_folder/'soundtrack.m4a'
-        run_ffmpeg(audio_args+['-filter_complex',';'.join(filters),'-map','[audio]','-t',str(total),
-                               *audio_encode,soundtrack.name],output_folder,cancel,watch_output=soundtrack)
+        cached_ffmpeg(audio_args+['-filter_complex',';'.join(filters),'-map','[audio]','-t',str(total),
+                                  *audio_encode,soundtrack.name],output_folder,cancel,watch_output=soundtrack,
+                      inputs=[asset(assets_folder,name) for name in (voice_name,project.get('music')) if name])
         filters = []
         index = 1
     source_video='0:v'
@@ -431,17 +466,17 @@ def render(project, assets_folder, output_folder, update):
     pending = output_folder/'output.pending.mp4'
     if separate_audio:
         picture = output_folder/'picture.mp4'
-        graph = ['-filter_complex',';'.join(filters)] if filters else []
-        run_ffmpeg(args+graph+['-map',video,'-an','-t',str(total),'-r',str(FPS),*video_encode,picture.name],
-                   output_folder,cancel,lambda fraction:update(72+24*fraction,'Đang mã hóa hình ảnh'),
-                   total,watch_output=picture)
+        if filters:
+            run_ffmpeg(args+['-filter_complex',';'.join(filters),'-map',video,'-an','-t',str(total),
+                             '-r',str(FPS),*video_encode,picture.name],
+                       output_folder,cancel,lambda fraction:update(72+24*fraction,'Đang mã hóa hình ảnh'),
+                       total,watch_output=picture)
+        else:
+            picture=background
         update(97, 'Đang ghép hình ảnh và âm thanh vào MP4')
         run_ffmpeg(['-i',picture.name,'-i',soundtrack.name,'-map','0:v:0','-map','1:a:0',
-                    '-c','copy','-movflags','+faststart',pending.name],
+                    '-t',str(total),'-c','copy','-movflags','+faststart',pending.name],
                    output_folder,cancel,watch_output=pending)
-        background.unlink()
-        picture.unlink()
-        soundtrack.unlink()
     else:
         run_ffmpeg(args+['-filter_complex',';'.join(filters),'-map',video,'-map','[audio]',
                          '-t',str(total),'-r',str(FPS),*encode,'-movflags','+faststart',pending.name],
@@ -451,6 +486,9 @@ def render(project, assets_folder, output_folder, update):
     if not result['video'] or not result['audio'] or abs(result['duration']-total)>.3:
         raise ValueError('Video xuất chưa đạt kiểm tra thời lượng/âm thanh.')
     pending.replace(output_folder/'output.mp4')
+    if separate_audio:
+        for temporary in {background,picture,soundtrack}:
+            temporary.unlink(missing_ok=True)
     update(100,'Hoàn thành và đã lưu MP4')
     return dict(duration=total,width=width,height=height,scenes=len(durations))
 

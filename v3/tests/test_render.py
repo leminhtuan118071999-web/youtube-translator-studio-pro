@@ -9,7 +9,7 @@ import time
 import unittest
 from unittest.mock import patch
 from v3 import projects
-from v3.render import plan, render, probe, validate_srt, estimated_srt, run_ffmpeg, Cancelled
+from v3.render import plan, render, probe, validate_srt, estimated_srt, run_ffmpeg, cached_ffmpeg, Cancelled
 from v3.render_worker import launch, current
 
 
@@ -111,6 +111,45 @@ class RealRenderTests(unittest.TestCase):
         out=self.folder/'cancelled';out.mkdir();(out/'cancel').touch()
         with self.assertRaises(Cancelled):render(self.p,self.folder,out,lambda *a:None)
         self.assertFalse((out/'output.mp4').exists())
+
+    def test_retry_reuses_completed_stages_and_copies_unfiltered_video(self):
+        self.p.update(voice='voice.wav',story=dict(enabled=True,subscribe_corner=False))
+        out=self.folder/'retry-fast'
+        def stop_at_mux(args,*pos,**kwargs):
+            if args[-1]=='output.pending.mp4':raise Cancelled()
+            return run_ffmpeg(args,*pos,**kwargs)
+        with patch('v3.render.run_ffmpeg',side_effect=stop_at_mux):
+            with self.assertRaises(Cancelled):render(self.p,self.folder,out,lambda *_:None)
+        names=['scene-0000.mp4','scene-0001.mp4','background.mp4','soundtrack.m4a']
+        before={name:(out/name).stat().st_mtime_ns for name in names}
+        with patch('v3.render.run_ffmpeg',wraps=run_ffmpeg) as calls:
+            result=render(self.p,self.folder,out,lambda *_:None)
+        self.assertEqual(calls.call_count,1)
+        self.assertIn('-c',calls.call_args.args[0])
+        self.assertNotIn('libx264',calls.call_args.args[0])
+        self.assertFalse((out/'picture.mp4').exists())
+        for name in names[:2]:self.assertEqual((out/name).stat().st_mtime_ns,before[name])
+        output=probe(out/'output.mp4')
+        self.assertTrue(output['video'] and output['audio'])
+        self.assertLess(abs(output['duration']-result['duration']),.15)
+
+    def test_intermediate_cache_invalidates_on_source_command_or_output_change(self):
+        out=self.folder/'cache-check'
+        out.mkdir()
+        source=self.folder/'assets'/'blue.mp4'
+        args=['-i',str(source),'-t','0.3','-an','-c:v','libx264','-threads','1','clip.mp4']
+        self.assertFalse(cached_ffmpeg(args,out,out/'cancel',inputs=[source]))
+        with patch('v3.render.run_ffmpeg',wraps=run_ffmpeg) as calls:
+            self.assertTrue(cached_ffmpeg(args,out,out/'cancel',inputs=[source]))
+            calls.assert_not_called()
+            args[3]='0.4'
+            self.assertFalse(cached_ffmpeg(args,out,out/'cancel',inputs=[source]))
+            stat=source.stat()
+            os.utime(source,ns=(stat.st_atime_ns,stat.st_mtime_ns+1000000))
+            self.assertFalse(cached_ffmpeg(args,out,out/'cancel',inputs=[source]))
+            (out/'clip.mp4').write_bytes(b'incomplete')
+            self.assertFalse(cached_ffmpeg(args,out,out/'cancel',inputs=[source]))
+            self.assertEqual(calls.call_count,3)
 
     def test_stalled_export_stops_the_ffmpeg_process(self):
         out = self.folder/'stalled'
