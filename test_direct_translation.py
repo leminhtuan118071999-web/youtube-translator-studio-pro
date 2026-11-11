@@ -55,6 +55,20 @@ class DirectTranslationTests(unittest.TestCase):
         result=translate_direct('Source','Vietnamese',lambda prompt:(calls.append(prompt) or 'Nguồn\n'+END_MARKER),p)
         self.assertTrue(calls);self.assertEqual(result,'Nguồn')
 
+    def test_old_policy_checkpoint_is_not_mixed_with_new_translation(self):
+        from faithful_summary import source_hash
+        p=JobProgress()
+        p.publish('optimization_work_json',json.dumps(dict(
+            method='direct_translation_v1',source_sha256=source_hash('Source'),
+            target_language='English',parts=['Old translation'],seo_contexts=[''])))
+        calls=[]
+        output=translate_direct('Source','English',
+            lambda prompt:(calls.append(prompt) or 'New translation\n'+END_MARKER),p)
+        self.assertEqual(output,'New translation')
+        self.assertEqual(len(calls),1)
+        self.assertEqual(json.loads(p.partial_result()['optimization_review_json'])['method'],
+                         'direct_translation_v2')
+
     def test_fast_seo_single_call_preserves_validation(self):
         prompts=[]
         result=generate_youtube_metadata('story','original','description','English',lambda p:(prompts.append(p) or '{"title":"Title","description":"Description","tags":["story"]}'),self_check_only=True)
@@ -80,3 +94,4 @@ class DirectTranslationTests(unittest.TestCase):
         self.assertEqual(json.loads(result['fields']['optimization_review_json'])['verification'],'model_self_check_single_pass')
 
 if __name__=='__main__':unittest.main()
+
