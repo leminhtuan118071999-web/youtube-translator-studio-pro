@@ -272,6 +272,33 @@ def draw_subscribe_sticker(path, width, height):
     return badge.width
 
 
+def prepare_subscribe_clip(folder, sticker, intro_duration, move_duration, corner_scale, cancel):
+    """Bake scaling into a finite, constant-size alpha clip.
+
+    Changing scale dimensions inside the final overlay graph can trigger filter
+    reconfiguration. Keep that graph's geometry fixed throughout the export.
+    """
+    import tempfile
+    from PIL import Image
+    frames=math.ceil((intro_duration+move_duration)*FPS)+2
+    with Image.open(sticker) as opened:badge=opened.convert('RGBA')
+    with tempfile.TemporaryDirectory(prefix='subscribe-frames-',dir=folder) as temporary:
+        sequence=Path(temporary)
+        for index in range(frames):
+            if cancel.exists():raise Cancelled()
+            move=min(1,max(0,(index/FPS-intro_duration)/move_duration))
+            scale=1-(1-corner_scale)*move
+            size=(max(2,2*round(badge.width*scale/2)),max(2,2*round(badge.height*scale/2)))
+            frame=Image.new('RGBA',badge.size)
+            frame.paste(badge.resize(size,Image.Resampling.LANCZOS),(0,0))
+            frame.save(sequence/f'{index:04d}.png')
+        output=folder/'subscribe-animation.mov'
+        run_ffmpeg(['-framerate',str(FPS),'-i',str(sequence/'%04d.png'),
+                    '-frames:v',str(frames),'-an','-c:v','qtrle','-threads','1',
+                    '-pix_fmt','argb',output.name],folder,cancel,watch_output=output)
+    return output,badge.height
+
+
 def add_snow_filters(filters, source, folder, width, height):
     """Scroll two sparse, transparent snow layers continuously over the video."""
     from random import Random
@@ -452,25 +479,21 @@ def render(project, assets_folder, output_folder, update):
         margin = round(min(width, height) * .025)
         # Leave room for the move and the corner badge even on short videos.
         move_duration = min(.4, total / 4)
-        intro_duration = min(7, total - 2 * move_duration)
-        # After the move, overlay repeats the last frame of the small badge.
-        sticker_frames = math.ceil((intro_duration + move_duration) * FPS) + 2
-        # Read the PNG inside the filter graph so a second input demuxer cannot
-        # block the main video while the finite sticker stream reaches EOF.
-        sticker_source = (f'movie={sticker.name}:dec_threads=1,loop=loop={sticker_frames - 1}:size=1:start=0,'
-                          f'settb=1/{FPS},setpts=N')
+        intro_duration = min(5, total - 2 * move_duration)
         move = f'min(1,max(0,(t-{intro_duration:.6f})/{move_duration:.6f}))'
         corner_scale = min(width, height) * .21 / sticker_width
         scale = f'1-{1-corner_scale:.6f}*{move}'
-        # Four slow pulses over seven seconds, followed by a steady corner badge.
-        visible = f'gte(t,{intro_duration:.6f})+lt(mod(t,1.75),1.25)'
+        update(71,'Đang chuẩn bị hiệu ứng Subscribe')
+        animation,sticker_height=prepare_subscribe_clip(
+            output_folder,sticker,intro_duration,move_duration,corner_scale,cancel)
         filters.append(
-            f"{sticker_source},scale=w='2*round(iw*({scale})/2)':h=-2:eval=frame[subscribe]"
+            f'movie={animation.name}:dec_threads=1,settb=1/{FPS},setpts=N,format=rgba[subscribe]'
         )
         filters.append(
             f"{base_video}[subscribe]overlay="
-            f"x='(W-w)/2*(1-{move})+{margin}*{move}':"
-            f"y='(H-h)/2*(1-{move})+{margin}*{move}':enable='{visible}'[with_subscribe]"
+            f"x='(W-{sticker_width}*({scale}))/2*(1-{move})+{margin}*{move}':"
+            f"y='(H-{sticker_height}*({scale}))/2*(1-{move})+{margin}*{move}':"
+            f'eof_action=repeat:repeatlast=1[with_subscribe]'
         )
         video = '[with_subscribe]'
     update(72, 'Đang xử lý phụ đề, hiệu ứng và xuất video')

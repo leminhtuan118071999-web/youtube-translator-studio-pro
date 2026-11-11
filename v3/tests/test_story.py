@@ -133,6 +133,9 @@ class StoryTests(unittest.TestCase):
                    if '-filter_complex' in args and 'with_subscribe' in args[args.index('-filter_complex')+1])
         self.assertEqual(graph.count('movie='),3)
         self.assertEqual(graph.count(':dec_threads=1'),3)
+        self.assertNotIn('eval=frame',graph)
+        self.assertNotIn('enable=',graph)
+        self.assertIn('subscribe-animation.mov',graph)
 
     def test_portrait_pixabay_mode_exports_landscape_with_blurred_sides(self):
         import subprocess

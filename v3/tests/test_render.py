@@ -51,7 +51,7 @@ class RealRenderTests(unittest.TestCase):
         audio=subprocess.run(['ffmpeg','-v','error','-i',str(out/'output.mp4'),'-t','1','-f','s16le','-ac','1','pipe:1'],capture_output=True,check=True).stdout
         self.assertTrue(any(audio))
 
-    def test_subscribe_starts_full_size_blinks_then_moves_to_corner_and_can_be_disabled(self):
+    def test_subscribe_stays_centered_five_seconds_then_moves_to_corner_and_can_be_disabled(self):
         self.p['scenes'] = [dict(id='b', name='Blue', file='blue.mp4', duration=8)]
         self.p['subtitle_text'] = 'Phụ đề cùng video.'
         out = self.folder/'subscribe-render'
@@ -66,10 +66,12 @@ class RealRenderTests(unittest.TestCase):
             ).stdout
 
         self.assertGreater(sample(.1, 485, 625)[0], 150)
-        self.assertGreater(sample(1.5, 485, 625)[2], 180)
+        self.assertGreater(sample(1.5, 485, 625)[0], 150)
         self.assertGreater(sample(2.0, 485, 625)[0], 150)
-        self.assertGreater(sample(6.1, 485, 625)[0], 150)
-        self.assertGreater(sample(6.1, 120, 35)[2], 180)
+        self.assertGreater(sample(4.9, 485, 625)[0], 150)
+        self.assertGreater(sample(4.9, 120, 35)[2], 180)
+        self.assertGreater(sample(5.7, 485, 625)[2], 180)
+        self.assertGreater(sample(5.7, 120, 35)[0], 150)
         self.assertGreater(sample(7.7, 485, 625)[2], 180)
         self.assertGreater(sample(7.7, 120, 35)[0], 150)
 

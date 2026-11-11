@@ -100,6 +100,7 @@ def panel(project,folder,locked,output_panel=None):
             subscribe_corner = st.checkbox(
                 'Hiệu ứng',
                 value=prefs['subscribe_corner'], disabled=locked,
+                help='Subscribe hiện giữa màn hình khoảng 5 giây, không nhấp nháy, sau đó thu nhỏ về góc trên bên trái.',
             )
             subtitles=st.checkbox('Tạo phụ đề',value=prefs['auto_subtitles'],disabled=locked,
                                   help='Tự nhận diện giọng chính nếu chưa có SRT. Phần mở đầu không có phụ đề tự động.')

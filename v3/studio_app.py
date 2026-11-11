@@ -135,6 +135,16 @@ def progress_panel(folder, controls_locked):
     else:
         st.warning(status['stage'])
         if status['state'] in ('failed','cancelled','interrupted'):
+            if status['state']=='failed':
+                import io
+                import zipfile
+                bundle=io.BytesIO()
+                with zipfile.ZipFile(bundle,'w',zipfile.ZIP_DEFLATED) as archive:
+                    for name in ('status.json','ffmpeg.log','ffmpeg-commands.jsonl'):
+                        path=status['folder']/name
+                        if path.is_file():archive.write(path,name)
+                st.download_button('Tải nhật ký lỗi',bundle.getvalue(),
+                    file_name='lmt-v3-error.zip',mime='application/zip',key='error_logs_'+status['run_id'])
             st.caption('Tiếp tục với nguyên liệu và cấu hình đã lưu của lần dựng này. Bước xuất MP4 sẽ chạy lại.')
             if st.button('▶ Tiếp tục dự án',type='primary',key='resume_'+status['run_id'],
                          disabled=controls_locked or busy(folder)):
