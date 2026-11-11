@@ -146,8 +146,16 @@ def validate_srt(text,duration, *, offset=0):
 
 def run_ffmpeg(args, folder, cancel, progress=None, duration=1, *, watch_output=None):
     if cancel.exists(): raise Cancelled()
-    base=['ffmpeg','-hide_banner','-loglevel','error','-nostdin','-y','-filter_threads','1','-filter_complex_threads','1']
+    # Input decoder threads are scoped per input; encoder -threads does not
+    # constrain them. Avoid automatic decoder pools on multi-source graphs.
+    args=list(args)
+    for index in reversed([i for i,value in enumerate(args) if value=='-i']):
+        args[index:index]=['-threads','1']
+    base=['ffmpeg','-hide_banner','-loglevel','info','-nostdin','-y','-filter_threads','1','-filter_complex_threads','1']
+    with (folder/'ffmpeg-commands.jsonl').open('a',encoding='utf8') as commands:
+        commands.write(json.dumps(dict(started=time.time(),args=base+args,output=str(watch_output or '')),ensure_ascii=False)+'\n')
     with (folder/'ffmpeg.log').open('a') as log:
+        log.write('\n--- FFmpeg output: '+str(watch_output or args[-1:] )+' ---\n');log.flush()
         process=subprocess.Popen(base+args+['-progress','pipe:1','-nostats'],stdout=subprocess.PIPE,stderr=log,text=True,cwd=folder,creationflags=NO_WINDOW)
         messages=queue.Queue()
         def read_progress():
@@ -289,7 +297,7 @@ def add_snow_filters(filters, source, folder, width, height):
         snow.putalpha(mask.resize(snow.size, Image.Resampling.LANCZOS))
         snow.save(folder/filename)
         filters.append(
-            f'movie={filename},loop=loop=-1:size=1:start=0,settb=1/{FPS},setpts=N,'
+            f'movie={filename}:dec_threads=1,loop=loop=-1:size=1:start=0,settb=1/{FPS},setpts=N,'
             f'format=yuva444p,scroll=h={-dx * scale / (FPS * width):.9f}:'
             f'v={-dy * scale / (FPS * height):.9f}[snow{layer}]'
         )
@@ -449,7 +457,7 @@ def render(project, assets_folder, output_folder, update):
         sticker_frames = math.ceil((intro_duration + move_duration) * FPS) + 2
         # Read the PNG inside the filter graph so a second input demuxer cannot
         # block the main video while the finite sticker stream reaches EOF.
-        sticker_source = (f'movie={sticker.name},loop=loop={sticker_frames - 1}:size=1:start=0,'
+        sticker_source = (f'movie={sticker.name}:dec_threads=1,loop=loop={sticker_frames - 1}:size=1:start=0,'
                           f'settb=1/{FPS},setpts=N')
         move = f'min(1,max(0,(t-{intro_duration:.6f})/{move_duration:.6f}))'
         corner_scale = min(width, height) * .21 / sticker_width

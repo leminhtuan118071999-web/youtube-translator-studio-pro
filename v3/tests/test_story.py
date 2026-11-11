@@ -104,6 +104,36 @@ class StoryTests(unittest.TestCase):
                 self.assertAlmostEqual(pixel[1],green,delta=8)
                 self.assertAlmostEqual(pixel[2],255-green,delta=8)
 
+    def test_picture_with_all_effects_finishes_after_subscribe_moves(self):
+        import subprocess
+        from v3.render import render
+        command('-f','lavfi','-i','sine=frequency=500:sample_rate=48000',
+                '-t','9',str(self.assets/'long.wav'))
+        self.p.update(voice='long.wav',overlay_image='person.png',
+                      subtitle_text='Kiểm tra phụ đề và hiệu ứng.')
+        self.p['scenes']=[dict(id='b',name='Background',file='bg.mp4',duration=9)]
+        self.p['story'].update(image_opacity=85,snow_overlay=True,subscribe_corner=True)
+        out=self.folder/'all-effects'
+        render(self.p,self.folder,out,lambda *_:None)
+        media=probe(out/'output.mp4')
+        self.assertTrue(media['video'] and media['audio'])
+        self.assertAlmostEqual(media['duration'],9,delta=.15)
+        # The final frames must remain decodable after the finite sticker source
+        # ends; the small badge must still be visible in the top-left corner.
+        pixel=subprocess.run(['ffmpeg','-v','error','-ss','8.5','-i',str(out/'output.mp4'),
+            '-vf','format=rgb24,crop=1:1:120:35','-frames:v','1','-threads','1',
+            '-f','rawvideo','pipe:1'],capture_output=True,check=True).stdout
+        self.assertEqual(len(pixel),3)
+        self.assertGreater(pixel[0],150)
+        invocations=[json.loads(line)['args'] for line in (out/'ffmpeg-commands.jsonl').read_text().splitlines()]
+        for args in invocations:
+            for i,value in enumerate(args):
+                if value=='-i':self.assertEqual(args[i-2:i],['-threads','1'])
+        graph=next(args[args.index('-filter_complex')+1] for args in invocations
+                   if '-filter_complex' in args and 'with_subscribe' in args[args.index('-filter_complex')+1])
+        self.assertEqual(graph.count('movie='),3)
+        self.assertEqual(graph.count(':dec_threads=1'),3)
+
     def test_portrait_pixabay_mode_exports_landscape_with_blurred_sides(self):
         import subprocess
         from v3.render import render
