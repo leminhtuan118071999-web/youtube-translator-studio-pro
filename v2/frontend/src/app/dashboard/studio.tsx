@@ -1,6 +1,6 @@
 "use client";
 
-import { useCallback, useEffect, useRef, useState } from "react";
+import { memo, useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { createClient } from "@/lib/supabase/client";
 import { SignOutButton } from "./sign-out-button";
 
@@ -61,7 +61,6 @@ const active = (job: Job) => ["queued", "running", "retry_wait"].includes(job.st
 const jobNames: Record<string, string> = { full: "Bản dịch + tiêu đề, mô tả, tag", translation: "Bản dịch + tiêu đề, mô tả, tag", seo: "Dịch tiêu đề, mô tả và thẻ tag" };
 const statusNames: Record<string, string> = { queued: "Đang chờ", running: "Đang xử lý", retry_wait: "Đang chờ thử lại", succeeded: "Hoàn thành", completed: "Hoàn thành", failed: "Có lỗi", cancelled: "Đã hủy", draft: "Bản nháp", ready: "Sẵn sàng", processing: "Đang xử lý", interrupted: "Đã gián đoạn" };
 const jobPercent = (job: Job) => Math.max(0, Math.min(100, Math.round(job.progress)));
-const latestJob = (jobs: Job[], sid: string) => jobs.find(j => j.session_id === sid && active(j)) ?? jobs.find(j => j.session_id === sid);
 const str = (value: unknown) => typeof value === "string" ? value : "";
 
 async function api<T>(path: string, method = "GET", body?: unknown): Promise<T> {
@@ -90,6 +89,10 @@ export function Studio({ email }: { email: string }) {
   const [checkpoint, setCheckpoint] = useState<Checkpoint | null>(null);
   const [jobs, setJobs] = useState<Job[]>([]);
   const [healthy, setHealthy] = useState(false);
+  const [loading, setLoading] = useState(true);
+  const [configLoaded, setConfigLoaded] = useState(false);
+  const [sourceOpen, setSourceOpen] = useState(false);
+  const [comparisonOpen, setComparisonOpen] = useState(false);
   const [tab, setTab] = useState("Nội dung");
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState("");
@@ -103,10 +106,15 @@ export function Studio({ email }: { email: string }) {
   const refreshing = useRef<Promise<void> | null>(null);
   const busyRef = useRef(false);
   const activeJobsRef = useRef(false);
+  const checkpointVersion = useRef({ sid: "", value: "" });
 
   function accept(session: Session) {
+    sessionCache.current.delete(session.id);
     sessionCache.current.set(session.id, session);
+    if (sessionCache.current.size > 8) sessionCache.current.delete(sessionCache.current.keys().next().value!);
+    checkpointVersion.current = { sid: "", value: "" };
     setCheckpoint(null);
+    setSourceOpen(false); setComparisonOpen(false);
     selectedRef.current = session.id;
     setSelected(session); setDraft(session.data); setName(session.name);
     dirtyRef.current = false; setDirty(false);
@@ -115,36 +123,55 @@ export function Studio({ email }: { email: string }) {
     if (refreshing.current) return refreshing.current;
     const sid = selectedRef.current;
     const cached = sid ? sessionCache.current.get(sid) : undefined;
-    const query = sid ? `?sid=${sid}&revision=${cached?.revision ?? -1}` : "";
-    const task = api<{ sessions: Summary[]; jobs: Job[]; healthy: boolean; selected: Session | null; checkpoint?: Checkpoint | null }>(`/dashboard${query}`).then(result => {
-      setSessions(result.sessions); setJobs(result.jobs); setHealthy(result.healthy);
+    const version = sid === checkpointVersion.current.sid ? checkpointVersion.current.value : "";
+    const query = sid ? `?sid=${sid}&revision=${cached?.revision ?? -1}&checkpoint_version=${encodeURIComponent(version)}` : "";
+    const task = api<{ sessions: Summary[]; jobs: Job[]; healthy: boolean; selected: Session | null; checkpoint?: Checkpoint | null; checkpoint_version?: string; checkpoint_unchanged?: boolean }>(`/dashboard${query}`).then(result => {
+      setSessions(old => JSON.stringify(old) === JSON.stringify(result.sessions) ? old : result.sessions);
+      setJobs(old => JSON.stringify(old) === JSON.stringify(result.jobs) ? old : result.jobs);
+      setHealthy(result.healthy);
       activeJobsRef.current = result.jobs.some(active);
-      if (sid === selectedRef.current) setCheckpoint(result.checkpoint ?? null);
+      if (sid === selectedRef.current) {
+        if (!result.checkpoint_unchanged) setCheckpoint(result.checkpoint ?? null);
+        if (!result.checkpoint_unchanged || (checkpointVersion.current.sid === sid && checkpointVersion.current.value === version))
+          checkpointVersion.current = { sid: sid ?? "", value: result.checkpoint_version ?? "" };
+      }
       if (result.selected && sid === selectedRef.current && !dirtyRef.current
           && result.selected.revision >= (sessionCache.current.get(sid!)?.revision ?? -1)) {
         sessionCache.current.set(result.selected.id, result.selected);
         setSelected(result.selected); setDraft(result.selected.data); setName(result.selected.name);
       }
-    }).finally(() => { refreshing.current = null; });
+    }).finally(() => { refreshing.current = null; setLoading(false); });
     refreshing.current = task;
     return task;
   }, []);
   useEffect(() => {
     let mounted = true;
+    let polling = false;
     let timer: ReturnType<typeof setTimeout>;
     async function poll() {
+      if (!mounted || polling) return;
+      polling = true;
+      clearTimeout(timer);
       try { if (!document.hidden) await refresh(); }
       catch (e) { if (mounted) setError(e instanceof Error ? e.message : "Không tải được dữ liệu."); }
-      if (mounted) timer = setTimeout(poll, document.hidden ? 60000 : activeJobsRef.current ? 5000 : 15000);
+      finally {
+        polling = false;
+        if (mounted) timer = setTimeout(poll, document.hidden ? 60000 : activeJobsRef.current ? 5000 : 30000);
+      }
     }
     void poll();
-    void Promise.all([api<Record<string, Provider>>("/providers"), api<Config>("/settings")])
-      .then(([p, c]) => { if (mounted) { setProviders(p); setConfig(c); } })
-      .catch(e => { if (mounted) setError(e.message); });
     const visible = () => { if (!document.hidden) { clearTimeout(timer); void poll(); } };
     document.addEventListener("visibilitychange", visible);
     return () => { mounted = false; clearTimeout(timer); document.removeEventListener("visibilitychange", visible); };
   }, [refresh]);
+  useEffect(() => {
+    if (tab !== "Cấu hình API" || configLoaded) return;
+    let mounted = true;
+    void Promise.all([api<Record<string, Provider>>("/providers"), api<Config>("/settings")])
+      .then(([p, c]) => { if (mounted) { setProviders(p); setConfig(c); setConfigLoaded(true); } })
+      .catch(e => { if (mounted) setError(e.message); });
+    return () => { mounted = false; };
+  }, [tab, configLoaded]);
   useEffect(() => {
     const protect = (e: BeforeUnloadEvent) => { if (dirtyRef.current) e.preventDefault(); };
     window.addEventListener("beforeunload", protect);
@@ -209,7 +236,16 @@ export function Studio({ email }: { email: string }) {
   const provider = changes.api_provider ?? config.values.api_provider ?? "Groq";
   const pref = (key: string, fallback = "") => changes[key] ?? config.values[key] ?? fallback;
   const setPref = (key: string, value: string) => setChanges(old => ({ ...old, [key]: value }));
-  const selectedJob = selected ? latestJob(jobs, selected.id) : undefined;
+  const jobsBySession = useMemo(() => {
+    const indexed = new Map<string, Job>();
+    for (const job of jobs) {
+      if (!job.session_id) continue;
+      const previous = indexed.get(job.session_id);
+      if (!previous || (!active(previous) && active(job))) indexed.set(job.session_id, job);
+    }
+    return indexed;
+  }, [jobs]);
+  const selectedJob = selected ? jobsBySession.get(selected.id) : undefined;
   const currentCheckpoint = checkpoint && checkpoint.session_id === selected?.id && checkpoint?.job_id === selectedJob?.id
     && !dirty && (checkpoint.input_revision === selected?.revision
       || (selectedJob?.status === "completed" && checkpoint.input_revision + 1 === selected?.revision)) ? checkpoint : null;
@@ -218,6 +254,7 @@ export function Studio({ email }: { email: string }) {
   const sourceMetadata = currentCheckpoint?.source_metadata ?? draft.source_metadata as { status?: Record<string, string> } | undefined;
   const sourceStatus = (field: string) => sourceMetadata?.status?.[field];
   const spokenText = currentCheckpoint?.tts_text ?? str(draft.tts_text);
+  const characterCount = useMemo(() => Array.from(spokenText || narrationText).length.toLocaleString("vi-VN"), [spokenText, narrationText]);
   const seoValue = (field: "new_title" | "new_description" | "seo_tags") => currentCheckpoint?.[field] ?? str(draft[field]);
   const running = selectedJob ? active(selectedJob) : false;
   const stale = (key: string) => draft[key] === true ? <p className="status-warning">Nội dung này được tạo từ đầu vào cũ. Hãy tạo lại để khớp với phiên hiện tại.</p> : null;
@@ -237,13 +274,13 @@ export function Studio({ email }: { email: string }) {
         await refresh(); setNotice("Đã xóa tất cả phiên V2 và hủy tác vụ liên quan.");
       })}>Xóa tất cả phiên</button>
       <div className="session-list">{sessions.map(s => {
-        const job = latestJob(jobs, s.id);
+        const job = jobsBySession.get(s.id);
         return <button disabled={busy} className={`session-item ${selected?.id === s.id ? "active" : ""}`} key={s.id} onClick={() => void action(() => open(s.id))}>
           <span>◫ {s.name}</span>
           <small>{job ? `${statusNames[job.status] || job.status} · ${jobPercent(job)}%` : statusNames[s.status] || s.status}</small>
           {job && <><small>{jobNames[job.job_type] || job.job_type}</small><progress aria-label={`Tiến trình phiên ${s.name}`} value={jobPercent(job)} max={100} /><small className="session-stage" title={job.error || job.stage}>{job.error || job.stage}</small></>}
         </button>;
-      })}{!sessions.length && <p className="muted">Tạo phiên mới để bắt đầu.</p>}</div>
+      })}{!sessions.length && <p className="muted">{loading ? "Đang tải các phiên đã lưu…" : "Tạo phiên mới để bắt đầu."}</p>}</div>
       <div className="sidebar-footer"><span className="online-dot" style={{ background: healthy ? "var(--green)" : "#ffc46b" }} />{healthy ? "Worker sẵn sàng" : "Worker chưa kết nối"}</div>
     </aside>
     <section className="main-area">
@@ -263,7 +300,7 @@ export function Studio({ email }: { email: string }) {
         <div className="toolbar">{active(selectedJob) && <button disabled={busy} className="ghost-button" onClick={() => void action(async () => { await api(`/jobs/${selectedJob.id}/cancel`, "POST"); await refresh(); })}>Hủy xử lý</button>}{selectedJob.status === "failed" && <button disabled={busy || !healthy} className="secondary-button" onClick={() => void action(async () => { await api(`/jobs/${selectedJob.id}/retry`, "POST"); await refresh(); })}>Tiếp tục từ phần đã lưu</button>}</div>
       </details>}
       {dirty && <div className="save-banner"><span>Có thay đổi chưa lưu. Lưu sẽ hủy tác vụ đang chạy của phiên.</span><button disabled={busy} className="secondary-button" onClick={() => void action(async () => { await save(); setNotice("Đã lưu trên máy chủ."); })}>Lưu thay đổi</button></div>}
-      {!healthy && <p className="muted worker-hint">Worker chưa sẵn sàng. Bạn vẫn có thể chuẩn bị và lưu nội dung; nút tạo sẽ mở khi worker kết nối.</p>}
+      {!healthy && !loading && <p className="muted worker-hint">Worker chưa sẵn sàng. Bạn vẫn có thể chuẩn bị và lưu nội dung; nút tạo sẽ mở khi worker kết nối.</p>}
       {!selected && !["Cấu hình API", "AI33"].includes(tab) && <section className="welcome-panel"><div><p className="eyebrow">BẮT ĐẦU SÁNG TẠO</p><h2>Dịch văn bản và nội dung YouTube.</h2><p className="muted">Tạo phiên mới hoặc mở phiên đã lưu ở thanh bên. Cấu hình API của bạn được mã hóa trên máy chủ.</p></div><div className="welcome-icon">✦</div></section>}
       {currentCheckpoint?.metrics && <ProcessingTimes metrics={currentCheckpoint.metrics} running={running} />}
       {selected && tab === "Nội dung" && <section className="editor-panel">
@@ -275,8 +312,9 @@ export function Studio({ email }: { email: string }) {
           <label>Link YouTube<input disabled={busy} value={str(draft.url)} onChange={e => change("url", e.target.value)} placeholder="https://www.youtube.com/watch?v=…" /></label>
           <YouTubeThumbnail url={str(draft.url)} />
 
-          <details key={`${selected.id}:source-inputs`} style={{ gridColumn: "1 / -1" }}>
+          <details key={`${selected.id}:source-inputs`} open={sourceOpen} onToggle={e => setSourceOpen(e.currentTarget.open)} style={{ gridColumn: "1 / -1" }}>
             <summary>Kịch bản gốc · Tiêu đề gốc · Mô tả gốc · Tag gốc</summary>
+            {sourceOpen && <>
             <div className="form-grid" style={{ marginTop: 16 }}>
           <label style={{ gridColumn: "1 / -1" }}>Kịch bản gốc<textarea disabled={busy || running} rows={12} maxLength={350000}
             value={str(draft.source)} onChange={e => change("source", e.target.value)}
@@ -284,6 +322,7 @@ export function Studio({ email }: { email: string }) {
           <label>Tiêu đề gốc (nếu có)<input disabled={busy || running} value={str(draft.title)} onChange={e => change("title", e.target.value)} /></label><label>Mô tả gốc (nếu có)<textarea disabled={busy || running} value={str(draft.description)} onChange={e => change("description", e.target.value)} /></label>
             </div>
             <label style={{ gridColumn: "1 / -1" }}>Tag gốc lấy từ YouTube<textarea readOnly rows={3} value={Array.isArray(draft.source_tags) ? draft.source_tags.join(", ") : ""} /></label>
+            </>}
           </details>
         </div>
 
@@ -291,14 +330,15 @@ export function Studio({ email }: { email: string }) {
         <div className="toolbar">{generate("Bắt đầu dịch + tiêu đề, mô tả, tag", "full")}<button className="ghost-button" disabled={busy} onClick={() => void action(() => download("json"))}>Xuất phiên JSON</button>
           <button className="ghost-button danger" disabled={busy} onClick={() => void action(async () => { if (!window.confirm("Xóa phiên này và hủy mọi tác vụ đang chạy?")) return; await api(`/sessions/${selected.id}`, "DELETE"); selectedRef.current = null; setSelected(null); dirtyRef.current = false; setDirty(false); await refresh(); })}>Xóa phiên</button></div>
       </section>}
-      {selected && tab === "Nội dung" && <section className="editor-panel">{!earlyNarration && stale("translation_stale")}<div className="toolbar"><h2>Bản dịch dùng cho giọng đọc AI</h2><span className="status-pill" aria-label="Số ký tự bản dịch">{Array.from(spokenText || narrationText).length.toLocaleString("vi-VN")} ký tự</span><CopyButton key={`${selected.id}:tts`} text={spokenText || narrationText} label="bản đọc AI" /></div><p className="muted">Tự chuẩn hóa dấu câu và chuyển số rõ nghĩa thành chữ theo ngôn ngữ đích trong lượt dịch. Giữ đầy đủ nội dung và lời thoại; số mơ hồ và mã định danh được giữ nguyên.</p>
+      {selected && tab === "Nội dung" && <section className="editor-panel">{!earlyNarration && stale("translation_stale")}<div className="toolbar"><h2>Bản dịch dùng cho giọng đọc AI</h2><span className="status-pill" aria-label="Số ký tự bản dịch">{characterCount} ký tự</span><CopyButton key={`${selected.id}:tts`} text={spokenText || narrationText} label="bản đọc AI" /></div><p className="muted">Tự chuẩn hóa dấu câu và chuyển số rõ nghĩa thành chữ theo ngôn ngữ đích trong lượt dịch. Giữ đầy đủ nội dung và lời thoại; số mơ hồ và mã định danh được giữ nguyên.</p>
         {earlyNarration && <p className="status-good">Bản dịch đã lưu. Bạn có thể copy ngay; tiêu đề, mô tả và tag được xử lý song song.</p>}
         {!spokenText && narrationText && <p className="status-warning">Đang hiển thị bản giữ chữ số. Bấm dịch lại để tạo bản đọc AI theo cách xử lý mới.</p>}
         <textarea readOnly rows={22} value={spokenText || narrationText} />
-        <details><summary>Bản dịch giữ chữ số · đối chiếu và chỉnh sửa</summary><div className="toolbar"><CopyButton key={`${selected.id}:canonical`} text={narrationText} label="bản giữ chữ số" /></div><textarea disabled={busy} readOnly={!!earlyNarration} rows={16} value={narrationText} onChange={e => change("translated", e.target.value)} /></details>
+        <details key={`${selected.id}:comparison`} open={comparisonOpen} onToggle={e => setComparisonOpen(e.currentTarget.open)}><summary>Bản dịch giữ chữ số · đối chiếu và chỉnh sửa</summary>{comparisonOpen && <><div className="toolbar"><CopyButton key={`${selected.id}:canonical`} text={narrationText} label="bản giữ chữ số" /></div><textarea disabled={busy} readOnly={!!earlyNarration} rows={16} value={narrationText} onChange={e => change("translated", e.target.value)} /></>}</details>
         <div className="toolbar">{generate("Dịch lại và cập nhật SEO", "translation")}</div></section>}
       {selected && tab === "Tiêu đề · Mô tả · Tag" && <section className="editor-panel">{stale("seo_stale")}<p className="muted">Tiêu đề và mô tả được dịch sát nghĩa khi có bản gốc. Nếu không có mô tả gốc, mô tả sẽ được viết theo bản dịch văn bản. Có thể thêm emoji phù hợp để dễ đọc và hấp dẫn hơn; tag gốc được dịch sát nghĩa khi lấy được; nếu thiếu, AI tạo tag theo nội dung.</p>{!str(draft.title).trim() && <p className="muted">Chưa có tiêu đề gốc: tiêu đề sẽ được tạo theo nội dung câu chuyện.</p>}{!str(draft.description).trim() && <p className="muted">Không có mô tả gốc: tự tạo mô tả theo bản dịch văn bản, kèm emoji phù hợp.</p>}{[['title','tiêu đề'],['description','mô tả'],['tags','tag']].map(([field,label]) => sourceStatus(field) === 'unavailable' ? <p key={field} className="status-warning">Không lấy được {label} gốc từ YouTube. Kết quả mục này do AI tạo theo nội dung nguồn.</p> : sourceStatus(field) === 'empty' ? <p key={field} className="muted">Dữ liệu YouTube trả về không có {label} gốc; AI tạo mục này theo nội dung.</p> : ['fetched','provided'].includes(sourceStatus(field) || '') ? <p key={field} className="status-good">Đã có {label} gốc · dịch sang ngôn ngữ đích.</p> : null)}<div className="toolbar"><h2>Tiêu đề video</h2><CopyButton key={`${selected.id}:title`} text={seoValue("new_title")} label="tiêu đề" /></div><pre>{seoValue("new_title") || "Tiêu đề chưa được tạo"}</pre><p className="muted">{seoValue("new_title").length}/100 ký tự</p><div className="toolbar"><h2>Mô tả video</h2><CopyButton key={`${selected.id}:description`} text={seoValue("new_description")} label="mô tả" /></div><pre>{seoValue("new_description") || "Mô tả chưa được tạo"}</pre><div className="toolbar"><h2>Thẻ tag</h2><CopyButton key={`${selected.id}:tags`} text={seoValue("seo_tags")} label="thẻ tag" /></div><pre>{seoValue("seo_tags")}</pre><div className="toolbar">{(["new_title", "new_description", "seo_tags"] as const).map(field => <button disabled={busy} key={field} className="ghost-button" onClick={() => { const value = window.prompt(field === "new_title" ? "Tiêu đề mới (tối đa 100 ký tự)" : field === "new_description" ? "Mô tả mới" : "Thẻ tag", str(draft[field])); if (value !== null) void action(() => editArtifact(field, value)); }}>Sửa {field === "new_title" ? "tiêu đề" : field === "new_description" ? "mô tả" : "tag"}</button>)}</div>{generate("Dịch lại tiêu đề, mô tả và tạo tag", "seo")}</section>}
-      {tab === "Cấu hình API" && <section className="editor-panel"><h2>Nhà cung cấp AI</h2><p className="muted">API key đã lưu được giữ trên máy chủ. Để trống ô key sẽ giữ key hiện tại; dùng “Xóa key” khi cần.</p>
+      {tab === "Cấu hình API" && !configLoaded && <p role="status" className="muted">Đang tải cấu hình API…</p>}
+      {tab === "Cấu hình API" && configLoaded && <section className="editor-panel"><h2>Nhà cung cấp AI</h2><p className="muted">API key đã lưu được giữ trên máy chủ. Để trống ô key sẽ giữ key hiện tại; dùng “Xóa key” khi cần.</p>
         <label>Nền tảng<select disabled={busy} value={provider} onChange={e => { setPref("api_provider", e.target.value); setModels([]); }}>{Object.keys(providers).map(p => <option key={p}>{p}</option>)}</select></label>
         <label>API key {config.configured_keys.includes(`api_key_${provider}`) && <small className="status-good">Đã lưu</small>}<input disabled={busy} type="password" autoComplete="new-password" value={changes[`api_key_${provider}`] ?? ""} onChange={e => { const value = e.target.value; setChanges(old => { const next = { ...old }; if (value) next[`api_key_${provider}`] = value; else delete next[`api_key_${provider}`]; return next; }); }} placeholder="Nhập key mới nếu muốn thay đổi" /></label>
         <button className="ghost-button" onClick={() => setPref(`api_key_${provider}`, "")}>Xóa key đã lưu khi lưu cấu hình</button>
@@ -365,7 +405,7 @@ function ProcessingTimes({ metrics, running }: { metrics: Metrics; running: bool
   </details>;
 }
 
-function YouTubeThumbnail({ url }: { url: string }) {
+const YouTubeThumbnail = memo(function YouTubeThumbnail({ url }: { url: string }) {
   let id = "";
   try {
     const parsed = new URL(url);
@@ -376,8 +416,7 @@ function YouTubeThumbnail({ url }: { url: string }) {
   } catch { /* Wait for a valid YouTube link. */ }
   if (!/^[A-Za-z0-9_-]{11}$/.test(id)) return null;
   return <div style={{ gridColumn: "1 / -1" }}>
-    <img key={id} src={`https://i.ytimg.com/vi/${id}/hqdefault.jpg`} alt="Thumbnail gốc YouTube" width={240} style={{ maxWidth: "100%", borderRadius: 10 }} />
+    <img key={id} src={`https://i.ytimg.com/vi/${id}/hqdefault.jpg`} alt="Thumbnail gốc YouTube" width={240} loading="lazy" decoding="async" style={{ maxWidth: "100%", borderRadius: 10 }} />
     <div className="toolbar"><a className="secondary-button" href={`/api/youtube-thumbnail?id=${id}`}>Tải thumbnail gốc</a></div>
   </div>;
-}
-
+});

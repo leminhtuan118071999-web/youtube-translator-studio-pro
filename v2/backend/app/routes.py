@@ -169,7 +169,7 @@ def _selected_checkpoint(conn, owner, sid, revision):
 
 
 @router.get('/dashboard')
-def dashboard(sid: UUID | None = None, revision: int = -1,
+def dashboard(sid: UUID | None = None, revision: int = -1, checkpoint_version: str = "",
               user: AuthenticatedUser = Depends(require_user)):
     # One authenticated HTTP request and one DB connection per refresh.
     with connect() as conn:
@@ -178,13 +178,22 @@ def dashboard(sid: UUID | None = None, revision: int = -1,
         worker = conn.execute("select coalesce(bool_or(last_seen > now()-interval '150 seconds'),false) as healthy from public.lmt_v2_worker_health").fetchone()
         selected = None
         checkpoint = None
+        current_checkpoint_version = ""
+        checkpoint_unchanged = False
         if sid is not None:
             current = next((row for row in sessions if str(row['id']) == str(sid)), None)
             if current:
-                checkpoint = _selected_checkpoint(conn,user.id,sid,current['revision'])
+                latest = next((job for job in queue if str(job['session_id']) == str(sid)), None)
+                if latest:
+                    current_checkpoint_version = f"{latest['id']}:{latest['updated_at'].isoformat()}:{current['revision']}"
+                checkpoint_unchanged = bool(current_checkpoint_version and checkpoint_version == current_checkpoint_version)
+                if not checkpoint_unchanged:
+                    checkpoint = _selected_checkpoint(conn,user.id,sid,current['revision'])
             if current and current['revision'] != revision:
                 selected = _studio_session(store.owned_session(conn, user.id, sid))
-        return dict(sessions=sessions, jobs=queue, healthy=worker['healthy'], selected=selected, checkpoint=checkpoint)
+        return dict(sessions=sessions, jobs=queue, healthy=worker['healthy'], selected=selected,
+                    checkpoint=checkpoint, checkpoint_version=current_checkpoint_version,
+                    checkpoint_unchanged=checkpoint_unchanged)
 
 @router.get('/sessions/{sid}/export')
 def export(sid: UUID, format: str = 'json', user: AuthenticatedUser = Depends(require_user)):

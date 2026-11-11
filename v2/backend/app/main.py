@@ -1,5 +1,6 @@
 from fastapi import Depends, FastAPI, HTTPException
 from fastapi.middleware.cors import CORSMiddleware
+from fastapi.middleware.gzip import GZipMiddleware
 
 from .auth import AuthenticatedUser, require_user
 from .settings import get_settings
@@ -13,6 +14,7 @@ app = FastAPI(
     redoc_url=None,
 )
 
+app.add_middleware(GZipMiddleware, minimum_size=1500, compresslevel=3)
 app.add_middleware(
     CORSMiddleware,
     allow_origins=settings.allowed_origins,
@@ -48,3 +50,4 @@ from fastapi.exceptions import RequestValidationError
 @app.exception_handler(RequestValidationError)
 async def validation_error(request, exc):
     return JSONResponse(status_code=422, content={'detail': 'Dữ liệu yêu cầu không hợp lệ. Kiểm tra kiểu và giới hạn các trường.'})
+

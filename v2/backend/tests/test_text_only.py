@@ -32,3 +32,39 @@ def test_txt_export_prefers_spoken_text_and_preserves_old_session_fallback():
         assert export(sid,'txt',user).body.decode()=='twenty-three minutes'
     with patch('app.routes.connect'), patch('app.routes.store.owned_session',return_value={'data':{'translated':'23 minutes'}}):
         assert export(sid,'txt',user).body.decode()=='23 minutes'
+
+
+def test_dashboard_omits_unchanged_checkpoint_and_refreshes_after_job_or_revision_change():
+    from app.routes import dashboard
+    from unittest.mock import MagicMock, patch
+    from types import SimpleNamespace
+    from datetime import datetime, timezone, timedelta
+    from uuid import uuid4
+    sid=uuid4()
+    user=SimpleNamespace(id=uuid4())
+    session=dict(id=sid,revision=4)
+    job=dict(id=uuid4(),session_id=sid,updated_at=datetime.now(timezone.utc))
+    checkpoint=dict(translated='Long translation',tts_text='Spoken translation')
+    conn=MagicMock()
+    conn.execute.return_value.fetchall.return_value=[session]
+    conn.execute.return_value.fetchone.return_value={'healthy':True}
+    with patch('app.routes.connect') as connect, patch(
+            'app.routes._dashboard_jobs',return_value=[job]), patch(
+            'app.routes._selected_checkpoint',return_value=checkpoint) as load:
+        connect.return_value.__enter__.return_value=conn
+        first=dashboard(sid=sid,revision=4,user=user)
+        assert first['checkpoint']==checkpoint
+        assert first['checkpoint_unchanged'] is False
+        load.reset_mock()
+        unchanged=dashboard(sid=sid,revision=4,checkpoint_version=first['checkpoint_version'],user=user)
+        assert unchanged['checkpoint'] is None
+        assert unchanged['checkpoint_unchanged'] is True
+        load.assert_not_called()
+        job['updated_at']+=timedelta(seconds=1)
+        changed=dashboard(sid=sid,revision=4,checkpoint_version=first['checkpoint_version'],user=user)
+        assert changed['checkpoint']==checkpoint
+        assert changed['checkpoint_version']!=first['checkpoint_version']
+        session['revision']=5
+        changed_revision=dashboard(sid=sid,revision=5,checkpoint_version=changed['checkpoint_version'],user=user)
+        assert changed_revision['checkpoint_unchanged'] is False
+        assert changed_revision['checkpoint']==checkpoint
