@@ -137,6 +137,41 @@ class StoryTests(unittest.TestCase):
         self.assertNotIn('enable=',graph)
         self.assertIn('subscribe-animation.mov',graph)
 
+    def test_mixed_color_scenes_keep_effects_after_scene_changes(self):
+        import subprocess
+        from v3.render import render
+        for name,matrix,color in [('hd','bt709','blue'),('sd','smpte170m','red')]:
+            command('-f','lavfi','-i',f'color={color}:s=320x180:r=30','-t','1',
+                '-c:v','libx264','-threads','1','-pix_fmt','yuv420p',
+                '-colorspace',matrix,'-color_primaries',matrix,'-color_trc',matrix,
+                str(self.assets/(name+'.mp4')))
+        command('-f','lavfi','-i','sine=frequency=500:sample_rate=48000',
+                '-t','9',str(self.assets/'long.wav'))
+        self.p.update(voice='long.wav',overlay_image='person.png',subtitle_text='Phụ đề qua các cảnh.')
+        self.p['settings']['aspect']='16:9'
+        self.p['story'].update(image_opacity=84,snow_overlay=True,subscribe_corner=True)
+        self.p['scenes']=[dict(id=name,name=name,file=name+'.mp4',duration=1) for name in ('hd','sd')]
+        out=self.folder/'mixed-color'
+        render(self.p,self.folder,out,lambda *_:None)
+        self.assertAlmostEqual(probe(out/'output.mp4')['duration'],9,delta=.15)
+        for i in range(2):
+            info=json.loads(subprocess.run(['ffprobe','-v','error','-select_streams','v:0',
+                '-show_entries','stream=color_space,color_transfer,color_primaries,color_range',
+                '-of','json',str(out/f'scene-{i:04}.mp4')],capture_output=True,text=True,check=True).stdout)['streams'][0]
+            self.assertEqual(info,dict(color_space='bt709',color_transfer='bt709',color_primaries='bt709',color_range='tv'))
+        # Scene transitions must not consume the one-frame character or reset
+        # the finite Subscribe animation. Check both well after their first EOF.
+        for x,y,channel in [(640,600,1),(120,35,0)]:
+            pixel=subprocess.run(['ffmpeg','-v','error','-ss','8.5','-i',str(out/'output.mp4'),
+                '-vf',f'format=rgb24,crop=1:1:{x}:{y}','-frames:v','1','-threads','1',
+                '-f','rawvideo','pipe:1'],capture_output=True,check=True).stdout
+            self.assertEqual(len(pixel),3)
+            self.assertGreater(pixel[channel],150)
+        invocations=[json.loads(line)['args'] for line in (out/'ffmpeg-commands.jsonl').read_text().splitlines()]
+        final=next(args for args in invocations if args[-1]=='picture.mp4')
+        self.assertEqual(final[final.index('-reinit_filter:v:0')+1],'0')
+        self.assertNotIn('Reconfiguring filter graph',(out/'ffmpeg.log').read_text())
+
     def test_portrait_pixabay_mode_exports_landscape_with_blurred_sides(self):
         import subprocess
         from v3.render import render

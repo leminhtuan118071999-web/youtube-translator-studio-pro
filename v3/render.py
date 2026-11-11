@@ -353,7 +353,8 @@ def render(project, assets_folder, output_folder, update):
     width,height={'9:16':(short,round(short*16/9)), '16:9':(round(short*16/9),short),'1:1':(short,short)}[cfg['aspect']]
     width+=width%2;height+=height%2
     threads=max(2,min(8,(os.cpu_count() or 4)//2))
-    video_encode=['-c:v','libx264','-preset','veryfast','-crf','20','-threads',str(threads),'-pix_fmt','yuv420p']
+    video_encode=['-c:v','libx264','-preset','veryfast','-crf','20','-threads',str(threads),'-pix_fmt','yuv420p',
+                  '-colorspace','bt709','-color_primaries','bt709','-color_trc','bt709','-color_range','tv']
     audio_encode=['-c:a','aac','-ar','48000','-ac','2']
     encode=video_encode+audio_encode
     separate_audio = story and voice_name and cfg['original_volume'] == 0
@@ -373,7 +374,12 @@ def render(project, assets_folder, output_folder, update):
                            f'aresample=48000,apad,atrim=duration={seconds},asetpts=PTS-STARTPTS',*audio_encode]
         vf=f'fps={FPS},scale={width}:{height}:force_original_aspect_ratio='+('increase' if cfg['fit']=='cover' else 'decrease')
         vf+=f',crop={width}:{height}' if cfg['fit']=='cover' else f',pad={width}:{height}:(ow-iw)/2:(oh-ih)/2:color=black'
-        tail=',setsar=1,setpts=PTS-STARTPTS'
+        # Stream-copy concatenation preserves each scene's H.264 color metadata.
+        # Normalize both pixels and tags before concatenating, otherwise mixed
+        # bt709/smpte170m sources can reinitialize the final effect graph.
+        tail=(',scale=out_color_matrix=bt709:out_range=tv,format=yuv420p,'
+              'setparams=range=limited:color_primaries=bt709:color_trc=bt709:colorspace=bt709,'
+              'setsar=1,setpts=PTS-STARTPTS')
         if cfg['transition']=='fade':
             fade=min(.25,seconds/3);tail+=f',fade=t=in:st=0:d={fade},fade=t=out:st={seconds-fade}:d={fade}'
         if portrait_layout and 0 < media['width'] < media['height']:
@@ -392,7 +398,9 @@ def render(project, assets_folder, output_folder, update):
     concat_path=output_folder/'scenes.txt'
     if not concat_path.exists() or concat_path.read_text()!=concat:
         concat_path.write_text(concat)
-    args = ['-f','concat','-safe','1','-i','scenes.txt']
+    # All scenes already have the same geometry/pixel format. Keep finite PNG
+    # and movie sources alive even if an older cached stream changes color tags.
+    args = ['-reinit_filter:v:0','0','-f','concat','-safe','1','-i','scenes.txt']
     if separate_audio:
         # Final filters read one regular video stream, without concat demuxing or unused scene audio.
         update(70, 'Đang nối các cảnh đã dựng')
@@ -400,7 +408,7 @@ def render(project, assets_folder, output_folder, update):
         cached_ffmpeg(args+['-map','0:v:0','-c:v','copy',background.name],
                       output_folder,cancel,watch_output=background,
                       inputs=[concat_path,*[output_folder/f'scene-{i:04}.mp4' for i in range(len(durations))]])
-        args = ['-i',background.name]
+        args = ['-reinit_filter:v:0','0','-i',background.name]
     audio_args = [] if separate_audio else args
     filters = []
     mix = []
