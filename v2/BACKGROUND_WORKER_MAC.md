@@ -24,6 +24,15 @@ Thông báo cài thành công nghĩa dịch vụ đã được nạp, không tha
 
 Mở https://lmt-studio-pro-v2-web.onrender.com để dùng.
 
+## Tự khôi phục sau mất mạng hoặc gián đoạn
+
+- Khi mạng trở lại, worker tự tiếp tục tác vụ đang chờ từ checkpoint; không cần mở trình duyệt hay bấm Tiếp tục.
+- Khi tiến trình dừng bất ngờ, worker khác/lần chạy lại chỉ nhận việc sau khi lease cũ hết hạn (khoảng 3 phút).
+- Lỗi mạng, timeout và gateway tạm thời được thử lại với khoảng chờ tăng dần, tối đa 15 phút giữa các lần. Các tác vụ văn bản không bị dừng vĩnh viễn chỉ vì vượt ngân sách thử lại cũ.
+- Worker cũng rà soát các tác vụ lỗi tạm thời cũ khi khởi động và khoảng mỗi phút khi có thể; chỉ khôi phục tác vụ mới nhất, đầu vào chưa đổi, chưa có tác vụ khác đang hoạt động. Khóa được lấy lại từ cấu hình mã hóa của đúng chủ phiên.
+- Không khôi phục tác vụ đã hủy, nguồn đã sửa, tác vụ cũ đã được thay thế hoặc lỗi cấu hình/nội dung. Nếu cấu hình không còn khả dụng, cần sửa cấu hình trước.
+- Phần đã ghi thành công vào checkpoint được giữ; yêu cầu AI bị đứt trước khi lưu có thể phải gọi lại. Máy tắt thì không xử lý; tự tiếp tục sau khi đăng nhập lại và có mạng.
+
 ## Kiểm tra và dừng
 
 Từ thư mục dự án:

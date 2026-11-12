@@ -183,7 +183,7 @@ def enqueue(owner, sid, body):
             (owner, sid, body.kind, Jsonb(snapshot), seal(keys), session['revision'], body.request_id)).fetchone()
 
 
-def retry_job(owner, jid):
+def retry_job(owner, jid, *, automatic=False):
     with connect() as conn:
         prior = conn.execute('select session_id from public.lmt_v2_jobs where id=%s and user_id=%s', (jid, owner)).fetchone()
         if not prior:
@@ -193,6 +193,10 @@ def retry_job(owner, jid):
         if job['job_type'] not in ('full','translation','seo'):raise HTTPException(422,'Chức năng này đã bỏ khỏi V2.')
         if job['status'] != 'failed' or job['input_revision'] != session['revision']:
             raise HTTPException(409, 'Chỉ tiếp tục job lỗi khi đầu vào chưa thay đổi; nếu đã sửa hãy tạo job mới.')
+        if automatic and conn.execute('''select id from public.lmt_v2_jobs
+                where user_id=%s and session_id=%s and (created_at,id)>(%s,%s) limit 1''',
+                (owner,session['id'],job['created_at'],job['id'])).fetchone():
+            raise HTTPException(409, 'Phiên đã có tác vụ mới hơn; không tự khôi phục tác vụ cũ.')
         if conn.execute('select id from public.lmt_v2_jobs where user_id=%s and session_id=%s and status=any(%s)',
                         (owner, session['id'], list(ACTIVE))).fetchone():
             raise HTTPException(409, 'Phiên đang có tác vụ khác.')

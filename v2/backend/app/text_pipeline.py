@@ -9,6 +9,7 @@ from direct_translation import translate_direct, METHOD
 from faithful_summary import source_hash
 from processing_metrics import phase_for
 from youtube_source_metadata import fetch_source_metadata
+from .recovery import recoverable_error
 
 SUPPORTED = ('full','translation','seo')
 
@@ -69,7 +70,7 @@ def run_text_job(kind,snapshot,progress):
     keys=[snapshot.get('api_key',''),snapshot.get('supadata_key','')]
     names=['seo'] if kind=='seo' else ['translation','seo']
     shared=Shared(progress,names)
-    fields={};errors=[]
+    fields={};errors=[];retryable=[]
     try:
         # Restore only this immutable job's outputs; no old narration checkpoints.
         for key,value in (snapshot.get('resume_fields') or {}).items():
@@ -135,9 +136,12 @@ def run_text_job(kind,snapshot,progress):
             futures={executor.submit(fn):name for name,fn in tasks.items()}
             for future in as_completed(futures):
                 try:fields.update(future.result())
-                except Exception as exc:errors.append(futures[future]+': '+str(exc))
+                except Exception as exc:
+                    errors.append(futures[future]+': '+str(exc))
+                    retryable.append(exc.can_retry if isinstance(exc,RateLimitError) else recoverable_error(exc))
         progress.check_cancelled()
-    except Exception as exc:errors.append(str(exc))
+    except Exception as exc:
+        errors.append(str(exc));retryable.append(recoverable_error(exc))
     finally:
         with shared.lock:
             partial=progress.partial_result()
@@ -148,5 +152,5 @@ def run_text_job(kind,snapshot,progress):
     for key in keys:
         if key:error=error.replace(key,'[KEY ĐÃ ẨN]')
     progress.update(100,'Hoàn thành bản dịch và SEO' if not errors else 'Có phần chưa hoàn thành; đã giữ kết quả xong và checkpoint')
-    return dict(ok=not errors,fields=fields,error=error[:700])
+    return dict(ok=not errors,fields=fields,error=error[:700],retryable=bool(errors) and all(retryable))
 

@@ -14,6 +14,7 @@ from psycopg.types.json import Jsonb
 from .database import connect
 from .settings import get_settings
 from .store import unseal, seal
+from .recovery import TEXT_JOBS, recoverable_error
 
 STOP = threading.Event()
 PUBLIC_FIELDS = {
@@ -49,16 +50,51 @@ def claim(name):
         conn.execute("""update public.lmt_v2_jobs set status='failed',stage='Đã hết số lần thử',
             encrypted_keys=null,lease_token=null,lease_owner=null,lease_expires_at=null,
             finished_at=now(),updated_at=now()
-            where attempts>=max_attempts and ((status='running' and lease_expires_at<now())
+            where job_type not in ('full','translation','seo') and attempts>=max_attempts and ((status='running' and lease_expires_at<now())
                 or (status in ('queued','retry_wait') and retry_after<=now()))""")
         return conn.execute("""with candidate as (
-            select id from public.lmt_v2_jobs where attempts<max_attempts and session_id is not null and (
+            select id from public.lmt_v2_jobs where (attempts<max_attempts or job_type in ('full','translation','seo'))
+                and session_id is not null and encrypted_keys is not null and (
                 (status in ('queued','retry_wait') and retry_after<=now())
                 or (status='running' and lease_expires_at<now()))
             order by created_at for update skip locked limit 1)
             update public.lmt_v2_jobs j set status='running',lease_owner=%s,lease_token=gen_random_uuid(),
                 lease_expires_at=now()+interval '180 seconds',attempts=attempts+1,updated_at=now(),error=''
             from candidate c where j.id=c.id returning j.*""", (name,)).fetchone()
+
+
+def recover_failed_jobs():
+    """Recover only latest, unchanged text jobs that failed with an outage.
+
+    Older failed jobs erased their transient credentials. Reuse the owner-bound
+    manual recovery transaction to refresh keys without changing model/input.
+    Cancellation, revisions and active-job uniqueness remain authoritative.
+    """
+    from .store import retry_job
+    from fastapi import HTTPException
+    with connect() as conn:
+        rows=conn.execute("""select j.id,j.user_id,j.error from public.lmt_v2_jobs j
+            join public.lmt_v2_sessions s on s.id=j.session_id and s.user_id=j.user_id
+            where j.status='failed' and j.job_type in ('full','translation','seo')
+                and (j.result->>'_auto_retryable') is distinct from 'false'
+                and s.status='failed' and s.revision=j.input_revision
+                and not exists(select 1 from public.lmt_v2_jobs newer
+                    where newer.session_id=j.session_id and newer.user_id=j.user_id
+                    and (newer.created_at,newer.id)>(j.created_at,j.id))
+                and not exists(select 1 from public.lmt_v2_jobs active
+                    where active.session_id=j.session_id and active.user_id=j.user_id
+                    and active.status in ('queued','running','retry_wait'))
+            order by j.updated_at""").fetchall()
+    recovered=0
+    for row in rows:
+        if STOP.is_set():break
+        if not recoverable_error(row['error']):continue
+        try:
+            retry_job(row['user_id'],row['id'],automatic=True);recovered+=1
+        except HTTPException:
+            # Config unavailable, another worker won, or input was edited.
+            continue
+    return recovered
 
 
 class LeaseLost(RuntimeError):
@@ -161,8 +197,11 @@ def finish(job, progress, result):
     fields = {k: v for k, v in fields.items() if k in PUBLIC_FIELDS}
     success = bool(result.get('ok'))
     error = clean(str(result.get('error', '')), progress.keys)[:700]
-    transient = not success and any(x in error.lower() for x in ('502','503','504','timeout','temporarily','connection','kết nối','tạm thời'))
-    retry = transient and job['attempts'] < job['max_attempts']
+    transient = not success and (result.get('retryable') is True if 'retryable' in result else recoverable_error(error))
+    if not success:fields['_auto_retryable']=bool(transient)
+    # Outages do not become permanent failures just because the Mac restarted
+    # several times. Keep a capped backoff until restored or explicitly cancelled.
+    retry = transient and (job['job_type'] in TEXT_JOBS or job['attempts'] < job['max_attempts'])
     state = 'completed' if success else ('retry_wait' if retry else 'failed')
     with connect() as conn:
         session = conn.execute('select revision from public.lmt_v2_sessions where id=%s and user_id=%s for update', (job['session_id'], job['user_id'])).fetchone()
@@ -225,11 +264,15 @@ def main():
     with connect() as conn:
         conn.execute('select input_revision,request_id from public.lmt_v2_jobs limit 0')
     name = socket.gethostname()+'-'+str(uuid4())[:8]
+    next_recovery=0
     for sig in (signal.SIGTERM,signal.SIGINT):
         signal.signal(sig, lambda *_: STOP.set())
     while not STOP.is_set():
         try:
             heartbeat(name)
+            if time.monotonic()>=next_recovery:
+                recover_failed_jobs()
+                next_recovery=time.monotonic()+60
             job = claim(name)
             if job:
                 process(job)

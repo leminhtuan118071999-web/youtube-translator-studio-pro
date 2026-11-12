@@ -241,15 +241,85 @@ def test_worker_runs_direct_translation_and_parallel_metadata_into_durable_sessi
         assert j['status']=='completed' and j['progress']==100 and j['encrypted_keys'] is None
 
 
-def test_final_expired_attempt_is_failed_and_credentials_erased(db):
+def test_legacy_final_expired_attempt_is_failed_and_credentials_erased(db):
     owner,_=db
     configured(owner); s=session(owner); j=submit(owner,s)
     with connect() as c:
-        c.execute("update lmt_v2_jobs set status='running',attempts=max_attempts,lease_expires_at=now()-interval '1 second' where id=%s",(j['id'],))
+        c.execute("update lmt_v2_jobs set job_type='forms',status='running',attempts=max_attempts,lease_expires_at=now()-interval '1 second' where id=%s",(j['id'],))
     assert worker.claim('test-worker') is None
     with connect() as c:
         row=c.execute('select status,encrypted_keys from lmt_v2_jobs where id=%s',(j['id'],)).fetchone()
         assert row['status']=='failed' and row['encrypted_keys'] is None
+
+
+def test_text_jobs_resume_expired_lease_after_old_attempt_budget(db):
+    owner,_=db
+    configured(owner);s=session(owner);j=submit(owner,s)
+    with connect() as c:
+        c.execute("""update lmt_v2_jobs set status='running',attempts=max_attempts,
+            result='{"optimization_work_json":"saved part"}',
+            lease_expires_at=now()-interval '1 second' where id=%s""",(j['id'],))
+    recovered=worker.claim('restarted-worker')
+    assert str(recovered['id'])==str(j['id'])
+    assert recovered['result']['optimization_work_json']=='saved part'
+    assert recovered['encrypted_keys']
+    assert worker.finish(recovered,worker.Progress(recovered,{}),dict(ok=False,
+        error='translation: Nhà cung cấp AI phản hồi quá thời gian chờ (300 giây).'))
+    with connect() as c:
+        row=c.execute('select * from lmt_v2_jobs where id=%s',(j['id'],)).fetchone()
+        assert row['status']=='retry_wait' and row['encrypted_keys']
+        assert row['result']['optimization_work_json']=='saved part'
+
+
+def test_old_failed_timeout_is_automatically_requeued_with_saved_result(db):
+    owner,_=db
+    configured(owner);s=session(owner);j=submit(owner,s)
+    with connect() as c:
+        c.execute("""update lmt_v2_jobs set status='failed',encrypted_keys=null,
+            error='translation: Nhà cung cấp AI phản hồi quá thời gian chờ (300 giây).',
+            result='{"optimization_work_json":"old checkpoint"}' where id=%s""",(j['id'],))
+        c.execute("update lmt_v2_sessions set status='failed' where id=%s",(s['id'],))
+    with patch('app.engine.validate_base_url',return_value='https://api.openai.com/v1'):
+        assert worker.recover_failed_jobs()==1
+    with connect() as c:
+        row=c.execute('select * from lmt_v2_jobs where id=%s',(j['id'],)).fetchone()
+        assert row['status']=='queued' and row['encrypted_keys']
+        assert row['result']['optimization_work_json']=='old checkpoint'
+        assert store.unseal(row['encrypted_keys'])['api_key']=='private-provider-key'
+
+
+@pytest.mark.parametrize('situation',['cancelled','edited','newer','config_error'])
+def test_auto_recovery_does_not_restart_cancelled_changed_or_superseded_jobs(db,situation):
+    owner,_=db
+    configured(owner);s=session(owner);j=submit(owner,s)
+    with connect() as c:
+        c.execute("update lmt_v2_jobs set status='failed',encrypted_keys=null,error='HTTP 503' where id=%s",(j['id'],))
+        c.execute("update lmt_v2_sessions set status='failed' where id=%s",(s['id'],))
+        if situation=='cancelled':c.execute("update lmt_v2_jobs set status='cancelled' where id=%s",(j['id'],))
+        elif situation=='edited':c.execute('update lmt_v2_sessions set revision=revision+1 where id=%s',(s['id'],))
+        elif situation=='newer':
+            c.execute("""insert into lmt_v2_jobs(user_id,session_id,job_type,status,created_at)
+                values (%s,%s,'full','cancelled',now()+interval '1 second')""",(owner,s['id']))
+        else:c.execute("update lmt_v2_jobs set error='HTTP 401: API key không hợp lệ.' where id=%s",(j['id'],))
+    assert worker.recover_failed_jobs()==0
+
+
+def test_explicit_nonretryable_failure_cannot_be_reclassified_by_error_text(db):
+    owner,_=db
+    configured(owner);s=session(owner);submit(owner,s)
+    j=worker.claim('test');p=worker.Progress(j,{})
+    assert worker.finish(j,p,dict(ok=False,error='HTTP 429: quota exceeded',retryable=False))
+    assert worker.recover_failed_jobs()==0
+
+
+def test_automatic_retry_rechecks_newer_job_under_session_lock(db):
+    owner,_=db
+    configured(owner);s=session(owner);j=submit(owner,s)
+    with connect() as c:
+        c.execute("update lmt_v2_jobs set status='failed' where id=%s",(j['id'],))
+        c.execute("""insert into lmt_v2_jobs(user_id,session_id,job_type,status,created_at)
+            values (%s,%s,'full','cancelled',now()+interval '1 second')""",(owner,s['id']))
+    with pytest.raises(HTTPException):store.retry_job(owner,j['id'],automatic=True)
 
 
 def test_stale_session_save_is_rejected_without_cancelling_new_work(db):

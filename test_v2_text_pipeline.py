@@ -9,6 +9,25 @@ from app.text_pipeline import run_text_job
 from background_jobs import JobProgress
 
 class TextPipelineTests(unittest.TestCase):
+    def test_provider_timeout_is_retryable_and_keeps_completed_metadata(self):
+        from api_clients import ProviderReadTimeout
+        def call(*args,**kwargs):
+            if args[4].startswith('DIRECT_TRANSLATION'):raise ProviderReadTimeout('Nhà cung cấp AI phản hồi quá thời gian chờ (300 giây).')
+            return '{"title":"Xin chào","description":"Lời chào.","tags":["xin chào"]}'
+        with patch('app.text_pipeline.generate_text',side_effect=call):
+            result=run_text_job('full',self.config(),JobProgress())
+        self.assertFalse(result['ok']);self.assertTrue(result['retryable'])
+        self.assertEqual(result['fields']['new_title'],'Xin chào')
+
+    def test_mixed_temporary_and_content_error_is_not_automatically_retried(self):
+        from api_clients import ProviderReadTimeout
+        def call(*args,**kwargs):
+            if args[4].startswith('DIRECT_TRANSLATION'):raise ProviderReadTimeout('Timed out')
+            raise ValueError('Thiếu tiêu đề hoặc mô tả.')
+        with patch('app.text_pipeline.generate_text',side_effect=call):
+            result=run_text_job('full',self.config(),JobProgress())
+        self.assertFalse(result['ok']);self.assertFalse(result['retryable'])
+
     def config(self):return dict(source='Anna says hello.',uploaded_source='Anna says hello.',url='',title='Hello',description='Greeting.',language='Vietnamese',provider='custom',base_url='https://example.test',model='model',api_key='SECRET')
     def test_translation_and_seo_really_overlap(self):
         translation_started=threading.Event();seo_started=threading.Event()
