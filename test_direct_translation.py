@@ -6,6 +6,55 @@ from direct_translation import translate_direct, parse_translation, END_MARKER
 from youtube_metadata import generate_youtube_metadata
 
 class DirectTranslationTests(unittest.TestCase):
+    def test_timeout_splits_only_failed_window_and_keeps_exact_source(self):
+        from api_clients import ProviderReadTimeout
+        source='Anna waits 23 minutes. '*180
+        progress=JobProgress();completed=[];requests=[]
+        def call(prompt):
+            data=json.loads(prompt.split('SOURCE DATA:\n')[1]);requests.append(data)
+            if len(requests)==1:raise ProviderReadTimeout('Provider timed out')
+            completed.append(data['core'])
+            return json.dumps(dict(text=data['core'],complete=True,number_readings=[]))
+        output=translate_direct(source,'English',call,progress,numbers_as_words=True)
+        self.assertEqual(''.join(completed),source)
+        self.assertTrue(all(len(core)<len(source) for core in completed))
+        self.assertEqual(output,'\n\n'.join(core.strip() for core in completed))
+        self.assertEqual(progress.partial_result()['tts_text'],output)
+        self.assertTrue(requests[1]['after'])
+        self.assertTrue(requests[2]['before'])
+        self.assertTrue(requests[2]['previous'])
+
+    def test_resume_after_child_timeout_never_repeats_completed_child(self):
+        from api_clients import ProviderReadTimeout
+        source='Anna tells her story. '*190
+        progress=JobProgress();success=[];count=0
+        def call(prompt):
+            nonlocal count
+            count+=1;core=json.loads(prompt.split('SOURCE DATA:\n')[1])['core']
+            if count in (1,3):raise ProviderReadTimeout('Timed out')
+            success.append(core)
+            return core+'\n'+END_MARKER
+        with self.assertRaises(ProviderReadTimeout):translate_direct(source,'English',call,progress)
+        saved=json.loads(progress.partial_result()['optimization_work_json'])
+        self.assertEqual(len(saved['section_texts']),1)
+        first=success[0]
+        def resume(prompt):
+            core=json.loads(prompt.split('SOURCE DATA:\n')[1])['core']
+            self.assertNotEqual(core,first)
+            success.append(core)
+            return core+'\n'+END_MARKER
+        output=translate_direct(source,'English',resume,progress)
+        self.assertEqual(''.join(success),source)
+        self.assertEqual(output,'\n\n'.join(core.strip() for core in success))
+
+    def test_short_timeout_has_no_retry_storm(self):
+        from api_clients import ProviderReadTimeout
+        calls=[]
+        def fail(prompt):calls.append(prompt);raise ProviderReadTimeout('Unavailable')
+        with self.assertRaises(ProviderReadTimeout):
+            translate_direct('Short source.','English',fail,JobProgress())
+        self.assertEqual(len(calls),1)
+
     def test_full_source_once_and_resume(self):
         source=('Anna said, "Wait 23 minutes."\n'*500)
         progress=JobProgress();cores=[]
