@@ -265,6 +265,10 @@ class ProviderReadTimeout(RuntimeError):
     """Provider did not finish a response within the request deadline."""
 
 
+class ProviderEmptyResponse(RuntimeError):
+    """The provider finished but returned no visible answer text."""
+
+
 class TransientProviderError(RuntimeError):
     """A provider/gateway responded with a retryable 502/503/504.
 
@@ -396,6 +400,7 @@ def _read_provider_answer(payload, kind, provider, model):
     if not isinstance(payload, dict):
         raise RuntimeError("API trả phản hồi không phải JSON object.")
     finish_reason = "không rõ"
+    answer = ""
     if kind == "anthropic":
         answer = _extract_text_parts(payload.get("content", []))
         finish_reason = str(payload.get("stop_reason") or "không rõ")
@@ -407,16 +412,18 @@ def _read_provider_answer(payload, kind, provider, model):
             if not isinstance(message, dict):
                 message = {}
             answer = _extract_text_parts(message.get("content"))
+            if not answer and message.get('refusal'):
+                raise RuntimeError('Nhà cung cấp từ chối trả nội dung; hãy kiểm tra yêu cầu và chính sách của model.')
             finish_reason = str(choice.get("finish_reason") or "không rõ")
             if not answer and message.get("tool_calls"):
                 finish_reason = "tool_calls"
-        else:
+        if not answer:
             # Some OpenAI-compatible proxy servers return Responses-style bodies.
             output = payload.get("output", [])
             answer = "\n".join(
                 _extract_text_parts(item.get("content", []))
                 for item in output if isinstance(item, dict)
-                and item.get("type") == "message"
+                and item.get("type") == "message" and item.get('role','assistant')=='assistant'
             ).strip() if isinstance(output, list) else ""
             # Gemini-compatible / v1beta-style fallback.
             if not answer and isinstance(payload.get("candidates"), list):
@@ -457,7 +464,7 @@ def _read_provider_answer(payload, kind, provider, model):
             f"Nhà cung cấp chặn nội dung đầu ra ({desc}). "
             "Hãy kiểm tra nội dung và chính sách của model."
         )
-    raise RuntimeError(
+    raise ProviderEmptyResponse(
         f"API trả về thành công nhưng không có nội dung văn bản ({desc}). "
         "Có thể model chỉ tạo phần reasoning mà chưa tạo câu trả lời cuối; "
         "hãy thử model chat khác hoặc giảm mức reasoning."
@@ -516,6 +523,12 @@ def generate_text(
         }
     else:
         body = {"model": model, "messages": [{"role": "user", "content": prompt}]}
+        if provider=='OpenAI' and model=='gpt-6.1-sol':
+            # This reasoning model defaults to medium effort. Explicitly reserve
+            # room for both reasoning and the full translated text rather than
+            # inheriting a small gateway completion default.
+            body['reasoning_effort']='low'
+            body['max_completion_tokens']=max(16384,(task_output_budget(prompt) or 4096)+8192)
         # Groq GPT-OSS uses reasoning tokens. Reserve enough output tokens for
         # the final translation, not just internal reasoning. These options
         # are documented for GPT-OSS; don't send them to other providers/models.
@@ -663,3 +676,4 @@ def list_models(
             if isinstance(value, str) and value.strip():
                 models.append(value.strip())
     return sorted(set(models), key=str.casefold)[:300]
+

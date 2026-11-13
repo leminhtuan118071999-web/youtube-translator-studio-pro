@@ -4,6 +4,7 @@ import pytest
 
 @pytest.mark.parametrize('error',[
     'translation: Nhà cung cấp AI phản hồi quá thời gian chờ (300 giây).',
+    'translation: API trả về thành công nhưng không có nội dung văn bản (OpenAI / gpt-6.1-sol, finish_reason=stop).',
     'Kết nối tới nhà cung cấp AI bị lỗi hoặc bị ngắt.',
     'HTTP 503: Service temporarily unavailable',
     'Temporary failure in name resolution',

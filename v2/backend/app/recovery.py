@@ -17,6 +17,7 @@ def recoverable_error(error):
     return any(marker in value for marker in (
         'http 502','http 503','http 504','http 429',
         'timeout','timed out','quá thời gian chờ','temporarily',
+        'api trả về thành công nhưng không có nội dung văn bản',
         'temporary failure','connection','kết nối','mất mạng',
         'network is unreachable','network error','name resolution',
         'could not translate host name','server closed',

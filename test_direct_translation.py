@@ -6,6 +6,18 @@ from direct_translation import translate_direct, parse_translation, END_MARKER
 from youtube_metadata import generate_youtube_metadata
 
 class DirectTranslationTests(unittest.TestCase):
+    def test_empty_provider_response_splits_without_accepting_reasoning_or_losing_source(self):
+        from api_clients import ProviderEmptyResponse
+        source='Anna waits quietly. '*190
+        calls=[];completed=[]
+        def call(prompt):
+            core=json.loads(prompt.split('SOURCE DATA:\n')[1])['core'];calls.append(core)
+            if len(calls)==1:raise ProviderEmptyResponse('No visible answer')
+            completed.append(core);return core+'\n'+END_MARKER
+        output=translate_direct(source,'English',call,JobProgress())
+        self.assertEqual(''.join(completed),source)
+        self.assertEqual(output,'\n\n'.join(core.strip() for core in completed))
+
     def test_timeout_splits_only_failed_window_and_keeps_exact_source(self):
         from api_clients import ProviderReadTimeout
         source='Anna waits 23 minutes. '*180

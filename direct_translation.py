@@ -2,7 +2,7 @@
 import json
 import re
 from faithful_summary import FACT_RULES, source_hash, source_windows
-from api_clients import ProviderReadTimeout
+from api_clients import ProviderReadTimeout, ProviderEmptyResponse
 
 
 METHOD = 'direct_translation_v2'
@@ -194,7 +194,7 @@ def translate_direct(source, language, call, progress, *, numbers_as_words=False
             try:
                 text,speech=translate_fragment(fragment,language,call,progress,numbers_as_words,
                     previous,pending_raw,checkpoint,percent,label)
-            except ProviderReadTimeout:
+            except (ProviderReadTimeout,ProviderEmptyResponse):
                 # One bounded fallback, not an unbounded retry of the billed POST.
                 # Never change an already completed parent window or child span.
                 if len(sections)!=1 or len(original['core'])<1600:raise
@@ -202,7 +202,7 @@ def translate_direct(source, language, call, progress, *, numbers_as_words=False
                     limit=(len(original['core'])+1)//2,context_size=0)]
                 if not 2<=len(sections)<=4:raise
                 pending_raw=None;checkpoint()
-                progress.update(percent,'AI quá thời gian chờ; tự chia nhỏ '+label)
+                progress.update(percent,'AI chưa trả bản dịch; tự chia nhỏ '+label)
                 continue
             section_texts.append(text);section_spoken.append(speech)
             pending_raw=None;checkpoint()
