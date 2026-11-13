@@ -1,0 +1,78 @@
+name: LMT Studio Pro V2 CI
+
+on:
+  push:
+    branches:
+      - "v2/**"
+      - "main"
+    paths:
+      - "v2/**"
+      - ".github/workflows/v2-ci.yml"
+  pull_request:
+    paths:
+      - "v2/**"
+      - ".github/workflows/v2-ci.yml"
+
+permissions:
+  contents: read
+
+jobs:
+  frontend:
+    name: Frontend typecheck and production build
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: v2/frontend
+    env:
+      NEXT_PUBLIC_SUPABASE_URL: https://example.supabase.co
+      NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY: sb_publishable_ci_placeholder
+      NEXT_PUBLIC_API_BASE_URL: http://localhost:8000
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "22"
+      - name: Install pinned frontend dependencies
+        run: |
+          if [ -f package-lock.json ]; then
+            npm ci --no-audit --no-fund
+          else
+            npm install --no-audit --no-fund
+          fi
+      - run: npm test
+      - run: npm run typecheck
+      - run: npm run build
+
+  backend:
+    name: Backend tests
+    runs-on: ubuntu-latest
+    services:
+      postgres:
+        image: postgres:17
+        env:
+          POSTGRES_USER: postgres
+          POSTGRES_PASSWORD: ci-disposable-password
+          POSTGRES_DB: lmt_test
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd "pg_isready -U postgres"
+          --health-interval 5s --health-timeout 5s --health-retries 10
+    env:
+      TEST_DATABASE_URL: postgresql://postgres:ci-disposable-password@localhost:5432/lmt_test
+    defaults:
+      run:
+        working-directory: v2/backend
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+          cache: pip
+          cache-dependency-path: v2/backend/requirements.txt
+      - run: pip install -r requirements.txt
+      - run: pytest -q
+      - name: Regression tests for shared production engines
+        working-directory: .
+        run: python -m unittest -q test_youtube_source_metadata test_direct_numbers test_direct_punctuation test_v2_text_pipeline test_direct_translation test_processing_metrics test_narration_auto_repair test_narration_translation test_narration_numbers test_youtube_metadata test_persistent_store test_durable_queue test_character_profiles test_character_identity test_wardrobe_lock test_speech_roles
+

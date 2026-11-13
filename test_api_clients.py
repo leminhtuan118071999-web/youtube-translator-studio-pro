@@ -806,3 +806,29 @@ class ApiClientTests(unittest.TestCase):
 
 if __name__ == "__main__":
     unittest.main()
+
+class DirectTranslationTimeoutTests(unittest.TestCase):
+    def setUp(self):
+        dns = patch("api_clients.socket.getaddrinfo", return_value=[(2, 1, 6, "", ("8.8.8.8", 443))])
+        dns.start()
+        self.addCleanup(dns.stop)
+
+    @patch("api_clients._request")
+    def test_long_translation_wait_is_bounded_and_not_retried(self, req):
+        import requests
+        from api_clients import generate_text, ProviderReadTimeout
+        req.side_effect = requests.ReadTimeout("slow upstream")
+        with self.assertRaises(ProviderReadTimeout) as raised:
+            generate_text("OpenAI", "https://api.openai.com/v1", "test-model", "test-key", "DIRECT_TRANSLATION. Translate core.")
+        self.assertIn("300", str(raised.exception))
+        self.assertEqual(req.call_count, 1)
+        self.assertEqual(req.call_args.kwargs["timeout"], (10, 300))
+
+    @patch("api_clients._request")
+    def test_connection_check_keeps_existing_timeout(self, req):
+        import requests
+        from api_clients import generate_text, ProviderReadTimeout
+        req.side_effect = requests.ReadTimeout("slow upstream")
+        with self.assertRaises(ProviderReadTimeout):
+            generate_text("OpenAI", "https://api.openai.com/v1", "test-model", "test-key", "Say OK")
+        self.assertEqual(req.call_args.kwargs["timeout"], (10, 150))

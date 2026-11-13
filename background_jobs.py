@@ -4,6 +4,7 @@ Never import Streamlit or touch st.session_state from a worker thread.
 Jobs and API keys exist in process memory, not persistent storage.
 """
 from youtube_metadata import generate_youtube_metadata
+from processing_metrics import ProcessingMetrics
 import json
 import re
 import threading
@@ -102,13 +103,14 @@ def parse_object(value, field):
     return data
 
 
-def overview(text, call, progress):
+def overview(text, call, progress, *, context_limit=7000):
     """Keep story context under the 8K TPM ceiling with hierarchical summaries."""
-    max_brief = 7000
+    max_brief = max(7000, min(24000, context_limit))
+    piece_limit = max_brief - 1000
     if len(text) <= max_brief:
         return text
 
-    pieces = list(chunk_text(text, 6000))
+    pieces = list(chunk_text(text, piece_limit))
     summaries = []
     for idx, section in enumerate(pieces, 1):
         progress.check_cancelled()
@@ -127,7 +129,7 @@ def overview(text, call, progress):
         if len(combined) <= max_brief:
             return combined
         progress.check_cancelled()
-        groups = list(chunk_text(combined, 6000))
+        groups = list(chunk_text(combined, piece_limit))
         short = []
         for idx, group in enumerate(groups, 1):
             short.append(call(
@@ -140,13 +142,62 @@ def overview(text, call, progress):
         if len(updated) >= len(combined):
             break
         combined = updated
-    if len(combined) > 9000:
+    if len(combined) > max_brief + 2000:
         raise ValueError(
             "Không thể tóm tắt toàn bộ video vừa giới hạn token của model. "
             "Hãy thử model có hạn mức lớn hơn."
         )
     return combined
 
+
+
+def metadata_for_job(text, title, description, language, call, progress, *, fast=False, context_limit=7000, original_tags=None):
+    identity = source_hash(json.dumps([text, title, description, language, "faithful-title-hook-v1", fast, context_limit, original_tags], ensure_ascii=False))
+    try:
+        work = json.loads(progress.partial_result().get('seo_work_json') or '{}')
+    except (ValueError, TypeError):
+        work = {}
+    if not isinstance(work, dict) or work.get('identity') != identity:
+        work = {}
+    brief = work.get('context')
+    if not isinstance(brief, str) or not brief:
+        originals_complete=(isinstance(title,str) and bool(title.strip())
+                            and isinstance(description,str) and bool(description.strip())
+                            and isinstance(original_tags,list) and bool(original_tags)
+                            and all(isinstance(tag,str) and tag.strip() for tag in original_tags))
+        if fast and originals_complete:
+            # Supplied metadata is translated, never recreated from the plot.
+            # Full-story AI summaries are unnecessary here. Keep a little exact
+            # source context for ambiguous names/terms; translation still uses
+            # the entire source independently.
+            brief=(text if len(text)<=3000 else
+                   'Source excerpts for disambiguation only, not a complete plot summary:\n'
+                   +text[:1500]+'\n[intervening source omitted from metadata context]\n'+text[-1300:])
+        else:
+            brief = metadata_story_context(text,language,call,progress,context_limit)
+    def checkpoint(candidate):
+        progress.publish('seo_work_json', json.dumps(dict(identity=identity, context=brief, candidate=candidate), ensure_ascii=False))
+    progress.update(97, 'Đang dịch tiêu đề, mô tả và tag' if fast else 'Đang tạo và đối chiếu SEO; tự khôi phục kết quả đã lưu khi cần')
+    tag_options = {'original_tags': original_tags} if original_tags else {}
+    result = generate_youtube_metadata(brief, title, description, language, call,
+                                      resume_candidate=work.get('candidate'), checkpoint=checkpoint, self_check_only=fast, **tag_options)
+    progress.publish('seo_work_json', '')
+    return result
+
+
+def metadata_story_context(text, language, call, progress, context_limit):
+    """Cover the whole story when any original metadata field needs generation."""
+    report = progress.partial_result().get('optimization_review_json')
+    try:report = json.loads(report or '{}')
+    except (ValueError,TypeError):report = {}
+    if not isinstance(report,dict):report = {}
+    contexts = report.get('seo_contexts')
+    if (report.get('output_sha256') == source_hash(text) and report.get('target_language') == language
+            and isinstance(contexts,list) and contexts and len(contexts)==report.get('reviewed_parts')
+            and all(isinstance(v,str) and 0<len(v)<=1800 for v in contexts)):
+        return overview('\n\n'.join(contexts), call, progress, context_limit=context_limit)
+    else:
+        return overview(text, call, progress, context_limit=context_limit)
 
 
 def run_full_job(snapshot, progress):
@@ -166,9 +217,11 @@ def run_full_job(snapshot, progress):
                                    "new_title","new_description","seo_tags",
                                    "metadata","language")})
     api_key = snapshot["api_key"]
+    metrics = ProcessingMetrics(progress)
 
     def _wait_for_retry(seconds, description):
         """Keep the existing job cancelable while its progress shows the wait."""
+        wait_started = time.monotonic()
         remaining = max(0.0, float(seconds))
         while remaining > 0:
             progress.check_cancelled()
@@ -177,6 +230,7 @@ def run_full_job(snapshot, progress):
             step = min(1.0, remaining)
             time.sleep(step)
             remaining -= step
+        metrics.retry_wait(time.monotonic()-wait_started)
 
     def call(prompt):
         """Retry only the failed request; never repeat finished translation chunks."""
@@ -188,16 +242,16 @@ def run_full_job(snapshot, progress):
                 # Coordinate TPM pacing with other Streamlit jobs using Groq.
                 with groq_request_gate.reporting(progress):
                     if snapshot["provider"] == "API bên thứ ba (tùy chỉnh)":
-                        return generate_text(
+                        return metrics.measure(prompt, lambda: generate_text(
                             snapshot["provider"], snapshot["base_url"],
                             snapshot["model"], api_key, prompt,
                             api_format=snapshot.get("api_format", "chat"),
                             auth_mode=snapshot.get("auth_mode", "bearer"),
-                        )
-                    return generate_text(
+                        ))
+                    return metrics.measure(prompt, lambda: generate_text(
                         snapshot["provider"], snapshot["base_url"],
                         snapshot["model"], api_key, prompt
-                    )
+                    ))
             except RateLimitError as exc:
                 if not exc.can_retry:
                     raise RuntimeError(
@@ -290,57 +344,73 @@ def run_full_job(snapshot, progress):
         fields["source"] = source
         progress.publish("source", source)
 
-        # Translate the complete original as reviewed spoken narration.
-        target_text = fields.get("optimized_script")
-        try:
-            review = json.loads(fields.get("optimization_review_json") or "{}")
-        except (TypeError, ValueError):
-            review = {}
-        verified_checkpoint = (
-            isinstance(target_text, str) and bool(target_text.strip())
-            and isinstance(review, dict)
-            and review.get("version") == 2
-            and review.get("narration_style") == "single_narrator_indirect_v1"
-            and review.get("method") == "full_narration_translation"
-            and review.get("target_language") == language
-            and review.get("source_sha256") == source_hash(source)
-            and review.get("output_sha256") == source_hash(target_text)
-        )
-        if not verified_checkpoint:
-            for field in ("translation_parts", "translation_complete", "translated",
-                          "character_bible", "character_profile", "character_profile_json",
-                          "character_images_manifest", "character_images_error",
-                          "new_title", "new_description", "seo_tags", "metadata"):
-                fields.pop(field, None)
-            if fields.get("optimization_work_json"):
-                progress.publish("optimization_work_json", fields["optimization_work_json"])
-            target_text = rewrite_target_script(source, language, call, progress)
-            fields["optimization_review_json"] = progress.partial_result().get("optimization_review_json", "")
+        if snapshot.get('translation_mode') == 'direct':
+            from direct_translation import translate_direct, METHOD
+            target_text=fields.get('translated')
+            try:report=json.loads(fields.get('optimization_review_json') or '{}')
+            except (ValueError,TypeError):report={}
+            valid=(isinstance(report,dict) and report.get('method')==METHOD
+                   and report.get('source_sha256')==source_hash(source) and report.get('target_language')==language
+                   and isinstance(target_text,str) and bool(target_text.strip())
+                   and report.get('output_sha256')==source_hash(target_text))
+            if not valid:
+                target_text=translate_direct(source,language,call,progress)
+                fields['optimization_review_json']=progress.partial_result().get('optimization_review_json','')
+            fields.update(translated=target_text,optimized_script=target_text,translation_parts=[target_text],
+                          translation_complete=True,optimization_work_json='')
+            for name in ('optimization_review_json','optimization_work_json','translated','optimized_script','translation_parts','translation_complete'):
+                progress.publish(name,fields.get(name,''))
         else:
-            progress.update(67, "✅ Đã khôi phục bản viết lại ngôn ngữ đích đã đối soát")
-        if not target_text.strip():
-            raise ValueError("Bản dịch giọng đọc không được rỗng.")
-        fields.update(optimized_script=target_text, translated=target_text,
-                      optimization_work_json="", translation_parts=[target_text],
-                      translation_complete=True)
-        for name in ("optimization_review_json", "optimization_work_json", "optimized_script",
-                     "translated", "translation_parts", "translation_complete"):
-            progress.publish(name, fields.get(name, ""))
+            # Translate the complete original as reviewed spoken narration.
+            target_text = fields.get("optimized_script")
+            try:
+                review = json.loads(fields.get("optimization_review_json") or "{}")
+            except (TypeError, ValueError):
+                review = {}
+            verified_checkpoint = (
+                isinstance(target_text, str) and bool(target_text.strip())
+                and isinstance(review, dict)
+                and review.get("version") == 2
+                and review.get("narration_style") == "single_narrator_indirect_v1"
+                and review.get("method") == "full_narration_translation"
+                and review.get("target_language") == language
+                and review.get("source_sha256") == source_hash(source)
+                and review.get("output_sha256") == source_hash(target_text)
+            )
+            if not verified_checkpoint:
+                for field in ("translation_parts", "translation_complete", "translated",
+                              "character_bible", "character_profile", "character_profile_json",
+                              "character_images_manifest", "character_images_error",
+                              "new_title", "new_description", "seo_tags", "metadata"):
+                    fields.pop(field, None)
+                if fields.get("optimization_work_json"):
+                    progress.publish("optimization_work_json", fields["optimization_work_json"])
+                target_text = rewrite_target_script(source, language, call, progress)
+                fields["optimization_review_json"] = progress.partial_result().get("optimization_review_json", "")
+            else:
+                progress.update(67, "✅ Đã khôi phục bản viết lại ngôn ngữ đích đã đối soát")
+            if not target_text.strip():
+                raise ValueError("Bản dịch giọng đọc không được rỗng.")
+            fields.update(optimized_script=target_text, translated=target_text,
+                          optimization_work_json="", translation_parts=[target_text],
+                          translation_complete=True)
+            for name in ("optimization_review_json", "optimization_work_json", "optimized_script",
+                         "translated", "translation_parts", "translation_complete"):
+                progress.publish(name, fields.get(name, ""))
 
         fields["language"] = language
         progress.publish("language", language)
         # Complete metadata in the same target language after narration succeeds.
-        progress.update(96, "📝 Đang tối ưu tiêu đề, mô tả và tag theo ngôn ngữ đích...")
-        brief = overview(target_text, call, progress)
-        new_title, new_description, tags = generate_youtube_metadata(
-            brief, title, description, language, call,
+        progress.update(96, "✅ Bản dịch đã lưu; đang xử lý tiêu đề, mô tả và tag...")
+        new_title, new_description, tags = metadata_for_job(
+            target_text, title, description, language, call, progress, fast=snapshot.get("translation_mode")=="direct",
         )
         fields.update(new_title=new_title, new_description=new_description,
                       seo_tags=tags, metadata="\n\n".join((new_title, new_description, tags)))
         for name in ("new_title", "new_description", "seo_tags", "metadata"):
             progress.publish(name, fields[name])
         result["ok"] = True
-        progress.update(100, "✅ Hoàn thành bản dịch giọng đọc, tiêu đề, mô tả và SEO")
+        progress.update(100, "✅ Hoàn thành bản dịch, tiêu đề, mô tả và tag")
         return result
 
     except Exception as exc:
@@ -354,4 +424,8 @@ def run_full_job(snapshot, progress):
             safe_error = safe_error.replace(extra_key, "[KEY PHỤ ĐỀ ĐÃ ẨN]")
         result["error"] = safe_error[:700]
         progress.update(100, "⚠️ Tác vụ kết thúc nhưng có lỗi.")
+    finally:
+        metrics.publish()
+        result["fields"]["processing_metrics"] = progress.partial_result().get("processing_metrics", {})
     return result
+

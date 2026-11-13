@@ -3,6 +3,8 @@ import re
 
 
 def task_output_budget(prompt):
+    if prompt.startswith("DIRECT_TRANSLATION"):
+        return 8192
     # Leave reasoning headroom while avoiding a large narrative budget for
     # reviews whose final output is only a short JSON verdict.
     if prompt.startswith(("FAITHFULNESS_REVIEW", "STORY_REPAIR_REVIEW")):

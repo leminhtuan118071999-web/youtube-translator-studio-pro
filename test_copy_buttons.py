@@ -73,7 +73,7 @@ class CopyButtonsTests(TestCase):
             self.assertIn(f'key=f"{key}{{sid}}"', code)
         self.assertLess(
             code.index('key=f"copy_all_translation_{sid}"'),
-            code.index('with st.expander(f"🌍 Bản dịch hoàn chỉnh'),
+            code.index('with st.expander(f"🌍 Bản dịch giọng đọc'),
         )
         self.assertLess(
             code.index('key=f"copy_all_description_{sid}"'),
